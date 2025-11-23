@@ -19,5 +19,4 @@ wording:
     - "major"
     - "BREAKING CHANGE"
   release:
-    - "rc"
     - "release candidate"
