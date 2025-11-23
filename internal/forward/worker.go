@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/retry"
 )
@@ -23,10 +24,11 @@ type ForwardWorker struct {
 	verbose       bool
 	lastPod       string // Track the last pod we connected to
 	statusUI      StatusUpdater
+	healthChecker *healthcheck.Checker
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
-func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater) *ForwardWorker {
+func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater, healthChecker *healthcheck.Checker) *ForwardWorker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ForwardWorker{
@@ -38,6 +40,7 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		doneChan:      make(chan struct{}),
 		verbose:       verbose,
 		statusUI:      statusUI,
+		healthChecker: healthChecker,
 	}
 }
 
@@ -88,21 +91,19 @@ func (w *ForwardWorker) run() {
 
 		// Check if pod changed (restart detected)
 		if w.lastPod != "" && w.lastPod != podName {
-			if w.statusUI != nil {
-				w.statusUI.UpdateStatus(w.forward.ID(), "Reconnecting")
+			if w.healthChecker != nil {
+				w.healthChecker.MarkReconnecting(w.forward.ID())
 			}
 			log.Printf("[%s] Switched to new pod: %s → %s", w.forward.ID(), w.lastPod, podName)
 		} else if w.lastPod == "" {
 			log.Printf("[%s] Forwarding %s → localhost:%d",
 				w.forward.ID(), w.forward.String(), w.forward.LocalPort)
+			if w.healthChecker != nil {
+				w.healthChecker.MarkStarting(w.forward.ID())
+			}
 		}
 
 		w.lastPod = podName
-
-		// Update status to active
-		if w.statusUI != nil {
-			w.statusUI.UpdateStatus(w.forward.ID(), "Active")
-		}
 
 		// Establish port-forward connection
 		err = w.establishForward(podName)
@@ -114,9 +115,9 @@ func (w *ForwardWorker) run() {
 				return
 			}
 
-			// Update status to error
-			if w.statusUI != nil {
-				w.statusUI.UpdateStatus(w.forward.ID(), "Reconnecting")
+			// Update status to reconnecting
+			if w.healthChecker != nil {
+				w.healthChecker.MarkReconnecting(w.forward.ID())
 			}
 
 			// Log the error

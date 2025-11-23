@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
 )
 
@@ -25,6 +27,7 @@ type Manager struct {
 	resolver      *k8s.ResourceResolver
 	portForwarder *k8s.PortForwarder
 	portChecker   *PortChecker
+	healthChecker *healthcheck.Checker
 	verbose       bool
 	currentConfig *config.Config
 	statusUI      StatusUpdater
@@ -40,12 +43,16 @@ func NewManager(verbose bool) *Manager {
 	resolver := k8s.NewResourceResolver(clientPool)
 	portForwarder := k8s.NewPortForwarder(clientPool, resolver)
 
+	// Create health checker: check every 5 seconds with 2 second timeout
+	healthChecker := healthcheck.NewChecker(5*time.Second, 2*time.Second)
+
 	return &Manager{
 		workers:       make(map[string]*ForwardWorker),
 		clientPool:    clientPool,
 		resolver:      resolver,
 		portForwarder: portForwarder,
 		portChecker:   NewPortChecker(),
+		healthChecker: healthChecker,
 		verbose:       verbose,
 	}
 }
@@ -98,6 +105,9 @@ func (m *Manager) Start(cfg *config.Config) error {
 // Stop gracefully stops all port-forward workers.
 func (m *Manager) Stop() {
 	log.Printf("Stopping all port-forwards...")
+
+	// Stop health checker first
+	m.healthChecker.Stop()
 
 	m.workersMu.Lock()
 	workers := make([]*ForwardWorker, 0, len(m.workers))
@@ -248,8 +258,15 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 		m.statusUI.AddForward(fwd.ID(), &fwd)
 	}
 
+	// Register with health checker
+	m.healthChecker.Register(fwd.ID(), fwd.LocalPort, func(forwardID string, status healthcheck.Status) {
+		if m.statusUI != nil {
+			m.statusUI.UpdateStatus(forwardID, string(status))
+		}
+	})
+
 	// Create and start worker
-	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI)
+	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI, m.healthChecker)
 	worker.Start()
 
 	// Store worker
@@ -268,6 +285,9 @@ func (m *Manager) stopWorker(id string) error {
 	}
 	delete(m.workers, id)
 	m.workersMu.Unlock()
+
+	// Unregister from health checker
+	m.healthChecker.Unregister(id)
 
 	// Stop the worker
 	worker.Stop()
