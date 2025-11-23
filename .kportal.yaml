@@ -1,0 +1,46 @@
+# Example kportal configuration
+# Copy this file to your project and customize as needed
+
+contexts:
+  # Production context
+  - name: production
+    namespaces:
+      - name: default
+        forwards:
+          # Forward to API service
+          - resource: service/api
+            protocol: tcp
+            port: 8080
+            localPort: 8080
+
+          # Forward to PostgreSQL database
+          - resource: service/postgres
+            protocol: tcp
+            port: 5432
+            localPort: 5432
+
+      - name: monitoring
+        forwards:
+          # Forward to Prometheus using label selector
+          - resource: pod
+            selector: app=prometheus
+            protocol: tcp
+            port: 9090
+            localPort: 9090
+
+  # Staging context
+  - name: staging
+    namespaces:
+      - name: default
+        forwards:
+          # Forward to staging app (prefix matching handles pod restarts)
+          - resource: pod/myapp
+            protocol: tcp
+            port: 8080
+            localPort: 8081
+
+          # Forward multiple ports from same pod
+          - resource: pod/myapp
+            protocol: tcp
+            port: 9090
+            localPort: 9091

@@ -11,22 +11,9 @@ blacklist:
   - "WIP"
 
 wording:
-  patch:
-    - "fix"
-    - "bugfix"
-    - "hotfix"
-    - "patch"
-    - "docs"
-    - "test"
-    - "tests"
-    - "refactor"
   minor:
     - "feat"
     - "feature"
-    - "add"
-    - "enhance"
-    - "update"
-    - "improve"
   major:
     - "breaking"
     - "major"
