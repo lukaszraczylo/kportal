@@ -9,6 +9,13 @@ import (
 	"github.com/nvm/kportal/internal/k8s"
 )
 
+// StatusUpdater is an interface for updating forward status
+type StatusUpdater interface {
+	UpdateStatus(id string, status string)
+	AddForward(id string, fwd *config.Forward)
+	Remove(id string)
+}
+
 // Manager orchestrates all port-forward workers.
 // It handles starting, stopping, and hot-reloading forwards.
 type Manager struct {
@@ -20,6 +27,7 @@ type Manager struct {
 	portChecker   *PortChecker
 	verbose       bool
 	currentConfig *config.Config
+	statusUI      StatusUpdater
 }
 
 // NewManager creates a new forward Manager.
@@ -40,6 +48,11 @@ func NewManager(verbose bool) *Manager {
 		portChecker:   NewPortChecker(),
 		verbose:       verbose,
 	}
+}
+
+// SetStatusUI sets the status updater for the manager
+func (m *Manager) SetStatusUI(ui StatusUpdater) {
+	m.statusUI = ui
 }
 
 // Start initializes and starts all port-forwards from the configuration.
@@ -230,8 +243,13 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 		return fmt.Errorf("worker already exists for %s", fwd.ID())
 	}
 
+	// Notify UI about new forward
+	if m.statusUI != nil {
+		m.statusUI.AddForward(fwd.ID(), &fwd)
+	}
+
 	// Create and start worker
-	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose)
+	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI)
 	worker.Start()
 
 	// Store worker

@@ -22,10 +22,11 @@ type ForwardWorker struct {
 	doneChan      chan struct{}
 	verbose       bool
 	lastPod       string // Track the last pod we connected to
+	statusUI      StatusUpdater
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
-func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool) *ForwardWorker {
+func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater) *ForwardWorker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ForwardWorker{
@@ -36,6 +37,7 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		stopChan:      make(chan struct{}),
 		doneChan:      make(chan struct{}),
 		verbose:       verbose,
+		statusUI:      statusUI,
 	}
 }
 
@@ -86,6 +88,9 @@ func (w *ForwardWorker) run() {
 
 		// Check if pod changed (restart detected)
 		if w.lastPod != "" && w.lastPod != podName {
+			if w.statusUI != nil {
+				w.statusUI.UpdateStatus(w.forward.ID(), "Reconnecting")
+			}
 			log.Printf("[%s] Switched to new pod: %s → %s", w.forward.ID(), w.lastPod, podName)
 		} else if w.lastPod == "" {
 			log.Printf("[%s] Forwarding %s → localhost:%d",
@@ -93,6 +98,11 @@ func (w *ForwardWorker) run() {
 		}
 
 		w.lastPod = podName
+
+		// Update status to active
+		if w.statusUI != nil {
+			w.statusUI.UpdateStatus(w.forward.ID(), "Active")
+		}
 
 		// Establish port-forward connection
 		err = w.establishForward(podName)
@@ -102,6 +112,11 @@ func (w *ForwardWorker) run() {
 			if w.ctx.Err() != nil {
 				// Context was cancelled, exit gracefully
 				return
+			}
+
+			// Update status to error
+			if w.statusUI != nil {
+				w.statusUI.UpdateStatus(w.forward.ID(), "Reconnecting")
 			}
 
 			// Log the error
