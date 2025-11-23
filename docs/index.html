@@ -162,9 +162,9 @@
                             <p class="text-gray-600 dark:text-gray-400 text-sm">macOS & Linux</p>
                         </div>
                     </div>
-                    <div onclick="copyToClipboard('brew install lukaszraczylo/tap/kportal', this)"
+                    <div onclick="copyToClipboard('brew install lukaszraczylo/brew-taps/kportal', this)"
                          class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative">
-                        <code class="block">brew install lukaszraczylo/tap/kportal</code>
+                        <code class="block">brew install lukaszraczylo/brew-taps/kportal</code>
                         <i class="fas fa-copy absolute top-3 right-3 text-gray-500 group-hover:text-gray-300 text-xs"></i>
                     </div>
                 </div>
@@ -357,17 +357,65 @@
             }
         });
 
-        // Copy to clipboard function
+        // Copy to clipboard function with fallback
         function copyToClipboard(text, button) {
-            navigator.clipboard.writeText(text).then(() => {
-                const originalHTML = button.innerHTML;
-                button.innerHTML = '<i class="fas fa-check text-green-500"></i>';
-                setTimeout(() => {
-                    button.innerHTML = originalHTML;
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
+            // Modern clipboard API (preferred)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showCopySuccess(button);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopy(text, button);
+                });
+            } else {
+                // Fallback for older browsers or insecure contexts
+                fallbackCopy(text, button);
+            }
+        }
+
+        // Fallback copy method using execCommand
+        function fallbackCopy(text, button) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '0';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showCopySuccess(button);
+                } else {
+                    showCopyError(button);
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                showCopyError(button);
+            }
+
+            document.body.removeChild(textarea);
+        }
+
+        // Show success feedback
+        function showCopySuccess(button) {
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+            }, 2000);
+        }
+
+        // Show error feedback
+        function showCopyError(button) {
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-times text-red-500"></i>';
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+            }, 2000);
         }
 
         // Smooth scrolling
