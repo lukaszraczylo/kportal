@@ -8,7 +8,7 @@
 
 kportal simplifies managing multiple Kubernetes port-forwards with an elegant, interactive terminal interface. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), it provides real-time status updates, automatic reconnection, and hot-reload configuration support.
 
-![kportal Demo](docs/images/demo.png)
+![kportal Screenshot](docs/kportal-screenshot.png)
 
 ## ✨ Features
 
