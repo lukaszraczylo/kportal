@@ -140,6 +140,18 @@ func TestForward_ID(t *testing.T) {
 			},
 			expectedID: "staging/web/pod:8081",
 		},
+		{
+			name: "forward with alias",
+			forward: Forward{
+				Resource:      "service/postgres",
+				Port:          5432,
+				LocalPort:     5432,
+				Alias:         "shared-postgres",
+				contextName:   "home",
+				namespaceName: "shared-resources",
+			},
+			expectedID: "shared-postgres:5432",
+		},
 	}
 
 	for _, tt := range tests {
@@ -189,6 +201,18 @@ func TestForward_String(t *testing.T) {
 				namespaceName: "web",
 			},
 			expectedString: "staging/web/pod[app=nginx,env=prod]:80→8081",
+		},
+		{
+			name: "forward with alias",
+			forward: Forward{
+				Resource:      "service/redis",
+				Port:          6379,
+				LocalPort:     6379,
+				Alias:         "redis-at-home",
+				contextName:   "home",
+				namespaceName: "shared-resources",
+			},
+			expectedString: "redis-at-home:6379→6379",
 		},
 	}
 

@@ -26,11 +26,12 @@ type Namespace struct {
 
 // Forward represents a single port-forward configuration
 type Forward struct {
-	Resource  string `yaml:"resource"`  // e.g., "pod/my-app", "service/postgres", "pod"
-	Selector  string `yaml:"selector"`  // Label selector for pod resolution (e.g., "app=nginx,env=prod")
-	Protocol  string `yaml:"protocol"`  // tcp or udp
-	Port      int    `yaml:"port"`      // Remote port
-	LocalPort int    `yaml:"localPort"` // Local port
+	Resource  string `yaml:"resource"`        // e.g., "pod/my-app", "service/postgres", "pod"
+	Selector  string `yaml:"selector"`        // Label selector for pod resolution (e.g., "app=nginx,env=prod")
+	Protocol  string `yaml:"protocol"`        // tcp or udp
+	Port      int    `yaml:"port"`            // Remote port
+	LocalPort int    `yaml:"localPort"`       // Local port
+	Alias     string `yaml:"alias,omitempty"` // Optional human-readable alias for this forward
 
 	// Runtime fields (not in YAML)
 	contextName   string
@@ -38,14 +39,20 @@ type Forward struct {
 }
 
 // ID returns a unique identifier for this forward configuration.
-// Format: context/namespace/resource:localPort
+// Format: alias:localPort (if alias provided) or context/namespace/resource:localPort
 func (f *Forward) ID() string {
+	if f.Alias != "" {
+		return fmt.Sprintf("%s:%d", f.Alias, f.LocalPort)
+	}
 	return fmt.Sprintf("%s/%s/%s:%d", f.contextName, f.namespaceName, f.Resource, f.LocalPort)
 }
 
 // String returns a human-readable representation of the forward.
-// Format: context/namespace/resource:port→localPort
+// Format: alias:port→localPort (if alias provided) or context/namespace/resource:port→localPort
 func (f *Forward) String() string {
+	if f.Alias != "" {
+		return fmt.Sprintf("%s:%d→%d", f.Alias, f.Port, f.LocalPort)
+	}
 	if f.Selector != "" {
 		return fmt.Sprintf("%s/%s/%s[%s]:%d→%d",
 			f.contextName, f.namespaceName, f.Resource, f.Selector, f.Port, f.LocalPort)

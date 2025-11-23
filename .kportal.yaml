@@ -12,12 +12,14 @@ contexts:
             protocol: tcp
             port: 8080
             localPort: 8080
+            alias: prod-api
 
           # Forward to PostgreSQL database
           - resource: service/postgres
             protocol: tcp
             port: 5432
             localPort: 5432
+            alias: prod-db
 
       - name: monitoring
         forwards:
@@ -27,6 +29,7 @@ contexts:
             protocol: tcp
             port: 9090
             localPort: 9090
+            alias: prometheus
 
   # Staging context
   - name: staging
@@ -38,9 +41,11 @@ contexts:
             protocol: tcp
             port: 8080
             localPort: 8081
+            alias: staging-http
 
           # Forward multiple ports from same pod
           - resource: pod/myapp
             protocol: tcp
             port: 9090
             localPort: 9091
+            alias: staging-metrics

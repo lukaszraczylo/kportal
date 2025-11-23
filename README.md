@@ -48,6 +48,9 @@ go build -o kportal ./cmd/kportal
 
 # Validate configuration without starting
 ./kportal --check
+
+# Convert kftray JSON config to kportal YAML
+./kportal --convert configs.json --convert-output .kportal.yaml
 ```
 
 ### Configuration File
@@ -65,12 +68,14 @@ contexts:
             protocol: tcp
             port: 8080
             localPort: 8080
+            alias: my-api  # Optional: cleaner log output
 
-          # Service forwarding
+          # Service forwarding with alias
           - resource: service/postgres
             protocol: tcp
             port: 5432
             localPort: 5432
+            alias: prod-db
 
       - name: monitoring
         forwards:
@@ -80,6 +85,7 @@ contexts:
             protocol: tcp
             port: 9090
             localPort: 9090
+            alias: prometheus
 
   - name: staging
     namespaces:
@@ -89,10 +95,12 @@ contexts:
           - resource: pod/test-app
             port: 8080
             localPort: 8081
+            alias: test-http
 
           - resource: pod/test-app
             port: 9090
             localPort: 9091
+            alias: test-metrics
 ```
 
 ### Resource Types
@@ -121,6 +129,72 @@ Dynamically selects pods matching the label selector.
   localPort: 5432
 ```
 Most stable option - forwards to service endpoints.
+
+#### Using Aliases
+
+Aliases provide cleaner, more readable log output:
+
+```yaml
+- resource: service/victoria-metrics-cluster-vmselect
+  port: 8481
+  localPort: 8481
+  alias: vmetrics  # Shows "vmetrics:8481→8481" instead of full path
+```
+
+**Without alias:**
+```
+[home/monitoring/service/victoria-metrics-cluster-vmselect:8481] Forwarding...
+```
+
+**With alias:**
+```
+[vmetrics:8481] Forwarding vmetrics:8481→8481 → localhost:8481
+```
+
+### Converting from kftray
+
+kportal can automatically convert kftray JSON configurations to kportal YAML format:
+
+```bash
+# Convert kftray config
+kportal --convert kftray-config.json --convert-output .kportal.yaml
+
+# The converter will:
+# 1. Read the kftray JSON format
+# 2. Group forwards by context and namespace
+# 3. Generate kportal YAML with all aliases preserved
+# 4. Display a summary of the conversion
+```
+
+**Example kftray JSON:**
+```json
+[
+  {
+    "service": "postgres",
+    "namespace": "default",
+    "local_port": 5432,
+    "remote_port": 5432,
+    "context": "production",
+    "workload_type": "service",
+    "protocol": "tcp",
+    "alias": "prod-db"
+  }
+]
+```
+
+**Converts to kportal YAML:**
+```yaml
+contexts:
+  - name: production
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/postgres
+            protocol: tcp
+            port: 5432
+            localPort: 5432
+            alias: prod-db
+```
 
 ## How It Works
 
