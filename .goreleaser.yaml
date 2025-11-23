@@ -1,0 +1,68 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kportal
+    main: ./cmd/kportal
+    binary: kportal
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - id: kportal
+    format: tar.gz
+    name_template: "kportal-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "kportal-{{ .Version }}-checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^Merge'
+      - '^WIP'
+
+release:
+  github:
+    owner: lukaszraczylo
+    name: kportal
+  name_template: "Release {{.Version}}"
+  draft: false
+  prerelease: auto
+
+brews:
+  - repository:
+      owner: lukaszraczylo
+      name: brew-taps
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    folder: Formula
+    homepage: https://lukaszraczylo.github.io/kportal
+    description: "Modern Kubernetes port-forward manager with interactive TUI"
+    license: MIT
+    test: |
+      system "#{bin}/kportal", "--version"
+    install: |
+      bin.install "kportal"

@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Calculate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version_formatted.outputs.version }}
+      version_tag: ${{ steps.version_formatted.outputs.version_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate semantic version
+        id: semver
+        uses: lukaszraczylo/semver-generator@v1
+        with:
+          config_file: semver.yaml
+          repository_local: true
+
+      - name: Format version
+        id: version_formatted
+        run: |
+          VERSION="${{ steps.semver.outputs.semantic_version }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Display version
+        run: |
+          echo "Calculated version: ${{ steps.version_formatted.outputs.version }}"
+          echo "Version tag: ${{ steps.version_formatted.outputs.version_tag }}"
+
+  release:
+    name: Release with GoReleaser
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.version_tag }}

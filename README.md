@@ -1,172 +1,249 @@
 # kportal
 
-A robust Kubernetes port-forwarding tool that manages multiple concurrent port-forwards across different contexts, namespaces, and resources with automatic reconnection and failure recovery.
+[![Release](https://img.shields.io/github/v/release/lukaszraczylo/kportal)](https://github.com/lukaszraczylo/kportal/releases)
+[![License](https://img.shields.io/github/license/lukaszraczylo/kportal)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/lukaszraczylo/kportal)](https://goreportcard.com/report/github.com/lukaszraczylo/kportal)
 
-## Features
+**Modern Kubernetes port-forward manager with interactive terminal UI**
 
-- **Multi-Context Support**: Forward ports from multiple Kubernetes contexts simultaneously
-- **Automatic Pod Restart Handling**: Detects and reconnects to pods when they restart
-- **Label Selector Support**: Dynamically target pods using label selectors
-- **Prefix Matching**: Automatically find and reconnect to pods with name prefixes
-- **Hot-Reload**: Configuration file changes are automatically detected and applied
-- **Resilient Connections**: Infinite retry with exponential backoff (max 10s)
-- **Port Conflict Detection**: Validates port availability before starting
-- **Multiple Ports Per Resource**: Forward multiple ports from the same pod/service
+kportal simplifies managing multiple Kubernetes port-forwards with an elegant, interactive terminal interface. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), it provides real-time status updates, automatic reconnection, and hot-reload configuration support.
 
-## Installation
+![kportal Demo](docs/images/demo.png)
+
+## ✨ Features
+
+- 🎯 **Interactive TUI** - Beautiful terminal interface with keyboard navigation (↑↓/jk, Space to toggle, q to quit)
+- 🔄 **Auto-Reconnect** - Automatic retry with exponential backoff on connection failures (max 10s)
+- ⚡ **Hot-Reload** - Update configuration without restarting - changes applied automatically
+- 🏥 **Health Checks** - Real-time port forward status monitoring with 5-second intervals
+- 🎨 **Multi-Context** - Support for multiple Kubernetes contexts and namespaces
+- 📦 **Batch Management** - Manage all port-forwards from a single configuration file
+- 🔌 **Toggle Forwards** - Enable/disable individual port-forwards on the fly with Space key
+- 🚀 **Grace Period** - Smart 10-second grace period to avoid false "Error" status on startup
+- 📊 **Status Display** - Clear visual indicators: Active (●), Starting (○), Reconnecting (◐), Error (✗)
+- 🔍 **Error Reporting** - Detailed error messages displayed below the table
+- 🔄 **Pod Restart Handling** - Detects and reconnects to pods when they restart
+- 🏷️ **Label Selector Support** - Dynamically target pods using label selectors
+- 📋 **Prefix Matching** - Automatically find and reconnect to pods with name prefixes
+- 🚫 **Port Conflict Detection** - Validates port availability before starting with detailed PID info
+- 🎭 **Alias Support** - Cleaner, more readable display names for your forwards
+
+## 📦 Installation
+
+### Homebrew (macOS/Linux)
 
 ```bash
-# Install development tools (including semver-gen for version management)
-make install-tools
+brew install lukaszraczylo/tap/kportal
+```
 
-# Build from source (version automatically generated from git history)
+### Quick Install Script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash
+```
+
+### Manual Download
+
+Download the latest binary for your platform from the [releases page](https://github.com/lukaszraczylo/kportal/releases):
+
+- **macOS**: `kportal-{version}-darwin-{amd64|arm64}.tar.gz`
+- **Linux**: `kportal-{version}-linux-{amd64|arm64}.tar.gz`
+- **Windows**: `kportal-{version}-windows-{amd64|arm64}.zip`
+
+### Build from Source
+
+```bash
+git clone https://github.com/lukaszraczylo/kportal.git
+cd kportal
 make build
-
-# Install to user bin directory
 make install
-
-# Install system-wide (requires sudo)
-sudo make install-system
-
-# Or build manually
-go build -o kportal ./cmd/kportal
 ```
 
-## Usage
+## 🚀 Quick Start
 
-### Basic Usage
-
-```bash
-# Use default config file (.kportal.yaml)
-./kportal
-
-# Use custom config file
-./kportal -c myconfig.yaml
-
-# Enable verbose logging
-./kportal -v
-
-# Validate configuration without starting
-./kportal --check
-
-# Convert kftray JSON config to kportal YAML
-./kportal --convert configs.json --convert-output .kportal.yaml
-```
-
-### Configuration File
-
-Create a `.kportal.yaml` file in your current directory:
+1. **Create a configuration file** (`.kportal.yaml`):
 
 ```yaml
 contexts:
   - name: production
     namespaces:
-      - name: default
+      - name: backend
         forwards:
-          # Pod with prefix matching (auto-handles restarts)
-          - resource: pod/my-app
-            protocol: tcp
-            port: 8080
-            localPort: 8080
-            alias: my-api  # Optional: cleaner log output
-
-          # Service forwarding with alias
           - resource: service/postgres
             protocol: tcp
             port: 5432
             localPort: 5432
             alias: prod-db
 
-      - name: monitoring
+      - name: frontend
         forwards:
+          - resource: service/redis
+            protocol: tcp
+            port: 6379
+            localPort: 6380
+            alias: prod-redis
+```
+
+2. **Run kportal**:
+
+```bash
+kportal
+```
+
+3. **Navigate the interface**:
+   - `↑↓` or `j/k` - Navigate through forwards
+   - `Space` or `Enter` - Toggle forward on/off
+   - `q` - Quit application
+
+## 📖 Configuration
+
+### Simple Configuration
+
+```yaml
+contexts:
+  - name: <context-name>
+    namespaces:
+      - name: <namespace-name>
+        forwards:
+          - resource: <resource-type>/<resource-name>
+            protocol: tcp
+            port: <remote-port>
+            localPort: <local-port>
+            alias: <friendly-name>  # Optional
+```
+
+### Advanced Configuration
+
+```yaml
+contexts:
+  # Production cluster
+  - name: prod-us-west
+    namespaces:
+      - name: databases
+        forwards:
+          # Direct pod connection with prefix matching
+          - resource: pod/postgres-primary
+            protocol: tcp
+            port: 5432
+            localPort: 5432
+            alias: prod-postgres
+
+          # Service connection
+          - resource: service/redis-master
+            protocol: tcp
+            port: 6379
+            localPort: 6379
+            alias: prod-redis
+
           # Pod with label selector
           - resource: pod
-            selector: app=prometheus
+            selector: app=mongodb
             protocol: tcp
-            port: 9090
-            localPort: 9090
-            alias: prometheus
+            port: 27017
+            localPort: 27017
+            alias: mongo
 
-  - name: staging
+      - name: applications
+        forwards:
+          - resource: deployment/api-server
+            protocol: tcp
+            port: 8080
+            localPort: 8080
+            alias: api
+
+  # Development cluster
+  - name: dev-local
     namespaces:
       - name: default
         forwards:
-          # Multiple ports from same pod
-          - resource: pod/test-app
-            port: 8080
-            localPort: 8081
-            alias: test-http
-
-          - resource: pod/test-app
-            port: 9090
-            localPort: 9091
-            alias: test-metrics
+          - resource: service/grafana
+            protocol: tcp
+            port: 3000
+            localPort: 3000
+            alias: grafana-dashboard
 ```
 
-### Resource Types
+### Configuration Options
 
-#### Pod with Prefix Matching
-```yaml
-- resource: pod/my-app    # Matches my-app-xyz789, my-app-abc123, etc.
-  port: 8080
-  localPort: 8080
-```
-Automatically reconnects to new pods when they restart.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `resource` | string | Yes | Kubernetes resource with type prefix (e.g., `service/name`, `pod/name`) |
+| `protocol` | string | Yes | Connection protocol (typically `tcp`) |
+| `port` | int | Yes | Remote port on the Kubernetes resource |
+| `localPort` | int | Yes | Local port to forward to |
+| `alias` | string | No | Friendly name for display (defaults to resource name) |
+| `selector` | string | No | Label selector for dynamic pod selection (e.g., `app=nginx,env=prod`) |
 
-#### Pod with Label Selector
-```yaml
-- resource: pod
-  selector: app=nginx,env=prod
-  port: 80
-  localPort: 8080
-```
-Dynamically selects pods matching the label selector.
+### Resource Formats
 
-#### Service
-```yaml
-- resource: service/postgres
-  port: 5432
-  localPort: 5432
-```
-Most stable option - forwards to service endpoints.
+- **Pod by name**: `pod/pod-name` or just `pod-name`
+- **Pod by prefix**: `pod/my-app` (matches `my-app-xyz789`, `my-app-abc123`, etc.)
+- **Pod by selector**: Set `resource: pod` and use `selector: app=nginx`
+- **Service**: `service/service-name` or `svc/service-name`
+- **Deployment**: `deployment/deployment-name` or `deploy/deployment-name`
 
-#### Using Aliases
+## 🎮 Usage
 
-Aliases provide cleaner, more readable log output:
-
-```yaml
-- resource: service/victoria-metrics-cluster-vmselect
-  port: 8481
-  localPort: 8481
-  alias: vmetrics  # Shows "vmetrics:8481→8481" instead of full path
-```
-
-**Without alias:**
-```
-[home/monitoring/service/victoria-metrics-cluster-vmselect:8481] Forwarding...
-```
-
-**With alias:**
-```
-[vmetrics:8481] Forwarding vmetrics:8481→8481 → localhost:8481
-```
-
-### Converting from kftray
-
-kportal can automatically convert kftray JSON configurations to kportal YAML format:
+### Interactive Mode (Default)
 
 ```bash
-# Convert kftray config
-kportal --convert kftray-config.json --convert-output .kportal.yaml
-
-# The converter will:
-# 1. Read the kftray JSON format
-# 2. Group forwards by context and namespace
-# 3. Generate kportal YAML with all aliases preserved
-# 4. Display a summary of the conversion
+kportal
 ```
 
-**Example kftray JSON:**
+Starts the interactive TUI where you can:
+- View all configured port-forwards in a table
+- See real-time status updates (Active, Starting, Reconnecting, Error)
+- Toggle forwards on/off with Space key
+- View detailed error messages at the bottom of the screen
+
+### Verbose Mode
+
+```bash
+kportal -v
+```
+
+Runs in verbose mode with:
+- Detailed logging to stdout
+- Periodic status table updates every 2 seconds
+- Full error traces
+- No interactive controls (for automation/debugging)
+
+### Validate Configuration
+
+```bash
+kportal --check
+```
+
+Validates your configuration file without starting any forwards:
+- Checks YAML syntax
+- Validates all required fields
+- Detects duplicate local ports
+- Shows validation errors with line numbers
+
+### Custom Configuration File
+
+```bash
+kportal -c /path/to/config.yaml
+```
+
+### Version Information
+
+```bash
+kportal --version
+# Output: kportal version 0.1.5
+```
+
+## 🔄 kftray Migration
+
+Migrate from kftray JSON configuration:
+
+```bash
+kportal --convert configs.json --convert-output .kportal.yaml
+```
+
+**Example conversion:**
+
+kftray JSON:
 ```json
 [
   {
@@ -182,7 +259,7 @@ kportal --convert kftray-config.json --convert-output .kportal.yaml
 ]
 ```
 
-**Converts to kportal YAML:**
+Converts to kportal YAML:
 ```yaml
 contexts:
   - name: production
@@ -196,65 +273,342 @@ contexts:
             alias: prod-db
 ```
 
-## How It Works
+## 🎨 Status Indicators
+
+| Indicator | Status | Description |
+|-----------|--------|-------------|
+| `● Active` | 🟢 Green | Port-forward is active and healthy |
+| `○ Starting` | 🟡 Yellow | Initial connection in progress (10s grace period) |
+| `◐ Reconnecting` | 🟡 Yellow | Attempting to reconnect after failure |
+| `✗ Error` | 🔴 Red | Connection failed - see error details below table |
+| `○ Disabled` | ⚪ Gray | Port-forward manually disabled via Space key |
+
+## 🛠️ Advanced Features
+
+### Hot-Reload
+
+kportal automatically watches for configuration file changes and reloads:
+
+```bash
+# Edit your config while kportal is running
+vim .kportal.yaml
+
+# Changes are applied automatically within seconds:
+# - New forwards are started
+# - Removed forwards are stopped
+# - Existing forwards continue running unchanged
+```
+
+Supports manual reload via `SIGHUP`:
+```bash
+kill -HUP $(pgrep kportal)
+```
+
+### Health Checks
+
+Built-in health monitoring system:
+- **Check interval**: Every 5 seconds
+- **Timeout**: 2 seconds per check
+- **Grace period**: 10 seconds for new connections
+- **Automatic updates**: Real-time status changes in UI
+- **Error tracking**: Detailed error messages for failed connections
+
+### Error Display
+
+When connections fail, errors are displayed below the table:
+
+```
+Errors:
+  • prod-postgres: dial tcp 127.0.0.1:5432: connect: connection refused
+  • prod-redis: i/o timeout after 2.0s
+```
+
+Errors automatically clear when:
+- Connection becomes healthy
+- Forward is disabled
+- Forward is removed
+
+### Port Conflict Detection
+
+kportal checks for port conflicts at multiple stages:
+
+**At startup:**
+```
+Port conflicts detected:
+  Port 8080:
+    • Requested by: api-server (context: prod, namespace: default)
+    • Currently used by: PID 1234 (chrome)
+```
+
+**During hot-reload:**
+- Only validates new ports being added
+- Skips currently managed ports
+- Rejects configuration if conflicts found
 
 ### Pod Restart Handling
 
 When a pod restarts:
-1. The port-forward connection breaks
-2. kportal immediately attempts to re-resolve the resource
-3. For prefix matches: finds the newest pod with that prefix
-4. For selectors: re-queries pods with matching labels
-5. Reconnects to the new pod
-6. Logs the switch: `Switched to new pod: old-pod → new-pod`
+1. Port-forward connection breaks
+2. kportal immediately re-resolves the resource:
+   - For prefix matches: Finds newest pod with matching prefix
+   - For selectors: Re-queries pods with matching labels
+3. Reconnects to new pod
+4. Logs the switch: `Switched to new pod: old-pod-abc → new-pod-xyz`
 
 ### Retry Strategy
 
-Backoff intervals: **1s → 2s → 4s → 8s → 10s (max)**
+Exponential backoff with maximum interval:
+- **Intervals**: 1s → 2s → 4s → 8s → 10s (max)
+- **Infinite retries**: Continues until connection succeeds
+- **Independent**: Each forward has its own retry logic
+- **Grace period**: First 10 seconds show "Starting" instead of "Error"
 
-- Connection failures trigger immediate resource re-resolution
-- Retries continue indefinitely until successful
-- Each forward has independent retry logic
+## 🔧 Development
 
-### Hot-Reload
+### Prerequisites
 
-The config file is watched for changes:
-1. File change detected
-2. New config loaded and validated
-3. Changes diff'd against current state
-4. New forwards started, removed forwards stopped
-5. Unchanged forwards continue running
+- Go 1.23 or higher
+- Access to a Kubernetes cluster
+- kubectl configured with contexts
 
-If validation fails, the previous configuration remains active.
-
-## Development
-
-### Build Commands
+### Building
 
 ```bash
 # Build binary
 make build
 
-# Check current version (from semver-gen)
-make version
-
-# Run all checks (fmt, vet, staticcheck, test, build)
-make all
-
-# Run tests with race detection
+# Run tests
 make test
 
-# Run code quality checks
-make vet
-make staticcheck
-make fmt
+# Run all checks (fmt, vet, staticcheck, test)
+make all
 
-# Install development tools (staticcheck, mockery, semver-gen)
-make install-tools
+# Check current version
+make version
 
-# Generate test coverage report
-make coverage
+# Install locally
+make install
+
+# Install system-wide
+sudo make install-system
+
+# Clean build artifacts
+make clean
 ```
+
+### Project Structure
+
+```
+kportal/
+├── cmd/kportal/              # Main application entry point
+├── internal/
+│   ├── config/               # Configuration parsing and validation
+│   ├── forward/              # Port-forward manager and workers
+│   │   ├── manager.go        # Orchestrates all forwards
+│   │   ├── worker.go         # Individual forward worker
+│   │   └── port_checker.go   # Port conflict detection
+│   ├── healthcheck/          # Health monitoring system
+│   │   └── checker.go        # Port health checking
+│   ├── k8s/                  # Kubernetes client wrapper
+│   │   ├── client.go         # K8s client management
+│   │   ├── port_forward.go   # Port-forward implementation
+│   │   └── resolver.go       # Resource resolution
+│   ├── retry/                # Retry logic with backoff
+│   │   └── backoff.go        # Exponential backoff
+│   ├── ui/                   # Terminal UI implementations
+│   │   ├── bubbletea_ui.go   # Interactive TUI (Bubble Tea)
+│   │   └── table_ui.go       # Simple table for verbose mode
+│   └── converter/            # kftray JSON converter
+├── Formula/                  # Homebrew formula
+├── .github/workflows/        # CI/CD pipelines
+│   └── release.yml           # Release automation
+├── install.sh                # Installation script
+├── semver.yaml               # Semantic version config
+├── Makefile                  # Build automation
+└── README.md                 # This file
+```
+
+## 📝 Examples
+
+### Database Access
+
+```yaml
+contexts:
+  production:
+    namespaces:
+      databases:
+        - resource: postgres-primary
+          port: 5432
+          local_port: 5432
+          alias: prod-db
+```
+
+Connect with:
+```bash
+kportal  # Start in another terminal
+psql -h localhost -p 5432 -U postgres
+```
+
+### Multiple Services
+
+```yaml
+contexts:
+  dev:
+    namespaces:
+      default:
+        - resource: api
+          port: 8080
+          local_port: 8080
+        - resource: frontend
+          port: 3000
+          local_port: 3000
+        - resource: redis
+          port: 6379
+          local_port: 6379
+```
+
+Access:
+- API: `http://localhost:8080`
+- Frontend: `http://localhost:3000`
+- Redis: `redis-cli -p 6379`
+
+### Cross-Context Setup
+
+```yaml
+contexts:
+  prod-us:
+    namespaces:
+      backend:
+        - resource: api
+          port: 8080
+          local_port: 8080
+          alias: prod-us-api
+
+  prod-eu:
+    namespaces:
+      backend:
+        - resource: api
+          port: 8080
+          local_port: 8081  # Different local port
+          alias: prod-eu-api
+```
+
+Compare APIs across regions simultaneously.
+
+### Debug Multiple Pod Versions
+
+```yaml
+contexts:
+  production:
+    namespaces:
+      default:
+        # Version 1
+        - resource: pod
+          selector: app=myapp,version=v1
+          port: 8080
+          local_port: 8080
+          alias: app-v1
+
+        # Version 2
+        - resource: pod
+          selector: app=myapp,version=v2
+          port: 8080
+          local_port: 8081
+          alias: app-v2
+
+        # Debug port for v2
+        - resource: pod
+          selector: app=myapp,version=v2
+          port: 6060
+          local_port: 6060
+          alias: app-v2-pprof
+```
+
+## 🐛 Troubleshooting
+
+### Port Already in Use
+
+**Problem**: `Port 8080: already in use by PID 1234 (chrome)`
+
+**Solutions**:
+```bash
+# Find the process
+lsof -i :8080
+
+# Kill the process
+kill 1234
+
+# Or use a different local port in config
+local_port: 8081
+```
+
+### Connection Refused
+
+**Problem**: `dial tcp 127.0.0.1:8080: connect: connection refused`
+
+**Common causes**:
+1. **Pod not ready yet** - Wait for status to change from "Starting" → "Active" (10s grace period)
+2. **Wrong port number** - Verify the pod/service actually exposes that port
+3. **Service not exposed** - Check with `kubectl get svc` and `kubectl describe svc <name>`
+
+**Debug**:
+```bash
+# Check pod status
+kubectl get pods -n <namespace>
+
+# Check if port is exposed
+kubectl describe pod <pod-name> -n <namespace>
+
+# Check service endpoints
+kubectl get endpoints <service-name> -n <namespace>
+```
+
+### Context Not Found
+
+**Problem**: `context "prod" not found in kubeconfig`
+
+**Solution**:
+```bash
+# List available contexts
+kubectl config get-contexts
+
+# Verify context name matches
+kubectl config current-context
+
+# Update your config to use the correct context name
+```
+
+### Health Check Errors During Startup
+
+**Problem**: Seeing "Error" status immediately after starting
+
+**This is normal!** kportal has a 10-second grace period. If the connection is still failing after 10 seconds, check:
+- Pod is running: `kubectl get pods`
+- Port is correct in config
+- Network connectivity to cluster
+
+### Logs Covering UI
+
+**Problem**: Kubernetes client logs appearing over the interactive UI
+
+**This is fixed in v0.1.5+**. The interactive mode now completely suppresses all logs including:
+- Standard Go `log` package
+- Kubernetes `klog` output
+- Any stderr/stdout leakage
+
+If you still see logs, please file an issue!
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes and add tests
+4. Run checks: `make all`
+5. Commit your changes (follow [semantic commit messages](#semantic-versioning))
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ### Semantic Versioning
 
@@ -265,130 +619,37 @@ This project uses [semver-gen](https://github.com/lukaszraczylo/semver-generator
 - **Minor** (0.X.0): `feat`, `feature`, `add`, `enhance`, `update`, `improve`
 - **Major** (X.0.0): `breaking`, `major`, `BREAKING CHANGE`
 
-The version is automatically calculated from your git history and embedded in the binary at build time.
-
+Example commits:
 ```bash
-# Check current version
-make version
-
-# Build with auto-generated version
-make build
-
-# Verify version in binary
-./kportal --version
+git commit -m "feat: add health check grace period"  # Bumps minor version
+git commit -m "fix: resolve port conflict detection" # Bumps patch version
+git commit -m "breaking: change config file format"  # Bumps major version
 ```
 
-Configuration is managed in `semver.yaml`. To manually install semver-gen:
+## 📄 License
 
-```bash
-# Automatically installed via make install-tools
-# Or install manually from https://github.com/lukaszraczylo/semver-generator
-```
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-### Project Structure
+## 🙏 Acknowledgments
 
-```
-kportal/
-├── cmd/kportal/          # CLI entry point
-├── internal/
-│   ├── config/           # Configuration parsing and validation
-│   ├── forward/          # Port-forward workers and manager
-│   ├── k8s/             # Kubernetes client, resolver, port-forward wrapper
-│   └── retry/           # Exponential backoff logic
-├── test/
-│   ├── integration/     # Integration tests
-│   ├── fixtures/        # Test configurations
-│   └── helpers/         # Test utilities
-├── .kportal.yaml        # Example configuration
-├── semver.yaml          # Semantic version configuration
-├── Makefile             # Build automation
-└── CLAUDE.md            # Development guide
-```
+- Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) by Charm - An awesome framework for building terminal UIs
+- Styled with [Lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling library
+- Inspired by [kftray](https://github.com/hcavarsan/kftray) - Original GUI port-forward manager
+- Uses [client-go](https://github.com/kubernetes/client-go) for Kubernetes integration
+- Version management by [semver-gen](https://github.com/lukaszraczylo/semver-generator)
+
+## 📚 Documentation
+
+- [Website](https://lukaszraczylo.github.io/kportal)
+- [Issue Tracker](https://github.com/lukaszraczylo/kportal/issues)
+- [Releases](https://github.com/lukaszraczylo/kportal/releases)
+- [Changelog](CHANGELOG.md)
 
 ## Signal Handling
 
-- `CTRL+C` / `SIGTERM`: Graceful shutdown (closes all forwards)
+- `Ctrl+C` / `SIGTERM`: Graceful shutdown (closes all forwards)
 - `SIGHUP`: Reload configuration file
 
-## Port Conflict Detection
+---
 
-kportal validates ports at multiple stages:
-
-1. **Config Parse Time**: Detects duplicate local ports in configuration
-2. **Startup Time**: Checks if ports are available on the system
-3. **Hot-Reload Time**: Validates new ports before applying changes
-
-Errors show which process is using conflicting ports (with PID).
-
-## Examples
-
-### Forward Multiple Services from Production
-
-```yaml
-contexts:
-  - name: production
-    namespaces:
-      - name: default
-        forwards:
-          - resource: service/api
-            port: 8080
-            localPort: 8080
-          - resource: service/postgres
-            port: 5432
-            localPort: 5432
-          - resource: service/redis
-            port: 6379
-            localPort: 6379
-```
-
-### Monitor Multiple Environments
-
-```yaml
-contexts:
-  - name: production
-    namespaces:
-      - name: monitoring
-        forwards:
-          - resource: service/prometheus
-            port: 9090
-            localPort: 9090
-
-  - name: staging
-    namespaces:
-      - name: monitoring
-        forwards:
-          - resource: service/prometheus
-            port: 9090
-            localPort: 9091  # Different local port
-```
-
-### Debug Specific Pods
-
-```yaml
-contexts:
-  - name: production
-    namespaces:
-      - name: default
-        forwards:
-          # Forward app HTTP and debug ports
-          - resource: pod
-            selector: app=myapp,version=v2
-            port: 8080
-            localPort: 8080
-
-          - resource: pod
-            selector: app=myapp,version=v2
-            port: 6060  # pprof
-            localPort: 6060
-```
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions welcome! Please ensure:
-- Code passes `make check` (fmt, vet, staticcheck)
-- Tests pass with `make test`
-- New features include tests
+Made with ❤️ by [Lukasz Raczylo](https://github.com/lukaszraczylo)
