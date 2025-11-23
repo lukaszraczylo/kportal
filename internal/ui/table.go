@@ -23,9 +23,10 @@ type ForwardStatus struct {
 
 // TableUI manages the terminal table display
 type TableUI struct {
-	mu       sync.RWMutex
-	forwards map[string]*ForwardStatus // key is forward ID
-	verbose  bool
+	mu          sync.RWMutex
+	forwards    map[string]*ForwardStatus // key is forward ID
+	verbose     bool
+	interactive *InteractiveController
 }
 
 // NewTableUI creates a new table UI manager
@@ -34,6 +35,13 @@ func NewTableUI(verbose bool) *TableUI {
 		forwards: make(map[string]*ForwardStatus),
 		verbose:  verbose,
 	}
+}
+
+// SetInteractiveController sets the interactive controller
+func (t *TableUI) SetInteractiveController(ic *InteractiveController) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.interactive = ic
 }
 
 // AddForward registers a new forward for display
@@ -118,9 +126,26 @@ func (t *TableUI) Render() {
 		}
 	}
 
+	// Update interactive controller with current forward IDs (in display order)
+	if t.interactive != nil {
+		ids := make([]string, len(entries))
+		for i, entry := range entries {
+			ids[i] = entry.id
+		}
+		t.interactive.UpdateForwardsList(ids)
+	}
+
 	// Print each forward
-	for _, entry := range entries {
+	for i, entry := range entries {
 		fwd := entry.fwd
+
+		// Check if this row is selected
+		isSelected := false
+		isDisabled := false
+		if t.interactive != nil {
+			isSelected = (i == t.interactive.GetSelectedIndex())
+			isDisabled = t.interactive.IsDisabled(entry.id)
+		}
 
 		// Truncate long names
 		alias := truncate(fwd.Alias, 25)
@@ -129,7 +154,8 @@ func (t *TableUI) Render() {
 		// Color code status with indicator
 		statusStr := formatStatusWithIndicator(fwd.Status)
 
-		fmt.Printf("%-15s %-18s %-25s %-10s %-25s %-12d %-12d %s\n",
+		// Build the row content
+		rowContent := fmt.Sprintf("  %-15s %-18s %-25s %-10s %-25s %-12d %-12d %s",
 			fwd.Context,
 			fwd.Namespace,
 			alias,
@@ -138,10 +164,26 @@ func (t *TableUI) Render() {
 			fwd.RemotePort,
 			fwd.LocalPort,
 			statusStr)
+
+		// Apply selection highlighting or disabled styling
+		if isSelected {
+			// Replace leading spaces with arrow, then apply reverse video to entire line
+			rowContent = "\033[7m> " + rowContent[2:] + "\033[0m"
+		} else if isDisabled {
+			// Apply dimmed styling to entire line
+			rowContent = "\033[2m" + rowContent + "\033[0m"
+		}
+
+		fmt.Println(rowContent)
 	}
 
 	fmt.Println(strings.Repeat("=", 130))
-	fmt.Printf("Total forwards: %d | Press Ctrl+C to stop\n", len(t.forwards))
+	helpText := "Total forwards: %d | ↑↓: Navigate | Space: Toggle | q: Quit"
+	if !t.verbose {
+		fmt.Printf(helpText+"\n", len(t.forwards))
+	} else {
+		fmt.Printf("Total forwards: %d | Press Ctrl+C to stop\n", len(t.forwards))
+	}
 
 	// In verbose mode, add a newline to separate from logs
 	if t.verbose {

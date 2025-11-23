@@ -25,6 +25,7 @@ type ForwardWorker struct {
 	lastPod       string // Track the last pod we connected to
 	statusUI      StatusUpdater
 	healthChecker *healthcheck.Checker
+	startTime     time.Time // Track when the worker started
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
@@ -41,6 +42,7 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		verbose:       verbose,
 		statusUI:      statusUI,
 		healthChecker: healthChecker,
+		startTime:     time.Now(),
 	}
 }
 

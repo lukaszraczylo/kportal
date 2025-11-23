@@ -24,10 +24,11 @@ type PortHealth struct {
 	LastCheck    time.Time
 	Status       Status
 	ErrorMessage string
+	RegisteredAt time.Time // When this port was registered
 }
 
 // StatusCallback is called when a port's health status changes
-type StatusCallback func(forwardID string, status Status)
+type StatusCallback func(forwardID string, status Status, errorMsg string)
 
 // Checker performs periodic health checks on local ports
 type Checker struct {
@@ -60,9 +61,10 @@ func (c *Checker) Register(forwardID string, port int, callback StatusCallback) 
 	defer c.mu.Unlock()
 
 	c.ports[forwardID] = &PortHealth{
-		Port:      port,
-		LastCheck: time.Time{},
-		Status:    StatusStarting,
+		Port:         port,
+		LastCheck:    time.Time{},
+		Status:       StatusStarting,
+		RegisteredAt: time.Now(),
 	}
 	c.callbacks[forwardID] = callback
 
@@ -93,7 +95,7 @@ func (c *Checker) MarkReconnecting(forwardID string) {
 		// Notify if status changed
 		if oldStatus != StatusReconnect {
 			c.mu.Unlock()
-			c.notifyStatusChange(forwardID, StatusReconnect)
+			c.notifyStatusChange(forwardID, StatusReconnect, "")
 			c.mu.Lock()
 		}
 	}
@@ -112,7 +114,7 @@ func (c *Checker) MarkStarting(forwardID string) {
 		// Notify if status changed
 		if oldStatus != StatusStarting {
 			c.mu.Unlock()
-			c.notifyStatusChange(forwardID, StatusStarting)
+			c.notifyStatusChange(forwardID, StatusStarting, "")
 			c.mu.Lock()
 		}
 	}
@@ -129,6 +131,20 @@ func (c *Checker) GetStatus(forwardID string) (Status, bool) {
 	return StatusUnhealthy, false
 }
 
+// GetAllErrors returns all forwards with errors and their error messages
+func (c *Checker) GetAllErrors() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	errors := make(map[string]string)
+	for forwardID, health := range c.ports {
+		if health.Status == StatusUnhealthy && health.ErrorMessage != "" {
+			errors[forwardID] = health.ErrorMessage
+		}
+	}
+	return errors
+}
+
 // Stop stops all health checking
 func (c *Checker) Stop() {
 	c.cancel()
@@ -142,8 +158,7 @@ func (c *Checker) checkLoop(forwardID string) {
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
-	// Initial check after a short delay to let port-forward establish
-	time.Sleep(2 * time.Second)
+	// Do immediate first check - grace period logic will handle early failures
 	c.checkPort(forwardID)
 
 	for {
@@ -175,6 +190,7 @@ func (c *Checker) checkPort(forwardID string) {
 	}
 	port := health.Port
 	oldStatus := health.Status
+	registeredAt := health.RegisteredAt
 	c.mu.RUnlock()
 
 	// Attempt to connect to the local port
@@ -188,7 +204,14 @@ func (c *Checker) checkPort(forwardID string) {
 	errorMsg := ""
 
 	if err != nil {
-		newStatus = StatusUnhealthy
+		// Grace period: if forward is less than 10 seconds old, keep it as "Starting"
+		// This avoids scary "Error" messages during initial connection attempts
+		timeSinceStart := time.Since(registeredAt)
+		if timeSinceStart < 10*time.Second {
+			newStatus = StatusStarting
+		} else {
+			newStatus = StatusUnhealthy
+		}
 		errorMsg = err.Error()
 	} else {
 		conn.Close()
@@ -205,17 +228,17 @@ func (c *Checker) checkPort(forwardID string) {
 
 	// Notify if status changed
 	if oldStatus != newStatus {
-		c.notifyStatusChange(forwardID, newStatus)
+		c.notifyStatusChange(forwardID, newStatus, errorMsg)
 	}
 }
 
 // notifyStatusChange calls the callback for a forward
-func (c *Checker) notifyStatusChange(forwardID string, status Status) {
+func (c *Checker) notifyStatusChange(forwardID string, status Status, errorMsg string) {
 	c.mu.RLock()
 	callback, exists := c.callbacks[forwardID]
 	c.mu.RUnlock()
 
 	if exists && callback != nil {
-		callback(forwardID, status)
+		callback(forwardID, status, errorMsg)
 	}
 }

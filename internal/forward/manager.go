@@ -259,9 +259,15 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 	}
 
 	// Register with health checker
-	m.healthChecker.Register(fwd.ID(), fwd.LocalPort, func(forwardID string, status healthcheck.Status) {
+	m.healthChecker.Register(fwd.ID(), fwd.LocalPort, func(forwardID string, status healthcheck.Status, errorMsg string) {
 		if m.statusUI != nil {
 			m.statusUI.UpdateStatus(forwardID, string(status))
+			// Send error separately if there is one
+			if status == healthcheck.StatusUnhealthy && errorMsg != "" {
+				if ui, ok := m.statusUI.(interface{ SetError(id, msg string) }); ok {
+					ui.SetError(forwardID, errorMsg)
+				}
+			}
 		}
 	})
 
@@ -288,6 +294,9 @@ func (m *Manager) stopWorker(id string) error {
 
 	// Unregister from health checker
 	m.healthChecker.Unregister(id)
+
+	// Note: We DON'T call Remove() here anymore - keep it in the UI
+	// The UI will show it as disabled instead
 
 	// Stop the worker
 	worker.Stop()
@@ -333,4 +342,51 @@ func (m *Manager) getResourceForPort(forwards []config.Forward, port int) string
 		}
 	}
 	return "unknown"
+}
+
+// DisableForward temporarily stops a forward by ID
+func (m *Manager) DisableForward(id string) error {
+	if err := m.stopWorker(id); err != nil {
+		return err
+	}
+	log.Printf("Disabled: %s", id)
+	return nil
+}
+
+// EnableForward re-enables a previously disabled forward
+func (m *Manager) EnableForward(id string) error {
+	// Find the forward configuration in current config
+	if m.currentConfig == nil {
+		return fmt.Errorf("no configuration available")
+	}
+
+	forwards := m.currentConfig.GetAllForwards()
+	var targetFwd *config.Forward
+	for _, fwd := range forwards {
+		if fwd.ID() == id {
+			targetFwd = &fwd
+			break
+		}
+	}
+
+	if targetFwd == nil {
+		return fmt.Errorf("forward not found in configuration: %s", id)
+	}
+
+	// Check if already running
+	m.workersMu.RLock()
+	_, exists := m.workers[id]
+	m.workersMu.RUnlock()
+
+	if exists {
+		return fmt.Errorf("forward already enabled: %s", id)
+	}
+
+	// Start the worker
+	if err := m.startWorker(*targetFwd); err != nil {
+		return fmt.Errorf("failed to enable forward: %w", err)
+	}
+
+	log.Printf("Enabled: %s", id)
+	return nil
 }
