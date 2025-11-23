@@ -14,8 +14,24 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run tests with race detector
+        run: go test -race -v ./...
+
   version:
     name: Calculate Version
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version_formatted.outputs.version }}
@@ -60,13 +76,19 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a ${{ needs.version.outputs.version_tag }} -m "Release ${{ needs.version.outputs.version_tag }}"
+          git push origin ${{ needs.version.outputs.version_tag }}
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: latest
+          version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.version_tag }}

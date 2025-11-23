@@ -58,11 +58,12 @@ brews:
       owner: lukaszraczylo
       name: brew-taps
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    folder: Formula
+    directory: Formula
     homepage: https://lukaszraczylo.github.io/kportal
     description: "Modern Kubernetes port-forward manager with interactive TUI"
     license: MIT
     test: |
       system "#{bin}/kportal", "--version"
-    install: |
-      bin.install "kportal"
+    dependencies:
+      - name: kubernetes-cli
+        type: optional
