@@ -295,8 +295,10 @@ func (m *Manager) stopWorker(id string) error {
 	// Unregister from health checker
 	m.healthChecker.Unregister(id)
 
-	// Note: We DON'T call Remove() here anymore - keep it in the UI
-	// The UI will show it as disabled instead
+	// Notify UI to remove the forward
+	if m.statusUI != nil {
+		m.statusUI.Remove(id)
+	}
 
 	// Stop the worker
 	worker.Stop()

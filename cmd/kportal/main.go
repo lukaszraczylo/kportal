@@ -13,6 +13,7 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/converter"
 	"github.com/nvm/kportal/internal/forward"
+	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/ui"
 	"k8s.io/klog/v2"
 )
@@ -70,8 +71,15 @@ func main() {
 		log.SetFlags(0)
 
 		// Disable klog (used by kubernetes client-go)
+		// This prevents kubernetes portforward errors from appearing in the terminal
 		klog.SetOutput(io.Discard)
 		klog.LogToStderr(false)
+		// Set to high verbosity level to suppress all levels
+		var klogFlags flag.FlagSet
+		klogFlags.Set("logtostderr", "false")
+		klogFlags.Set("alsologtostderr", "false")
+		klogFlags.Set("stderrthreshold", "FATAL")
+		klogFlags.Set("v", "0")
 	} else {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
@@ -101,6 +109,15 @@ func main() {
 		log.Printf("Loading configuration from: %s", *configFile)
 	}
 
+	// Create Kubernetes client pool and discovery for wizards
+	pool, err := k8s.NewClientPool()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create k8s client pool: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Add/remove wizards will not be available\n")
+	}
+	discovery := k8s.NewDiscovery(pool)
+	mutator := config.NewMutator(*configFile)
+
 	// Create forward manager
 	manager := forward.NewManager(*verbose)
 
@@ -117,6 +134,11 @@ func main() {
 				manager.DisableForward(id)
 			}
 		}, version)
+
+		// Set wizard dependencies
+		// Note: mutator is always available (for delete/edit), discovery requires valid kubeconfig (for add)
+		bubbleTeaUI.SetWizardDependencies(discovery, mutator, *configFile)
+
 		manager.SetStatusUI(bubbleTeaUI)
 	} else {
 		// Verbose mode with simple table
