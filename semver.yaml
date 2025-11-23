@@ -1,0 +1,36 @@
+version: 1
+
+force:
+  major: 0
+  minor: 1
+  patch: 0
+
+blacklist:
+  - "Merge branch"
+  - "Merge pull request"
+  - "WIP"
+
+wording:
+  patch:
+    - "fix"
+    - "bugfix"
+    - "hotfix"
+    - "patch"
+    - "docs"
+    - "test"
+    - "tests"
+    - "refactor"
+  minor:
+    - "feat"
+    - "feature"
+    - "add"
+    - "enhance"
+    - "update"
+    - "improve"
+  major:
+    - "breaking"
+    - "major"
+    - "BREAKING CHANGE"
+  release:
+    - "rc"
+    - "release candidate"
