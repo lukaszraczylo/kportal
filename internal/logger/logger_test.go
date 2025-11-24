@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -459,6 +460,61 @@ func TestJSONFieldTypes(t *testing.T) {
 			for key := range tt.fields {
 				_, exists := entry.Fields[key]
 				assert.True(t, exists, "Field %s not found in JSON output", key)
+			}
+		})
+	}
+}
+
+func TestInitWithCustomOutput(t *testing.T) {
+	tests := []struct {
+		name          string
+		output        io.Writer
+		expectDiscard bool
+		description   string
+	}{
+		{
+			name:          "init with custom buffer",
+			output:        &bytes.Buffer{},
+			expectDiscard: false,
+			description:   "Should use provided buffer",
+		},
+		{
+			name:          "init with io.Discard",
+			output:        io.Discard,
+			expectDiscard: true,
+			description:   "Should use io.Discard to silence output",
+		},
+		{
+			name:          "init without output defaults to stderr",
+			output:        nil,
+			expectDiscard: false,
+			description:   "Should default to stderr when no output provided",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.output != nil {
+				Init(LevelInfo, FormatText, tt.output)
+			} else {
+				Init(LevelInfo, FormatText)
+			}
+
+			// Verify global logger was initialized
+			assert.NotNil(t, globalLogger, "Global logger should be initialized")
+
+			if tt.output != nil && !tt.expectDiscard {
+				// For buffer, verify output works
+				if buf, ok := tt.output.(*bytes.Buffer); ok {
+					Info("test message")
+					output := buf.String()
+					assert.Contains(t, output, "test message")
+					assert.Contains(t, output, "[INFO]")
+				}
+			} else if tt.expectDiscard {
+				// For io.Discard, verify no output appears (we can't really test this directly,
+				// but we can verify the logger was set with the right output)
+				assert.Equal(t, io.Discard, globalLogger.output)
 			}
 		})
 	}

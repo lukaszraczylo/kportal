@@ -124,8 +124,14 @@ func levelToString(level Level) string {
 // Global logger for backward compatibility
 var globalLogger *Logger
 
-func Init(level Level, format Format) {
-	globalLogger = New(level, format, os.Stderr)
+func Init(level Level, format Format, output ...io.Writer) {
+	var out io.Writer
+	if len(output) > 0 && output[0] != nil {
+		out = output[0]
+	} else {
+		out = os.Stderr
+	}
+	globalLogger = New(level, format, out)
 }
 
 func Debug(msg string, fields ...map[string]interface{}) {

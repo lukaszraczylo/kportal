@@ -9,6 +9,11 @@
             content="Professional Kubernetes port-forward manager with interactive terminal UI. Manage multiple port-forwards with auto-reconnect, hot-reload, and real-time health checks."
         />
         <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                darkMode: 'class'
+            }
+        </script>
         <link
             rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -33,6 +38,86 @@
                     color 0.3s ease,
                     border-color 0.3s ease;
             }
+
+            /* Modern animations */
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @keyframes float {
+                0%, 100% {
+                    transform: translateY(0px);
+                }
+                50% {
+                    transform: translateY(-10px);
+                }
+            }
+
+            @keyframes shimmer {
+                0% {
+                    background-position: -1000px 0;
+                }
+                100% {
+                    background-position: 1000px 0;
+                }
+            }
+
+            .animate-fade-in-up {
+                animation: fadeInUp 0.6s ease-out;
+            }
+
+            .animate-float {
+                animation: float 3s ease-in-out infinite;
+            }
+
+            /* Glassmorphism */
+            .glass {
+                background: rgba(255, 255, 255, 0.7);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+
+            .dark .glass {
+                background: rgba(17, 24, 39, 0.7);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+
+            /* Gradient text */
+            .gradient-text {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+
+            .dark .gradient-text {
+                background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+
+            /* Modern shadows */
+            .shadow-modern {
+                box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+            }
+
+            .dark .shadow-modern {
+                box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.4);
+            }
+
+            /* Smooth scroll */
+            html {
+                scroll-behavior: smooth;
+            }
         </style>
         <script>
             // Theme initialization
@@ -54,7 +139,7 @@
         <nav
             class="fixed w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-50 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
                 <div class="flex justify-between h-16 items-center">
                     <div class="flex items-center space-x-3">
                         <i
@@ -65,6 +150,7 @@
                             >kportal</span
                         >
                     </div>
+                    <!-- Desktop Navigation -->
                     <div class="hidden md:flex space-x-8">
                         <a
                             href="#features"
@@ -90,7 +176,8 @@
                     <div class="flex items-center space-x-4">
                         <button
                             id="theme-toggle"
-                            class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                            class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            aria-label="Toggle theme"
                         >
                             <i class="fas fa-moon dark:hidden text-xl"></i>
                             <i
@@ -100,23 +187,58 @@
                         <a
                             href="https://github.com/lukaszraczylo/kportal"
                             target="_blank"
-                            class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                            class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            aria-label="View on GitHub"
                         >
                             <i class="fab fa-github text-xl"></i>
                         </a>
+                        <!-- Mobile menu button -->
+                        <button
+                            id="mobile-menu-toggle"
+                            class="md:hidden text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            aria-label="Toggle menu"
+                        >
+                            <i class="fas fa-bars text-xl" id="menu-open-icon"></i>
+                            <i class="fas fa-times text-xl hidden" id="menu-close-icon"></i>
+                        </button>
                     </div>
+                </div>
+            </div>
+            <!-- Mobile Navigation Menu -->
+            <div id="mobile-menu" class="hidden md:hidden border-t border-gray-200 dark:border-gray-700">
+                <div class="px-4 py-3 space-y-1 bg-white dark:bg-gray-800">
+                    <a
+                        href="#features"
+                        class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium"
+                        >Features</a
+                    >
+                    <a
+                        href="#installation"
+                        class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium"
+                        >Installation</a
+                    >
+                    <a
+                        href="#configuration"
+                        class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium"
+                        >Configuration</a
+                    >
+                    <a
+                        href="#docs"
+                        class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium"
+                        >Documentation</a
+                    >
                 </div>
             </div>
         </nav>
 
         <!-- Hero Section -->
         <section
-            class="pt-32 pb-20 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 theme-transition"
+            class="pt-24 sm:pt-32 pb-12 sm:pb-20 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
                 <div class="text-center">
                     <h1
-                        class="text-5xl md:text-6xl font-bold text-gray-900 dark:text-gray-100 mb-6"
+                        class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-6 leading-tight"
                     >
                         Kubernetes Port-Forward<br />
                         <span class="text-blue-600 dark:text-blue-400"
@@ -124,7 +246,7 @@
                         >
                     </h1>
                     <p
-                        class="text-xl text-gray-600 dark:text-gray-300 mb-10 max-w-2xl mx-auto leading-relaxed"
+                        class="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 sm:mb-10 max-w-2xl mx-auto leading-relaxed px-4"
                     >
                         Professional terminal interface for managing multiple
                         Kubernetes port-forwards with auto-reconnect,
@@ -132,41 +254,44 @@
                         not a wrapper for the kubectl command.
                     </p>
                     <div
-                        class="flex flex-col sm:flex-row gap-4 justify-center mb-12"
+                        class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-8 sm:mb-12 px-4"
                     >
                         <a
                             href="#installation"
-                            class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-8 py-3 rounded font-medium transition"
+                            class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-8 py-3 rounded font-medium transition min-h-[48px] flex items-center justify-center"
                         >
                             Get Started
                         </a>
                         <a
                             href="https://github.com/lukaszraczylo/kportal"
-                            class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-8 py-3 rounded font-medium border border-gray-300 dark:border-gray-600 transition"
+                            class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-8 py-3 rounded font-medium border border-gray-300 dark:border-gray-600 transition min-h-[48px] flex items-center justify-center"
                         >
                             <i class="fab fa-github mr-2"></i>View on GitHub
                         </a>
                     </div>
-                    <div class="flex justify-center gap-4 text-sm">
+                    <div class="flex flex-wrap justify-center gap-2 sm:gap-4 text-sm px-4">
                         <img
                             src="https://img.shields.io/github/v/release/lukaszraczylo/kportal"
                             alt="Version"
+                            class="h-5"
                         />
                         <img
                             src="https://img.shields.io/github/license/lukaszraczylo/kportal"
                             alt="License"
+                            class="h-5"
                         />
                         <img
                             src="https://goreportcard.com/badge/github.com/lukaszraczylo/kportal"
                             alt="Go Report"
+                            class="h-5"
                         />
                     </div>
                     <!-- Screenshot -->
-                    <div class="mt-16 max-w-4xl mx-auto">
+                    <div class="mt-12 sm:mt-16 max-w-4xl mx-auto px-4">
                         <img
                             src="kportal-screenshot.png"
                             alt="kportal terminal interface"
-                            class="rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700"
+                            class="rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 w-full h-auto"
                         />
                     </div>
                 </div>
@@ -176,22 +301,22 @@
         <!-- Features Section -->
         <section
             id="features"
-            class="py-20 bg-white dark:bg-gray-900 theme-transition"
+            class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
-                <div class="text-center mb-16">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-10 sm:mb-12 md:mb-16">
                     <h2
-                        class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+                        class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"
                     >
                         Features
                     </h2>
-                    <p class="text-lg text-gray-600 dark:text-gray-300">
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">
                         Everything you need for production-grade port-forwarding
                     </p>
                 </div>
-                <div class="grid md:grid-cols-3 gap-8">
+                <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -213,7 +338,7 @@
                     </div>
 
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -234,7 +359,7 @@
                     </div>
 
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-purple-50 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -255,7 +380,7 @@
                     </div>
 
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -276,7 +401,7 @@
                     </div>
 
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-red-50 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -297,7 +422,7 @@
                     </div>
 
                     <div
-                        class="p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
                     >
                         <div
                             class="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center mb-4"
@@ -323,20 +448,20 @@
         <!-- Installation Section -->
         <section
             id="installation"
-            class="py-20 bg-gray-50 dark:bg-gray-800 theme-transition"
+            class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition"
         >
-            <div class="max-w-4xl mx-auto px-6">
-                <div class="text-center mb-16">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-10 sm:mb-12 md:mb-16">
                     <h2
-                        class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+                        class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"
                     >
                         Installation
                     </h2>
-                    <p class="text-lg text-gray-600 dark:text-gray-300">
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">
                         Get started in seconds
                     </p>
                 </div>
-                <div class="space-y-6">
+                <div class="space-y-4 sm:space-y-6">
                     <div
                         class="bg-white dark:bg-gray-700 p-8 border border-gray-200 dark:border-gray-600 rounded-lg theme-transition"
                     >
@@ -359,14 +484,14 @@
                         </div>
                         <div
                             onclick="copyToClipboard('brew install lukaszraczylo/brew-taps/kportal', this)"
-                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative"
+                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 sm:p-4 rounded text-xs sm:text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative overflow-x-auto"
                         >
-                            <code class="block"
+                            <code class="block whitespace-nowrap"
                                 >brew install
                                 lukaszraczylo/brew-taps/kportal</code
                             >
                             <i
-                                class="fas fa-copy absolute top-3 right-3 text-gray-500 group-hover:text-gray-300 text-xs"
+                                class="fas fa-copy absolute top-2 sm:top-3 right-2 sm:right-3 text-gray-500 group-hover:text-gray-300 text-xs min-w-[24px] min-h-[24px] flex items-center justify-center"
                             ></i>
                         </div>
                     </div>
@@ -393,15 +518,15 @@
                         </div>
                         <div
                             onclick="copyToClipboard('curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash', this)"
-                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative"
+                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 sm:p-4 rounded text-xs sm:text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative overflow-x-auto"
                         >
-                            <code class="block"
+                            <code class="block whitespace-nowrap"
                                 >curl -fsSL
                                 https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh
                                 | bash</code
                             >
                             <i
-                                class="fas fa-copy absolute top-3 right-3 text-gray-500 group-hover:text-gray-300 text-xs"
+                                class="fas fa-copy absolute top-2 sm:top-3 right-2 sm:right-3 text-gray-500 group-hover:text-gray-300 text-xs min-w-[24px] min-h-[24px] flex items-center justify-center"
                             ></i>
                         </div>
                     </div>
@@ -440,21 +565,21 @@
         <!-- Configuration Section -->
         <section
             id="configuration"
-            class="py-20 bg-white dark:bg-gray-900 theme-transition"
+            class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
-                <div class="text-center mb-16">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-10 sm:mb-12 md:mb-16">
                     <h2
-                        class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+                        class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"
                     >
                         Configuration
                     </h2>
-                    <p class="text-lg text-gray-600 dark:text-gray-300">
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">
                         Simple YAML configuration
                     </p>
                 </div>
                 <div class="max-w-3xl mx-auto">
-                    <div class="bg-gray-900 dark:bg-black rounded-lg p-6">
+                    <div class="bg-gray-900 dark:bg-black rounded-lg p-4 sm:p-6 overflow-x-auto">
                         <div class="flex items-center justify-between mb-4">
                             <div class="flex items-center">
                                 <i
@@ -473,7 +598,7 @@
                             </button>
                         </div>
                         <pre
-                            class="text-sm text-gray-100 overflow-x-auto"
+                            class="text-xs sm:text-sm text-gray-100 overflow-x-auto"
                         ><code id="config-code">contexts:
   - name: production
     namespaces:
@@ -494,7 +619,7 @@
             alias: prod-redis</code></pre>
                     </div>
 
-                    <div class="mt-12 grid md:grid-cols-2 gap-6">
+                    <div class="mt-8 sm:mt-10 md:mt-12 grid sm:grid-cols-2 gap-4 sm:gap-6">
                         <div
                             class="p-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg theme-transition"
                         >
@@ -561,20 +686,20 @@
         <!-- Documentation Section -->
         <section
             id="docs"
-            class="py-20 bg-gray-50 dark:bg-gray-800 theme-transition"
+            class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
-                <div class="text-center mb-16">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-10 sm:mb-12 md:mb-16">
                     <h2
-                        class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+                        class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"
                     >
                         Documentation
                     </h2>
-                    <p class="text-lg text-gray-600 dark:text-gray-300">
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">
                         Everything you need to know
                     </p>
                 </div>
-                <div class="grid md:grid-cols-4 gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                     <a
                         href="https://github.com/lukaszraczylo/kportal#quick-start"
                         class="p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-lg transition group theme-transition"
@@ -645,10 +770,10 @@
 
         <!-- Footer -->
         <footer
-            class="bg-gray-900 dark:bg-black text-gray-400 dark:text-gray-500 py-12 theme-transition"
+            class="bg-gray-900 dark:bg-black text-gray-400 dark:text-gray-500 py-8 sm:py-10 md:py-12 theme-transition"
         >
-            <div class="max-w-6xl mx-auto px-6">
-                <div class="grid md:grid-cols-3 gap-8">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
                     <div>
                         <div class="flex items-center space-x-3 mb-4">
                             <i
@@ -722,6 +847,28 @@
         </footer>
 
         <script>
+            // Mobile menu toggle
+            const mobileMenuToggle = document.getElementById("mobile-menu-toggle");
+            const mobileMenu = document.getElementById("mobile-menu");
+            const menuOpenIcon = document.getElementById("menu-open-icon");
+            const menuCloseIcon = document.getElementById("menu-close-icon");
+
+            mobileMenuToggle.addEventListener("click", () => {
+                mobileMenu.classList.toggle("hidden");
+                menuOpenIcon.classList.toggle("hidden");
+                menuCloseIcon.classList.toggle("hidden");
+            });
+
+            // Close mobile menu when clicking on a link
+            const mobileMenuLinks = mobileMenu.querySelectorAll("a");
+            mobileMenuLinks.forEach(link => {
+                link.addEventListener("click", () => {
+                    mobileMenu.classList.add("hidden");
+                    menuOpenIcon.classList.remove("hidden");
+                    menuCloseIcon.classList.add("hidden");
+                });
+            });
+
             // Theme toggle
             const themeToggle = document.getElementById("theme-toggle");
             themeToggle.addEventListener("click", () => {

@@ -70,11 +70,14 @@ func main() {
 	// Initialize structured logger
 	var logLevel logger.Level
 	var logFmt logger.Format
+	var logOutput io.Writer
 
 	if *verbose {
 		logLevel = logger.LevelDebug
+		logOutput = os.Stderr
 	} else {
 		logLevel = logger.LevelInfo
+		logOutput = io.Discard // Silence logger in non-verbose mode to prevent UI corruption
 	}
 
 	switch *logFormat {
@@ -84,7 +87,20 @@ func main() {
 		logFmt = logger.FormatText
 	}
 
-	logger.Init(logLevel, logFmt)
+	logger.Init(logLevel, logFmt, logOutput)
+
+	// Configure klog (used by kubernetes client-go) to route through our logger
+	// This prevents k8s logs from interfering with the UI
+	if *verbose {
+		// In verbose mode, route klog through our structured logger at DEBUG level
+		klogLogger := logger.New(logger.LevelDebug, logFmt, os.Stderr)
+		klogWriter := logger.NewKlogWriter(klogLogger)
+		klog.SetOutput(klogWriter)
+	} else {
+		// In non-verbose mode, completely silence klog
+		klog.SetOutput(io.Discard)
+	}
+	klog.LogToStderr(false)
 
 	// Handle conversion mode
 	if *convertInput != "" {
@@ -115,18 +131,8 @@ func main() {
 		log.SetOutput(io.Discard)
 		log.SetPrefix("")
 		log.SetFlags(0)
-
-		// Disable klog (used by kubernetes client-go)
-		// This prevents kubernetes portforward errors from appearing in the terminal
-		klog.SetOutput(io.Discard)
-		klog.LogToStderr(false)
-		// Set to high verbosity level to suppress all levels
-		var klogFlags flag.FlagSet
-		klogFlags.Set("logtostderr", "false")
-		klogFlags.Set("alsologtostderr", "false")
-		klogFlags.Set("stderrthreshold", "FATAL")
-		klogFlags.Set("v", "0")
 	} else {
+		// Verbose mode - enable standard log formatting
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
