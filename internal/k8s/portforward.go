@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,16 +19,30 @@ import (
 
 // PortForwarder handles Kubernetes port-forwarding operations.
 type PortForwarder struct {
-	clientPool *ClientPool
-	resolver   *ResourceResolver
+	clientPool   *ClientPool
+	resolver     *ResourceResolver
+	tcpKeepalive time.Duration // TCP keepalive interval
+	dialTimeout  time.Duration // Connection dial timeout
 }
 
-// NewPortForwarder creates a new PortForwarder instance.
+// NewPortForwarder creates a new PortForwarder instance with default settings.
 func NewPortForwarder(clientPool *ClientPool, resolver *ResourceResolver) *PortForwarder {
 	return &PortForwarder{
-		clientPool: clientPool,
-		resolver:   resolver,
+		clientPool:   clientPool,
+		resolver:     resolver,
+		tcpKeepalive: 30 * time.Second, // Default: 30 second keepalive
+		dialTimeout:  30 * time.Second, // Default: 30 second dial timeout
 	}
+}
+
+// SetTCPKeepalive configures the TCP keepalive interval for new connections.
+func (pf *PortForwarder) SetTCPKeepalive(keepalive time.Duration) {
+	pf.tcpKeepalive = keepalive
+}
+
+// SetDialTimeout configures the connection dial timeout.
+func (pf *PortForwarder) SetDialTimeout(timeout time.Duration) {
+	pf.dialTimeout = timeout
 }
 
 // ForwardRequest contains the parameters for a port-forward request.
@@ -164,6 +180,19 @@ func (pf *PortForwarder) forwardToService(ctx context.Context, req *ForwardReque
 
 // executePortForward performs the actual port-forward operation.
 func (pf *PortForwarder) executePortForward(config *rest.Config, url *url.URL, req *ForwardRequest) error {
+	// Configure TCP settings on the underlying connection
+	// This is set in the rest.Config which will be used by the SPDY transport
+	if config.Dial == nil {
+		// Create a custom dialer with configurable timeout and keepalive
+		// - Timeout: How long to wait for connection to establish
+		// - KeepAlive: TCP keepalive helps OS detect dead connections at network layer
+		dialer := &net.Dialer{
+			Timeout:   pf.dialTimeout,  // Configurable dial timeout
+			KeepAlive: pf.tcpKeepalive, // Configurable keepalive interval
+		}
+		config.Dial = dialer.DialContext
+	}
+
 	// Create SPDY roundtripper
 	transport, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
