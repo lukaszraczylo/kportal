@@ -543,51 +543,53 @@ func (m model) renderDeleteConfirmation() string {
 
 	var b strings.Builder
 
-	// Styles
+	// Use wizard color palette for consistency
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("196")).
+		Foreground(warningColor). // Yellow for warning (delete action)
 		Padding(0, 1)
 
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("196")).
-		Foreground(lipgloss.Color("230")).
+	buttonSelectedStyle := lipgloss.NewStyle().
+		Background(primaryColor).          // Pink/Magenta background
+		Foreground(lipgloss.Color("230")). // Light yellow text
 		Bold(true).
 		Padding(0, 1)
 
-	unselectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+	buttonUnselectedStyle := lipgloss.NewStyle().
+		Foreground(mutedColor). // Gray
 		Padding(0, 1)
 
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+	deleteInfoStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252")). // Light gray for info text
+		Italic(true)
 
 	// Title
-	b.WriteString(titleStyle.Render("Delete Port Forward"))
+	b.WriteString(titleStyle.Render("⚠ Delete Port Forward"))
 	b.WriteString("\n\n")
 
 	// Message
-	b.WriteString("Are you sure you want to delete:\n")
-	b.WriteString(fmt.Sprintf("  %s\n\n", m.ui.deleteConfirmAlias))
+	b.WriteString("Are you sure you want to delete:\n\n")
+	b.WriteString(deleteInfoStyle.Render("  " + m.ui.deleteConfirmAlias))
+	b.WriteString("\n\n")
 
 	// Buttons
 	if m.ui.deleteConfirmCursor == 0 {
-		b.WriteString(selectedStyle.Render(" Yes "))
+		b.WriteString(buttonSelectedStyle.Render(" Yes "))
 		b.WriteString("  ")
-		b.WriteString(unselectedStyle.Render(" No "))
+		b.WriteString(buttonUnselectedStyle.Render(" No "))
 	} else {
-		b.WriteString(unselectedStyle.Render(" Yes "))
+		b.WriteString(buttonUnselectedStyle.Render(" Yes "))
 		b.WriteString("  ")
-		b.WriteString(selectedStyle.Render(" No "))
+		b.WriteString(buttonSelectedStyle.Render(" No "))
 	}
 
 	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("←/→: Navigate  Enter: Confirm  Esc: Cancel"))
 
-	// Wrap in a box
+	// Wrap in a box using wizard style
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(accentColor). // Purple border like other wizards
 		Padding(1, 2)
 
 	return boxStyle.Render(b.String())

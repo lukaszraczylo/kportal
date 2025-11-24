@@ -137,7 +137,7 @@
     >
         <!-- Navigation -->
         <nav
-            class="fixed w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-50 theme-transition"
+            class="fixed w-full glass shadow-modern z-50 theme-transition"
         >
             <div class="max-w-6xl mx-auto px-4 sm:px-6">
                 <div class="flex justify-between h-16 items-center">
@@ -233,38 +233,49 @@
 
         <!-- Hero Section -->
         <section
-            class="pt-24 sm:pt-32 pb-12 sm:pb-20 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 theme-transition"
+            class="relative pt-24 sm:pt-32 pb-12 sm:pb-20 overflow-hidden"
         >
-            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+            <!-- Animated background -->
+            <div class="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-900/20 dark:to-purple-900/20 theme-transition"></div>
+
+            <!-- Decorative blobs -->
+            <div class="absolute top-0 -left-4 w-72 h-72 bg-purple-300 dark:bg-purple-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float"></div>
+            <div class="absolute top-0 -right-4 w-72 h-72 bg-blue-300 dark:bg-blue-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float" style="animation-delay: 1s;"></div>
+            <div class="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 dark:bg-pink-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float" style="animation-delay: 2s;"></div>
+
+            <div class="relative max-w-6xl mx-auto px-4 sm:px-6">
                 <div class="text-center">
                     <h1
-                        class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-6 leading-tight"
+                        class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-6 leading-tight animate-fade-in-up"
                     >
                         Kubernetes Port-Forward<br />
-                        <span class="text-blue-600 dark:text-blue-400"
+                        <span class="gradient-text"
                             >Manager</span
                         >
                     </h1>
                     <p
-                        class="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 sm:mb-10 max-w-2xl mx-auto leading-relaxed px-4"
+                        class="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 sm:mb-10 max-w-2xl mx-auto leading-relaxed px-4 animate-fade-in-up"
+                        style="animation-delay: 0.1s;"
                     >
-                        Professional terminal interface for managing multiple
+                        Terminal interface for professionals managing multiple
                         Kubernetes port-forwards with auto-reconnect,
                         hot-reload, and real-time health monitoring. No, it's
                         not a wrapper for the kubectl command.
                     </p>
                     <div
-                        class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-8 sm:mb-12 px-4"
+                        class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-8 sm:mb-12 px-4 animate-fade-in-up"
+                        style="animation-delay: 0.2s;"
                     >
                         <a
                             href="#installation"
-                            class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-8 py-3 rounded font-medium transition min-h-[48px] flex items-center justify-center"
+                            class="group relative bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 rounded-lg font-medium transition-all duration-300 min-h-[48px] flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105"
                         >
-                            Get Started
+                            <span class="relative z-10">Get Started</span>
+                            <div class="absolute inset-0 bg-white dark:bg-gray-900 opacity-0 group-hover:opacity-10 rounded-lg transition-opacity"></div>
                         </a>
                         <a
                             href="https://github.com/lukaszraczylo/kportal"
-                            class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-8 py-3 rounded font-medium border border-gray-300 dark:border-gray-600 transition min-h-[48px] flex items-center justify-center"
+                            class="group glass hover:shadow-lg text-gray-900 dark:text-gray-100 px-8 py-3 rounded-lg font-medium transition-all duration-300 min-h-[48px] flex items-center justify-center hover:scale-105"
                         >
                             <i class="fab fa-github mr-2"></i>View on GitHub
                         </a>
@@ -287,12 +298,15 @@
                         />
                     </div>
                     <!-- Screenshot -->
-                    <div class="mt-12 sm:mt-16 max-w-4xl mx-auto px-4">
-                        <img
-                            src="kportal-screenshot.png"
-                            alt="kportal terminal interface"
-                            class="rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 w-full h-auto"
-                        />
+                    <div class="mt-12 sm:mt-16 max-w-4xl mx-auto px-4 animate-fade-in-up" style="animation-delay: 0.3s;">
+                        <div class="relative group">
+                            <div class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
+                            <img
+                                src="kportal-screenshot.png"
+                                alt="kportal terminal interface"
+                                class="relative rounded-xl shadow-2xl w-full h-auto transform transition duration-500 group-hover:scale-[1.02]"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -316,130 +330,148 @@
                 </div>
                 <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-desktop text-blue-600 dark:text-blue-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-desktop text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Interactive TUI
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Beautiful terminal interface powered by Bubble Tea.
+                                Toggle forwards on/off, view real-time status
+                                updates.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Interactive TUI
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Beautiful terminal interface powered by Bubble Tea.
-                            Toggle forwards on/off, view real-time status
-                            updates.
-                        </p>
                     </div>
 
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-sync-alt text-green-600 dark:text-green-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 dark:from-green-400 dark:to-green-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-sync-alt text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Auto-Reconnect
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Automatic reconnection on failure with exponential
+                                backoff. Never lose connectivity to your services.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Auto-Reconnect
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Automatic reconnection on failure with exponential
-                            backoff. Never lose connectivity to your services.
-                        </p>
                     </div>
 
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-purple-50 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-fire text-purple-600 dark:text-purple-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-400 dark:to-purple-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-fire text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Hot-Reload
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Configuration changes applied automatically. Add,
+                                remove, or modify forwards without restarting.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Hot-Reload
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Configuration changes applied automatically. Add,
-                            remove, or modify forwards without restarting.
-                        </p>
                     </div>
 
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-heartbeat text-yellow-600 dark:text-yellow-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 dark:from-yellow-400 dark:to-yellow-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-heartbeat text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Health Checks
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Real-time health monitoring with 5-second intervals.
+                                Grace period prevents false error alerts.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Health Checks
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Real-time health monitoring with 5-second intervals.
-                            Grace period prevents false error alerts.
-                        </p>
                     </div>
 
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-red-50 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-rose-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 dark:from-red-400 dark:to-red-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-exclamation-triangle text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Error Reporting
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Detailed error messages displayed in the interface.
+                                Know exactly what went wrong.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Error Reporting
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Detailed error messages displayed in the interface.
-                            Know exactly what went wrong.
-                        </p>
                     </div>
 
                     <div
-                        class="p-6 sm:p-8 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg hover:shadow-lg transition theme-transition"
+                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
-                        <div
-                            class="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center mb-4"
-                        >
-                            <i
-                                class="fas fa-layer-group text-indigo-600 dark:text-indigo-400 text-xl"
-                            ></i>
+                        <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="relative">
+                            <div
+                                class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-400 dark:to-indigo-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
+                            >
+                                <i
+                                    class="fas fa-layer-group text-white text-xl"
+                                ></i>
+                            </div>
+                            <h3
+                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
+                            >
+                                Multi-Context
+                            </h3>
+                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                Support for multiple Kubernetes contexts and
+                                namespaces. Manage all your clusters from one place.
+                            </p>
                         </div>
-                        <h3
-                            class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                        >
-                            Multi-Context
-                        </h3>
-                        <p class="text-gray-600 dark:text-gray-400">
-                            Support for multiple Kubernetes contexts and
-                            namespaces. Manage all your clusters from one place.
-                        </p>
                     </div>
                 </div>
             </div>
@@ -463,7 +495,7 @@
                 </div>
                 <div class="space-y-4 sm:space-y-6">
                     <div
-                        class="bg-white dark:bg-gray-700 p-8 border border-gray-200 dark:border-gray-600 rounded-lg theme-transition"
+                        class="glass p-6 sm:p-8 rounded-xl shadow-modern hover:shadow-xl transition-all duration-300"
                     >
                         <div class="flex items-center mb-4">
                             <i
@@ -484,20 +516,22 @@
                         </div>
                         <div
                             onclick="copyToClipboard('brew install lukaszraczylo/brew-taps/kportal', this)"
-                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 sm:p-4 rounded text-xs sm:text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative overflow-x-auto"
+                            class="relative bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-950 dark:to-black text-gray-100 p-3 sm:p-4 rounded-lg text-xs sm:text-sm cursor-pointer group overflow-x-auto border border-gray-700 hover:border-blue-500 transition-all duration-300"
                         >
-                            <code class="block whitespace-nowrap"
+                            <code class="block whitespace-nowrap font-mono"
                                 >brew install
                                 lukaszraczylo/brew-taps/kportal</code
                             >
-                            <i
-                                class="fas fa-copy absolute top-2 sm:top-3 right-2 sm:right-3 text-gray-500 group-hover:text-gray-300 text-xs min-w-[24px] min-h-[24px] flex items-center justify-center"
-                            ></i>
+                            <div class="absolute top-2 sm:top-3 right-2 sm:right-3 flex items-center justify-center">
+                                <i
+                                    class="fas fa-copy text-gray-500 group-hover:text-blue-400 text-xs min-w-[24px] min-h-[24px] transition-colors duration-300"
+                                ></i>
+                            </div>
                         </div>
                     </div>
 
                     <div
-                        class="bg-white dark:bg-gray-700 p-8 border border-gray-200 dark:border-gray-600 rounded-lg theme-transition"
+                        class="glass p-6 sm:p-8 rounded-xl shadow-modern hover:shadow-xl transition-all duration-300"
                     >
                         <div class="flex items-center mb-4">
                             <i
@@ -518,21 +552,23 @@
                         </div>
                         <div
                             onclick="copyToClipboard('curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash', this)"
-                            class="bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 sm:p-4 rounded text-xs sm:text-sm cursor-pointer hover:bg-gray-800 dark:hover:bg-black transition group relative overflow-x-auto"
+                            class="relative bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-950 dark:to-black text-gray-100 p-3 sm:p-4 rounded-lg text-xs sm:text-sm cursor-pointer group overflow-x-auto border border-gray-700 hover:border-green-500 transition-all duration-300"
                         >
-                            <code class="block whitespace-nowrap"
+                            <code class="block whitespace-nowrap font-mono"
                                 >curl -fsSL
                                 https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh
                                 | bash</code
                             >
-                            <i
-                                class="fas fa-copy absolute top-2 sm:top-3 right-2 sm:right-3 text-gray-500 group-hover:text-gray-300 text-xs min-w-[24px] min-h-[24px] flex items-center justify-center"
-                            ></i>
+                            <div class="absolute top-2 sm:top-3 right-2 sm:right-3 flex items-center justify-center">
+                                <i
+                                    class="fas fa-copy text-gray-500 group-hover:text-green-400 text-xs min-w-[24px] min-h-[24px] transition-colors duration-300"
+                                ></i>
+                            </div>
                         </div>
                     </div>
 
                     <div
-                        class="bg-white dark:bg-gray-700 p-8 border border-gray-200 dark:border-gray-600 rounded-lg theme-transition"
+                        class="glass p-6 sm:p-8 rounded-xl shadow-modern hover:shadow-xl transition-all duration-300"
                     >
                         <div class="flex items-center mb-4">
                             <i
@@ -553,7 +589,7 @@
                         </div>
                         <a
                             href="https://github.com/lukaszraczylo/kportal/releases"
-                            class="block text-center bg-gray-900 dark:bg-gray-950 text-gray-100 px-4 py-3 rounded text-sm font-medium hover:bg-gray-800 dark:hover:bg-black transition"
+                            class="block text-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
                         >
                             <i class="fas fa-download mr-2"></i>Download Binary
                         </a>
@@ -579,27 +615,29 @@
                     </p>
                 </div>
                 <div class="max-w-3xl mx-auto">
-                    <div class="bg-gray-900 dark:bg-black rounded-lg p-4 sm:p-6 overflow-x-auto">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center">
-                                <i
-                                    class="fas fa-file-code text-gray-400 dark:text-gray-500 mr-2"
-                                ></i>
-                                <span
-                                    class="text-gray-400 dark:text-gray-500 text-sm font-mono"
-                                    >.kportal.yaml</span
+                    <div class="relative group">
+                        <div class="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
+                        <div class="relative bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-950 dark:to-black rounded-xl p-4 sm:p-6 overflow-x-auto border border-gray-700">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center">
+                                    <i
+                                        class="fas fa-file-code text-purple-400 mr-2"
+                                    ></i>
+                                    <span
+                                        class="text-purple-400 text-sm font-mono font-semibold"
+                                        >.kportal.yaml</span
+                                    >
+                                </div>
+                                <button
+                                    onclick="copyToClipboard(document.getElementById('config-code').textContent, this)"
+                                    class="text-gray-400 hover:text-purple-400 transition-colors duration-300 min-w-[32px] min-h-[32px] flex items-center justify-center"
                                 >
+                                    <i class="fas fa-copy"></i>
+                                </button>
                             </div>
-                            <button
-                                onclick="copyToClipboard(document.getElementById('config-code').textContent, this)"
-                                class="text-gray-400 hover:text-gray-200"
-                            >
-                                <i class="fas fa-copy"></i>
-                            </button>
-                        </div>
-                        <pre
-                            class="text-xs sm:text-sm text-gray-100 overflow-x-auto"
-                        ><code id="config-code">contexts:
+                            <pre
+                                class="text-xs sm:text-sm text-gray-100 overflow-x-auto"
+                            ><code id="config-code" class="font-mono">contexts:
   - name: production
     namespaces:
       - name: backend
@@ -617,11 +655,12 @@
             port: 6379
             localPort: 6379
             alias: prod-redis</code></pre>
+                        </div>
                     </div>
 
                     <div class="mt-8 sm:mt-10 md:mt-12 grid sm:grid-cols-2 gap-4 sm:gap-6">
                         <div
-                            class="p-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg theme-transition"
+                            class="p-6 glass rounded-xl shadow-modern hover:shadow-xl transition-all duration-300"
                         >
                             <h3
                                 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3"
@@ -659,7 +698,7 @@
                         </div>
 
                         <div
-                            class="p-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg theme-transition"
+                            class="p-6 glass rounded-xl shadow-modern hover:shadow-xl transition-all duration-300"
                         >
                             <h3
                                 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3"
@@ -702,7 +741,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                     <a
                         href="https://github.com/lukaszraczylo/kportal#quick-start"
-                        class="p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-lg transition group theme-transition"
+                        class="group relative p-6 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
                         <i
                             class="fas fa-rocket text-blue-600 dark:text-blue-400 text-2xl mb-3 block"
@@ -718,7 +757,7 @@
                     </a>
                     <a
                         href="https://github.com/lukaszraczylo/kportal#configuration"
-                        class="p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-lg transition group theme-transition"
+                        class="group relative p-6 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
                         <i
                             class="fas fa-file-alt text-green-600 dark:text-green-400 text-2xl mb-3 block"
@@ -734,7 +773,7 @@
                     </a>
                     <a
                         href="https://github.com/lukaszraczylo/kportal#advanced-features"
-                        class="p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-lg transition group theme-transition"
+                        class="group relative p-6 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
                         <i
                             class="fas fa-sliders-h text-purple-600 dark:text-purple-400 text-2xl mb-3 block"
@@ -750,7 +789,7 @@
                     </a>
                     <a
                         href="https://github.com/lukaszraczylo/kportal#troubleshooting"
-                        class="p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-600 dark:hover:border-blue-400 hover:shadow-lg transition group theme-transition"
+                        class="group relative p-6 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
                     >
                         <i
                             class="fas fa-life-ring text-yellow-600 dark:text-yellow-400 text-2xl mb-3 block"
@@ -784,7 +823,7 @@
                             >
                         </div>
                         <p class="text-sm">
-                            Professional Kubernetes port-forward manager
+                            Kubernetes port-forward manager for professionals
                         </p>
                     </div>
                     <div>
