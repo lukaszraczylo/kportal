@@ -374,6 +374,11 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 	wizard := m.ui.addWizard
 
+	// Don't process Enter if we're currently loading
+	if wizard.loading {
+		return m, nil
+	}
+
 	switch wizard.step {
 	case StepSelectContext:
 		filteredContexts := wizard.getFilteredContexts()

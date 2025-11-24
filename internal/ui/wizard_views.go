@@ -443,7 +443,7 @@ func (m model) renderEnterLocalPort() string {
 		} else {
 			b.WriteString(errorStyle.Render(wizard.portCheckMsg))
 		}
-	} else if wizard.textInput != "" && wizard.localPort > 0 {
+	} else if wizard.textInput != "" {
 		b.WriteString(mutedStyle.Render("Press Enter to check availability"))
 	}
 
