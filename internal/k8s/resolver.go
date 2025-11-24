@@ -228,29 +228,3 @@ func (r *ResourceResolver) InvalidateCache(contextName, namespace, resource stri
 		}
 	}
 }
-
-// GetPodList returns a list of pods matching the given criteria.
-// This is useful for debugging and testing.
-func (r *ResourceResolver) GetPodList(ctx context.Context, contextName, namespace, selector string) ([]*corev1.Pod, error) {
-	client, err := r.clientPool.GetClient(contextName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get client: %w", err)
-	}
-
-	listOptions := metav1.ListOptions{}
-	if selector != "" {
-		listOptions.LabelSelector = selector
-	}
-
-	pods, err := client.CoreV1().Pods(namespace).List(ctx, listOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-
-	result := make([]*corev1.Pod, len(pods.Items))
-	for i := range pods.Items {
-		result[i] = &pods.Items[i]
-	}
-
-	return result, nil
-}

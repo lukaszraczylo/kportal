@@ -378,7 +378,7 @@ func (m model) renderMainView() string {
 			}
 
 			isSelected := (idx == m.ui.selectedIndex)
-			isDisabled := m.ui.disabledMap[id]
+			isDisabled := m.ui.disabledMap[id] || fwd.Status == "Disabled"
 
 			// Selection indicator
 			indicator := "  "

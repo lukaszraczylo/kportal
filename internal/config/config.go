@@ -136,38 +136,3 @@ func (c *Config) GetAllForwards() []Forward {
 
 	return forwards
 }
-
-// GetForwardsByContext returns all forwards for a specific context.
-func (c *Config) GetForwardsByContext(contextName string) []Forward {
-	var forwards []Forward
-
-	for _, ctx := range c.Contexts {
-		if ctx.Name == contextName {
-			for _, ns := range ctx.Namespaces {
-				forwards = append(forwards, ns.Forwards...)
-			}
-			break
-		}
-	}
-
-	return forwards
-}
-
-// GetForwardsByNamespace returns all forwards for a specific context and namespace.
-func (c *Config) GetForwardsByNamespace(contextName, namespaceName string) []Forward {
-	var forwards []Forward
-
-	for _, ctx := range c.Contexts {
-		if ctx.Name == contextName {
-			for _, ns := range ctx.Namespaces {
-				if ns.Name == namespaceName {
-					forwards = append(forwards, ns.Forwards...)
-					break
-				}
-			}
-			break
-		}
-	}
-
-	return forwards
-}

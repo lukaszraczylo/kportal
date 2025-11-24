@@ -298,6 +298,11 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 
 // stopWorker stops and removes a forward worker.
 func (m *Manager) stopWorker(id string) error {
+	return m.stopWorkerInternal(id, true)
+}
+
+// stopWorkerInternal stops a worker with option to remove from UI or just update status
+func (m *Manager) stopWorkerInternal(id string, removeFromUI bool) error {
 	m.workersMu.Lock()
 	worker, exists := m.workers[id]
 	if !exists {
@@ -310,9 +315,13 @@ func (m *Manager) stopWorker(id string) error {
 	// Unregister from health checker
 	m.healthChecker.Unregister(id)
 
-	// Notify UI to remove the forward
+	// Notify UI - either remove or update to disabled status
 	if m.statusUI != nil {
-		m.statusUI.Remove(id)
+		if removeFromUI {
+			m.statusUI.Remove(id)
+		} else {
+			m.statusUI.UpdateStatus(id, "Disabled")
+		}
 	}
 
 	// Stop the worker
@@ -363,7 +372,7 @@ func (m *Manager) getResourceForPort(forwards []config.Forward, port int) string
 
 // DisableForward temporarily stops a forward by ID
 func (m *Manager) DisableForward(id string) error {
-	if err := m.stopWorker(id); err != nil {
+	if err := m.stopWorkerInternal(id, false); err != nil {
 		return err
 	}
 	log.Printf("Disabled: %s", id)

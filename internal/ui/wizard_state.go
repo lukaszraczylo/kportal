@@ -1,8 +1,33 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/nvm/kportal/internal/k8s"
 )
+
+// filterStrings filters a slice of strings by a search filter (case-insensitive substring match)
+func filterStrings(items []string, filter string) []string {
+	if filter == "" {
+		return items
+	}
+	filtered := []string{}
+	filterLower := strings.ToLower(filter)
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item), filterLower) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+// matchesFilter checks if a string matches the filter (case-insensitive substring match)
+func matchesFilter(item, filter string) bool {
+	if filter == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(item), strings.ToLower(filter))
+}
 
 // ViewMode represents the current view state of the UI
 type ViewMode int
@@ -87,6 +112,7 @@ type AddWizardState struct {
 	cursor       int
 	scrollOffset int // For scrolling long lists
 	textInput    string
+	searchFilter string // For filtering lists (contexts, namespaces, services)
 	loading      bool
 	error        error
 
@@ -142,14 +168,14 @@ func (w *AddWizardState) moveCursor(delta int) {
 
 	switch w.step {
 	case StepSelectContext:
-		maxItems = len(w.contexts)
+		maxItems = len(w.getFilteredContexts())
 	case StepSelectNamespace:
-		maxItems = len(w.namespaces)
+		maxItems = len(w.getFilteredNamespaces())
 	case StepSelectResourceType:
 		maxItems = 3 // Three resource types
 	case StepEnterResource:
 		if w.selectedResourceType == ResourceTypeService {
-			maxItems = len(w.services)
+			maxItems = len(w.getFilteredServices())
 		}
 	case StepEnterRemotePort:
 		if len(w.detectedPorts) > 0 {
@@ -299,4 +325,41 @@ func (w *RemoveWizardState) getSelectedForwards() []RemovableForward {
 		}
 	}
 	return selected
+}
+
+// getFilteredContexts returns contexts filtered by search string
+func (w *AddWizardState) getFilteredContexts() []string {
+	if w.searchFilter == "" {
+		return w.contexts
+	}
+	return filterStrings(w.contexts, w.searchFilter)
+}
+
+// getFilteredNamespaces returns namespaces filtered by search string
+func (w *AddWizardState) getFilteredNamespaces() []string {
+	if w.searchFilter == "" {
+		return w.namespaces
+	}
+	return filterStrings(w.namespaces, w.searchFilter)
+}
+
+// getFilteredServices returns services filtered by search string
+func (w *AddWizardState) getFilteredServices() []k8s.ServiceInfo {
+	if w.searchFilter == "" {
+		return w.services
+	}
+	filtered := []k8s.ServiceInfo{}
+	for _, svc := range w.services {
+		if matchesFilter(svc.Name, w.searchFilter) {
+			filtered = append(filtered, svc)
+		}
+	}
+	return filtered
+}
+
+// clearSearchFilter clears the search filter and resets cursor/scroll
+func (w *AddWizardState) clearSearchFilter() {
+	w.searchFilter = ""
+	w.cursor = 0
+	w.scrollOffset = 0
 }

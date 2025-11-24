@@ -10,6 +10,19 @@ import (
 	"github.com/nvm/kportal/internal/k8s"
 )
 
+// isFilterableStep returns true if the step supports search/filter
+func isFilterableStep(step AddWizardStep) bool {
+	switch step {
+	case StepSelectContext, StepSelectNamespace:
+		return true
+	case StepEnterResource:
+		// Only service selection is filterable (pod prefix and selector are text input)
+		return true // We'll check resource type in the handler
+	default:
+		return false
+	}
+}
+
 // handleMainViewKeys handles keyboard input in the main view
 func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// If delete confirmation is showing, handle it separately
@@ -224,6 +237,12 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.ClearScreen
 
 	case "esc":
+		// If there's an active search filter, clear it instead of going back
+		if wizard.searchFilter != "" && isFilterableStep(wizard.step) {
+			wizard.clearSearchFilter()
+			return m, nil
+		}
+
 		// In edit mode, Esc always cancels (don't navigate back through skipped steps)
 		if wizard.isEditing {
 			m.ui.viewMode = ViewModeMain
@@ -242,6 +261,7 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			wizard.step--
 			wizard.cursor = 0
 			wizard.clearTextInput()
+			wizard.clearSearchFilter()
 			wizard.error = nil
 
 			// Reset input mode based on the step we're going back to
@@ -300,26 +320,48 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAddWizardEnter()
 
 	case "backspace":
-		// Allow backspace in text input mode OR when focused on alias in confirmation
+		// Allow backspace in text input mode OR when focused on alias in confirmation OR when filtering
 		canBackspace := wizard.inputMode == InputModeText ||
-			(wizard.step == StepConfirmation && wizard.confirmationFocus == FocusAlias)
-		if canBackspace && len(wizard.textInput) > 0 {
-			wizard.textInput = wizard.textInput[:len(wizard.textInput)-1]
+			(wizard.step == StepConfirmation && wizard.confirmationFocus == FocusAlias) ||
+			(wizard.inputMode == InputModeList && isFilterableStep(wizard.step) && len(wizard.searchFilter) > 0)
+
+		if canBackspace {
+			if isFilterableStep(wizard.step) && wizard.inputMode == InputModeList && len(wizard.searchFilter) > 0 {
+				// Backspace in search filter
+				wizard.searchFilter = wizard.searchFilter[:len(wizard.searchFilter)-1]
+				wizard.cursor = 0
+				wizard.scrollOffset = 0
+			} else if len(wizard.textInput) > 0 {
+				wizard.textInput = wizard.textInput[:len(wizard.textInput)-1]
+			}
 		}
 
 	default:
 		// Handle text input
 		canTypeText := wizard.inputMode == InputModeText ||
-			(wizard.step == StepConfirmation && wizard.confirmationFocus == FocusAlias)
-		if canTypeText && len(msg.String()) == 1 {
-			wizard.handleTextInput(rune(msg.String()[0]))
+			(wizard.step == StepConfirmation && wizard.confirmationFocus == FocusAlias) ||
+			(wizard.inputMode == InputModeList && isFilterableStep(wizard.step))
 
-			// Trigger validation for selector
-			if wizard.step == StepEnterResource && wizard.selectedResourceType == ResourceTypePodSelector {
-				if len(wizard.textInput) > 0 {
-					wizard.loading = true
-					wizard.error = nil
-					return m, validateSelectorCmd(m.ui.discovery, wizard.selectedContext, wizard.selectedNamespace, wizard.textInput)
+		if canTypeText && len(msg.String()) == 1 {
+			// If in list mode on filterable step, add to search filter instead of textInput
+			if wizard.inputMode == InputModeList && isFilterableStep(wizard.step) {
+				char := rune(msg.String()[0])
+				// Only allow printable characters
+				if char >= 32 && char < 127 {
+					wizard.searchFilter += string(char)
+					wizard.cursor = 0
+					wizard.scrollOffset = 0
+				}
+			} else {
+				wizard.handleTextInput(rune(msg.String()[0]))
+
+				// Trigger validation for selector
+				if wizard.step == StepEnterResource && wizard.selectedResourceType == ResourceTypePodSelector {
+					if len(wizard.textInput) > 0 {
+						wizard.loading = true
+						wizard.error = nil
+						return m, validateSelectorCmd(m.ui.discovery, wizard.selectedContext, wizard.selectedNamespace, wizard.textInput)
+					}
 				}
 			}
 		}
@@ -334,19 +376,23 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 
 	switch wizard.step {
 	case StepSelectContext:
-		if wizard.cursor >= 0 && wizard.cursor < len(wizard.contexts) {
-			wizard.selectedContext = wizard.contexts[wizard.cursor]
+		filteredContexts := wizard.getFilteredContexts()
+		if wizard.cursor >= 0 && wizard.cursor < len(filteredContexts) {
+			wizard.selectedContext = filteredContexts[wizard.cursor]
 			wizard.step = StepSelectNamespace
 			wizard.cursor = 0
+			wizard.clearSearchFilter()
 			wizard.loading = true
 			return m, loadNamespacesCmd(m.ui.discovery, wizard.selectedContext)
 		}
 
 	case StepSelectNamespace:
-		if wizard.cursor >= 0 && wizard.cursor < len(wizard.namespaces) {
-			wizard.selectedNamespace = wizard.namespaces[wizard.cursor]
+		filteredNamespaces := wizard.getFilteredNamespaces()
+		if wizard.cursor >= 0 && wizard.cursor < len(filteredNamespaces) {
+			wizard.selectedNamespace = filteredNamespaces[wizard.cursor]
 			wizard.step = StepSelectResourceType
 			wizard.cursor = 0
+			wizard.clearSearchFilter()
 			wizard.inputMode = InputModeList
 		}
 
@@ -403,13 +449,15 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			}
 
 		case ResourceTypeService:
-			if wizard.cursor >= 0 && wizard.cursor < len(wizard.services) {
-				wizard.resourceValue = wizard.services[wizard.cursor].Name
+			filteredServices := wizard.getFilteredServices()
+			if wizard.cursor >= 0 && wizard.cursor < len(filteredServices) {
+				wizard.resourceValue = filteredServices[wizard.cursor].Name
 				wizard.step = StepEnterRemotePort
 				wizard.clearTextInput()
+				wizard.clearSearchFilter()
 
 				// Get ports from selected service
-				wizard.detectedPorts = wizard.services[wizard.cursor].Ports
+				wizard.detectedPorts = filteredServices[wizard.cursor].Ports
 				if len(wizard.detectedPorts) > 0 {
 					wizard.inputMode = InputModeList
 					wizard.cursor = 0

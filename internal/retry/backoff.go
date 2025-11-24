@@ -67,8 +67,3 @@ func (b *Backoff) calculateJitter(delay time.Duration) time.Duration {
 	jitter := (b.rng.Float64()*2 - 1) * maxJitter
 	return time.Duration(jitter)
 }
-
-// Sleep waits for the next backoff duration.
-func (b *Backoff) Sleep() {
-	time.Sleep(b.Next())
-}

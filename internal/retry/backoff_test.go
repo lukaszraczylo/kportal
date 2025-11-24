@@ -158,10 +158,12 @@ func TestBackoff_ExponentialProgression(t *testing.T) {
 	// We allow for jitter by checking a range
 	for i := 1; i < len(delays)-1; i++ {
 		// Each delay should be roughly double the previous (accounting for jitter)
-		// With 10% jitter on each value, worst case: (2.0 * 1.1) / 0.9 = 2.44
-		// We use 1.7x to 2.5x as a reasonable range with 10% jitter on each
+		// With 10% jitter on each value:
+		//   Lower bound: (2.0 * 0.9) / 1.1 ≈ 1.636
+		//   Upper bound: (2.0 * 1.1) / 0.9 ≈ 2.444
+		// We use 1.6x to 2.5x as a reasonable range to account for jitter variance
 		ratio := float64(delays[i]) / float64(delays[i-1])
-		assert.GreaterOrEqual(t, ratio, 1.7, "exponential growth should be ~2x")
+		assert.GreaterOrEqual(t, ratio, 1.6, "exponential growth should be ~2x")
 		assert.LessOrEqual(t, ratio, 2.5, "exponential growth should be ~2x")
 	}
 }
