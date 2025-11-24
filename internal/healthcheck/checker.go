@@ -3,6 +3,7 @@ package healthcheck
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 const (
 	startupGracePeriod = 10 * time.Second
+	dataTransferSize   = 1024 // bytes to read in data transfer test
 )
 
 // Status represents the health status of a port forward
@@ -20,15 +22,26 @@ const (
 	StatusUnhealthy Status = "Error"
 	StatusStarting  Status = "Starting"
 	StatusReconnect Status = "Reconnecting"
+	StatusStale     Status = "Stale" // Connection is old or idle
+)
+
+// CheckMethod represents the health check method
+type CheckMethod string
+
+const (
+	CheckMethodTCPDial      CheckMethod = "tcp-dial"      // Simple TCP connection test
+	CheckMethodDataTransfer CheckMethod = "data-transfer" // Try to read data from connection
 )
 
 // PortHealth represents the health status of a single port
 type PortHealth struct {
-	Port         int
-	LastCheck    time.Time
-	Status       Status
-	ErrorMessage string
-	RegisteredAt time.Time // When this port was registered
+	Port           int
+	LastCheck      time.Time
+	Status         Status
+	ErrorMessage   string
+	RegisteredAt   time.Time // When this port was registered
+	ConnectionTime time.Time // When current connection was established
+	LastActivity   time.Time // Last time data was transferred
 }
 
 // StatusCallback is called when a port's health status changes
@@ -36,26 +49,52 @@ type StatusCallback func(forwardID string, status Status, errorMsg string)
 
 // Checker performs periodic health checks on local ports
 type Checker struct {
-	mu        sync.RWMutex
-	ports     map[string]*PortHealth // key: forward ID
-	callbacks map[string]StatusCallback
-	interval  time.Duration
-	timeout   time.Duration
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	mu               sync.RWMutex
+	ports            map[string]*PortHealth // key: forward ID
+	callbacks        map[string]StatusCallback
+	interval         time.Duration
+	timeout          time.Duration
+	method           CheckMethod
+	maxConnectionAge time.Duration
+	maxIdleTime      time.Duration
+	ctx              context.Context
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
 }
 
-// NewChecker creates a new health checker
+// CheckerOptions configures the health checker
+type CheckerOptions struct {
+	Interval         time.Duration
+	Timeout          time.Duration
+	Method           CheckMethod
+	MaxConnectionAge time.Duration
+	MaxIdleTime      time.Duration
+}
+
+// NewChecker creates a new health checker with default options
 func NewChecker(interval, timeout time.Duration) *Checker {
+	return NewCheckerWithOptions(CheckerOptions{
+		Interval:         interval,
+		Timeout:          timeout,
+		Method:           CheckMethodDataTransfer,
+		MaxConnectionAge: 25 * time.Minute,
+		MaxIdleTime:      10 * time.Minute,
+	})
+}
+
+// NewCheckerWithOptions creates a new health checker with custom options
+func NewCheckerWithOptions(opts CheckerOptions) *Checker {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Checker{
-		ports:     make(map[string]*PortHealth),
-		callbacks: make(map[string]StatusCallback),
-		interval:  interval,
-		timeout:   timeout,
-		ctx:       ctx,
-		cancel:    cancel,
+		ports:            make(map[string]*PortHealth),
+		callbacks:        make(map[string]StatusCallback),
+		interval:         opts.Interval,
+		timeout:          opts.Timeout,
+		method:           opts.Method,
+		maxConnectionAge: opts.MaxConnectionAge,
+		maxIdleTime:      opts.MaxIdleTime,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 
@@ -64,17 +103,42 @@ func (c *Checker) Register(forwardID string, port int, callback StatusCallback) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	now := time.Now()
 	c.ports[forwardID] = &PortHealth{
-		Port:         port,
-		LastCheck:    time.Time{},
-		Status:       StatusStarting,
-		RegisteredAt: time.Now(),
+		Port:           port,
+		LastCheck:      time.Time{},
+		Status:         StatusStarting,
+		RegisteredAt:   now,
+		ConnectionTime: now,
+		LastActivity:   now,
 	}
 	c.callbacks[forwardID] = callback
 
 	// Start checking this port
 	c.wg.Add(1)
 	go c.checkLoop(forwardID)
+}
+
+// MarkConnected marks a forward as having established a new connection
+func (c *Checker) MarkConnected(forwardID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if health, exists := c.ports[forwardID]; exists {
+		now := time.Now()
+		health.ConnectionTime = now
+		health.LastActivity = now
+	}
+}
+
+// RecordActivity records data transfer activity for a forward
+func (c *Checker) RecordActivity(forwardID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if health, exists := c.ports[forwardID]; exists {
+		health.LastActivity = time.Now()
+	}
 }
 
 // Unregister removes a port from monitoring
@@ -197,37 +261,57 @@ func (c *Checker) checkPort(forwardID string) {
 	port := health.Port
 	oldStatus := health.Status
 	registeredAt := health.RegisteredAt
+	connectionTime := health.ConnectionTime
+	lastActivity := health.LastActivity
 	c.mu.RUnlock()
 
-	// Attempt to connect to the local port
-	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
-	defer cancel()
-
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
-
+	now := time.Now()
 	newStatus := StatusHealthy
 	errorMsg := ""
 
-	if err != nil {
-		// Grace period: if forward is less than 10 seconds old, keep it as "Starting"
-		// This avoids scary "Error" messages during initial connection attempts
-		timeSinceStart := time.Since(registeredAt)
-		if timeSinceStart < startupGracePeriod {
-			newStatus = StatusStarting
-		} else {
-			newStatus = StatusUnhealthy
-		}
-		errorMsg = err.Error()
+	// Check for stale connections based on age or idle time
+	connectionAge := now.Sub(connectionTime)
+	idleTime := now.Sub(lastActivity)
+
+	// Only enforce max connection age if the connection is ALSO idle
+	// This prevents interrupting active transfers (e.g., database dumps)
+	if c.maxConnectionAge > 0 && connectionAge > c.maxConnectionAge && idleTime > c.maxIdleTime {
+		newStatus = StatusStale
+		errorMsg = fmt.Sprintf("connection age %v exceeds max %v (and idle for %v)",
+			connectionAge.Round(time.Second), c.maxConnectionAge, idleTime.Round(time.Second))
+	} else if c.maxIdleTime > 0 && idleTime > c.maxIdleTime {
+		newStatus = StatusStale
+		errorMsg = fmt.Sprintf("idle time %v exceeds max %v", idleTime.Round(time.Second), c.maxIdleTime)
 	} else {
-		conn.Close()
+		// Perform connectivity check
+		var checkErr error
+		switch c.method {
+		case CheckMethodDataTransfer:
+			checkErr = c.checkDataTransfer(port)
+		case CheckMethodTCPDial:
+			checkErr = c.checkTCPDial(port)
+		default:
+			checkErr = c.checkTCPDial(port)
+		}
+
+		if checkErr != nil {
+			// Grace period: if forward is less than 10 seconds old, keep it as "Starting"
+			// This avoids scary "Error" messages during initial connection attempts
+			timeSinceStart := now.Sub(registeredAt)
+			if timeSinceStart < startupGracePeriod {
+				newStatus = StatusStarting
+			} else {
+				newStatus = StatusUnhealthy
+			}
+			errorMsg = checkErr.Error()
+		}
 	}
 
 	// Update health status
 	c.mu.Lock()
 	if health, exists := c.ports[forwardID]; exists {
 		health.Status = newStatus
-		health.LastCheck = time.Now()
+		health.LastCheck = now
 		health.ErrorMessage = errorMsg
 	}
 	c.mu.Unlock()
@@ -236,6 +320,62 @@ func (c *Checker) checkPort(forwardID string) {
 	if oldStatus != newStatus {
 		c.notifyStatusChange(forwardID, newStatus, errorMsg)
 	}
+}
+
+// checkTCPDial performs a simple TCP dial test
+func (c *Checker) checkTCPDial(port int) error {
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return err
+	}
+	conn.Close()
+	return nil
+}
+
+// checkDataTransfer attempts to read data from the connection to verify tunnel health
+func (c *Checker) checkDataTransfer(port int) error {
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Set a short read deadline to detect hung connections
+	// We don't expect to receive data, but we want to verify the connection isn't hung
+	conn.SetReadDeadline(time.Now().Add(c.timeout))
+
+	// Try to read a small amount of data
+	// Most servers will either:
+	// 1. Send a banner (SSH, FTP, etc) - we'll read it successfully
+	// 2. Wait for client to send first (HTTP, postgres) - we'll timeout (which is OK)
+	// 3. Hung/stale connection - will timeout with different error
+	buf := make([]byte, dataTransferSize)
+	_, err = conn.Read(buf)
+
+	// We expect either:
+	// - No error (banner received)
+	// - EOF (connection closed by server after connect)
+	// - Timeout (server waiting for client)
+	// All of these indicate the tunnel is working
+	if err == nil || err == io.EOF {
+		return nil
+	}
+
+	// Timeout is acceptable - server is waiting for us to send data first
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return nil
+	}
+
+	// Other errors indicate a problem
+	return fmt.Errorf("data transfer check failed: %w", err)
 }
 
 // notifyStatusChange calls the callback for a forward

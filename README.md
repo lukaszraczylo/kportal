@@ -24,7 +24,8 @@ kportal simplifies managing multiple Kubernetes port-forwards with an elegant, i
 - 🗑️ **Live Delete** - Remove port-forwards instantly from the running session
 - 🔄 **Auto-Reconnect** - Automatic retry with exponential backoff on connection failures (max 10s)
 - ⚡ **Hot-Reload** - Update configuration without restarting - changes applied automatically
-- 🏥 **Health Checks** - Real-time port forward status monitoring with 5-second intervals
+- 🏥 **Advanced Health Checks** - Multiple check methods (tcp-dial, data-transfer) with stale connection detection
+- 🛡️ **Goroutine Watchdog** - Detects and recovers from completely hung workers
 - 🎨 **Multi-Context** - Support for multiple Kubernetes contexts and namespaces
 - 📦 **Batch Management** - Manage all port-forwards from a single configuration file
 - 🔌 **Toggle Forwards** - Enable/disable individual port-forwards on the fly with Space key
@@ -193,6 +194,47 @@ contexts:
 - **Pod by selector**: Set `resource: pod` and use `selector: app=nginx`
 - **Service**: `service/service-name` or `svc/service-name`
 - **Deployment**: `deployment/deployment-name` or `deploy/deployment-name`
+
+### Health Check & Reliability (Advanced)
+
+kportal includes advanced health checking to prevent stale connections during long-running operations like database dumps:
+
+```yaml
+healthCheck:
+  interval: "3s"              # Health check frequency (default: 3s)
+  timeout: "2s"               # Health check timeout (default: 2s)
+  method: "data-transfer"     # Check method: "tcp-dial" or "data-transfer" (default: data-transfer)
+  maxConnectionAge: "25m"     # Proactive reconnect before k8s timeout (default: 25m)
+  maxIdleTime: "10m"          # Detect hung connections (default: 10m)
+
+reliability:
+  tcpKeepalive: "30s"         # TCP keepalive interval (default: 30s)
+  dialTimeout: "30s"          # Connection dial timeout (default: 30s)
+  retryOnStale: true          # Auto-reconnect stale connections (default: true)
+```
+
+**Health Check Methods:**
+- **`tcp-dial`**: Fast TCP connection test - verifies local port is listening
+- **`data-transfer`**: More reliable - attempts to read data to verify tunnel is functional
+
+**Stale Detection:**
+- **Max Connection Age**: Kubernetes API typically has 30-minute timeout. kportal reconnects at 25 minutes by default to avoid hitting this limit. **Important**: Age-based reconnection only occurs when the connection is ALSO idle - active transfers (like database dumps) are never interrupted.
+- **Max Idle Time**: Detects connections with no data transfer, common when intermediate firewalls drop idle TCP connections
+
+**Use Case Example - Database Dumps:**
+```yaml
+# Optimized for long-running pg_dump
+healthCheck:
+  method: "data-transfer"
+  maxConnectionAge: "20m"  # Only applies when idle - won't interrupt active dumps
+  maxIdleTime: "5m"        # Detects truly stale connections
+
+reliability:
+  tcpKeepalive: "30s"
+  retryOnStale: true
+```
+
+This configuration ensures multi-hour database dumps complete without interruption. The `maxConnectionAge` will only trigger reconnection if the connection has been idle for more than `maxIdleTime`, preventing interruption of active data transfers.
 
 ## 🎮 Usage
 

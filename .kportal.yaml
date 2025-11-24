@@ -1,6 +1,27 @@
 # Example kportal configuration
 # Copy this file to your project and customize as needed
 
+# Optional: Health check configuration
+# These settings control how kportal monitors connection health and detects stale connections
+healthCheck:
+  interval: "3s"              # How often to check connection health (default: 3s)
+  timeout: "2s"               # Timeout for health check operations (default: 2s)
+  method: "data-transfer"     # Health check method: "tcp-dial" or "data-transfer" (default: data-transfer)
+                              # - tcp-dial: Simple TCP connection test (fast, less reliable)
+                              # - data-transfer: Attempts to read data (slower, more reliable)
+  maxConnectionAge: "25m"     # Maximum connection age before proactive reconnect (default: 25m)
+                              # Helps avoid Kubernetes API server timeouts (typically 30m)
+  maxIdleTime: "10m"          # Maximum idle time before marking as stale (default: 10m)
+                              # Connections with no data transfer are marked stale
+
+# Optional: Reliability configuration
+# These settings improve connection stability for long-running transfers
+reliability:
+  tcpKeepalive: "30s"         # TCP keepalive interval for OS-level connection monitoring (default: 30s)
+  dialTimeout: "30s"          # Connection dial timeout (default: 30s)
+  retryOnStale: true          # Automatically reconnect when stale connections detected (default: true)
+  watchdogPeriod: "30s"       # Goroutine watchdog check interval to detect hung workers (default: 30s)
+
 contexts:
   # Production context
   - name: production

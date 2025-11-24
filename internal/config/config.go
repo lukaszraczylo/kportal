@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,7 +14,112 @@ const (
 
 // Config represents the root configuration structure from .kportal.yaml
 type Config struct {
-	Contexts []Context `yaml:"contexts"`
+	Contexts    []Context        `yaml:"contexts"`
+	HealthCheck *HealthCheckSpec `yaml:"healthCheck,omitempty"`
+	Reliability *ReliabilitySpec `yaml:"reliability,omitempty"`
+}
+
+// HealthCheckSpec configures health check behavior
+type HealthCheckSpec struct {
+	Interval         string `yaml:"interval,omitempty"`         // e.g., "3s", "5s"
+	Timeout          string `yaml:"timeout,omitempty"`          // e.g., "2s"
+	Method           string `yaml:"method,omitempty"`           // "tcp-dial" | "data-transfer"
+	MaxConnectionAge string `yaml:"maxConnectionAge,omitempty"` // e.g., "25m" - reconnect before k8s timeout
+	MaxIdleTime      string `yaml:"maxIdleTime,omitempty"`      // e.g., "10m" - reconnect if no activity
+}
+
+// ReliabilitySpec configures connection reliability features
+type ReliabilitySpec struct {
+	TCPKeepalive   string `yaml:"tcpKeepalive,omitempty"`   // e.g., "30s" - OS-level keepalive
+	DialTimeout    string `yaml:"dialTimeout,omitempty"`    // e.g., "30s" - connection dial timeout
+	RetryOnStale   bool   `yaml:"retryOnStale,omitempty"`   // Auto-reconnect on stale detection
+	WatchdogPeriod string `yaml:"watchdogPeriod,omitempty"` // e.g., "30s" - goroutine watchdog interval
+}
+
+// GetHealthCheckIntervalOrDefault returns the health check interval or default value
+func (c *Config) GetHealthCheckIntervalOrDefault() time.Duration {
+	if c.HealthCheck != nil && c.HealthCheck.Interval != "" {
+		if d, err := time.ParseDuration(c.HealthCheck.Interval); err == nil {
+			return d
+		}
+	}
+	return 3 * time.Second // Default: check every 3 seconds
+}
+
+// GetHealthCheckTimeoutOrDefault returns the health check timeout or default value
+func (c *Config) GetHealthCheckTimeoutOrDefault() time.Duration {
+	if c.HealthCheck != nil && c.HealthCheck.Timeout != "" {
+		if d, err := time.ParseDuration(c.HealthCheck.Timeout); err == nil {
+			return d
+		}
+	}
+	return 2 * time.Second // Default: 2 second timeout
+}
+
+// GetHealthCheckMethod returns the health check method or default
+func (c *Config) GetHealthCheckMethod() string {
+	if c.HealthCheck != nil && c.HealthCheck.Method != "" {
+		return c.HealthCheck.Method
+	}
+	return "data-transfer" // Default: more reliable data transfer test
+}
+
+// GetMaxConnectionAge returns the max connection age or default
+func (c *Config) GetMaxConnectionAge() time.Duration {
+	if c.HealthCheck != nil && c.HealthCheck.MaxConnectionAge != "" {
+		if d, err := time.ParseDuration(c.HealthCheck.MaxConnectionAge); err == nil {
+			return d
+		}
+	}
+	return 25 * time.Minute // Default: 25 minutes (before typical 30min k8s timeout)
+}
+
+// GetMaxIdleTime returns the max idle time or default
+func (c *Config) GetMaxIdleTime() time.Duration {
+	if c.HealthCheck != nil && c.HealthCheck.MaxIdleTime != "" {
+		if d, err := time.ParseDuration(c.HealthCheck.MaxIdleTime); err == nil {
+			return d
+		}
+	}
+	return 10 * time.Minute // Default: 10 minutes idle before reconnect
+}
+
+// GetTCPKeepalive returns the TCP keepalive duration or default
+func (c *Config) GetTCPKeepalive() time.Duration {
+	if c.Reliability != nil && c.Reliability.TCPKeepalive != "" {
+		if d, err := time.ParseDuration(c.Reliability.TCPKeepalive); err == nil {
+			return d
+		}
+	}
+	return 30 * time.Second // Default: 30 second keepalive
+}
+
+// GetRetryOnStale returns whether to retry on stale connections
+func (c *Config) GetRetryOnStale() bool {
+	if c.Reliability != nil {
+		return c.Reliability.RetryOnStale
+	}
+	return true // Default: enabled
+}
+
+// GetWatchdogPeriod returns the goroutine watchdog check period or default
+func (c *Config) GetWatchdogPeriod() time.Duration {
+	if c.Reliability != nil && c.Reliability.WatchdogPeriod != "" {
+		if d, err := time.ParseDuration(c.Reliability.WatchdogPeriod); err == nil {
+			return d
+		}
+	}
+	return 30 * time.Second // Default: check every 30 seconds
+}
+
+// GetDialTimeout returns the connection dial timeout or default
+func (c *Config) GetDialTimeout() time.Duration {
+	if c.Reliability != nil && c.Reliability.DialTimeout != "" {
+		if d, err := time.ParseDuration(c.Reliability.DialTimeout); err == nil {
+			return d
+		}
+	}
+	return 30 * time.Second // Default: 30 second dial timeout
 }
 
 // Context represents a Kubernetes context with its namespaces

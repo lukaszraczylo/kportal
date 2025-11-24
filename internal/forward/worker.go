@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
@@ -20,21 +21,25 @@ const (
 
 // ForwardWorker manages a single port-forward connection with automatic retry.
 type ForwardWorker struct {
-	forward       config.Forward
-	portForwarder *k8s.PortForwarder
-	ctx           context.Context
-	cancel        context.CancelFunc
-	stopChan      chan struct{}
-	doneChan      chan struct{}
-	verbose       bool
-	lastPod       string // Track the last pod we connected to
-	statusUI      StatusUpdater
-	healthChecker *healthcheck.Checker
-	startTime     time.Time // Track when the worker started
+	forward         config.Forward
+	portForwarder   *k8s.PortForwarder
+	ctx             context.Context
+	cancel          context.CancelFunc
+	stopChan        chan struct{}
+	doneChan        chan struct{}
+	reconnectChan   chan string // Channel to trigger reconnection
+	verbose         bool
+	lastPod         string // Track the last pod we connected to
+	statusUI        StatusUpdater
+	healthChecker   *healthcheck.Checker
+	watchdog        *Watchdog
+	startTime       time.Time          // Track when the worker started
+	forwardCancel   context.CancelFunc // Cancel function for current forward attempt
+	forwardCancelMu sync.Mutex         // Protects forwardCancel
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
-func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater, healthChecker *healthcheck.Checker) *ForwardWorker {
+func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater, healthChecker *healthcheck.Checker, watchdog *Watchdog) *ForwardWorker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ForwardWorker{
@@ -44,10 +49,29 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		cancel:        cancel,
 		stopChan:      make(chan struct{}),
 		doneChan:      make(chan struct{}),
+		reconnectChan: make(chan string, 1), // Buffered to avoid blocking
 		verbose:       verbose,
 		statusUI:      statusUI,
 		healthChecker: healthChecker,
+		watchdog:      watchdog,
 		startTime:     time.Now(),
+	}
+}
+
+// TriggerReconnect triggers a reconnection (e.g., due to stale connection)
+func (w *ForwardWorker) TriggerReconnect(reason string) {
+	// Cancel current forward if running
+	w.forwardCancelMu.Lock()
+	if w.forwardCancel != nil {
+		w.forwardCancel()
+	}
+	w.forwardCancelMu.Unlock()
+
+	// Send reconnect signal (non-blocking)
+	select {
+	case w.reconnectChan <- reason:
+	default:
+		// Channel already has pending reconnect
 	}
 }
 
@@ -71,6 +95,11 @@ func (w *ForwardWorker) run() {
 	backoff := retry.NewBackoff()
 
 	for {
+		// Send heartbeat to watchdog to indicate we're alive
+		if w.watchdog != nil {
+			w.watchdog.Heartbeat(w.forward.ID())
+		}
+
 		// Check if we should stop
 		select {
 		case <-w.ctx.Done():
@@ -184,10 +213,23 @@ func (w *ForwardWorker) establishForward(podName string) error {
 	forwardCtx, forwardCancel := context.WithCancel(w.ctx)
 	defer forwardCancel()
 
-	// Start a goroutine to monitor for stop signal
+	// Store cancel function so TriggerReconnect can use it
+	w.forwardCancelMu.Lock()
+	w.forwardCancel = forwardCancel
+	w.forwardCancelMu.Unlock()
+
+	defer func() {
+		w.forwardCancelMu.Lock()
+		w.forwardCancel = nil
+		w.forwardCancelMu.Unlock()
+	}()
+
+	// Start a goroutine to monitor for stop signal and reconnect triggers
 	go func() {
 		select {
 		case <-w.stopChan:
+			close(stopChan)
+		case <-w.reconnectChan:
 			close(stopChan)
 		case <-forwardCtx.Done():
 			close(stopChan)
@@ -229,6 +271,10 @@ func (w *ForwardWorker) establishForward(podName string) error {
 	case <-readyChan:
 		if w.verbose {
 			log.Printf("[%s] Port-forward connection established", w.forward.ID())
+		}
+		// Mark connection as established in health checker
+		if w.healthChecker != nil {
+			w.healthChecker.MarkConnected(w.forward.ID())
 		}
 	case err := <-errChan:
 		return fmt.Errorf("failed to establish forward: %w", err)
