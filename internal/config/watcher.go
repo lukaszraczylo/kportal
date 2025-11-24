@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/nvm/kportal/internal/logger"
 )
 
 // ReloadCallback is called when the configuration file changes.
@@ -113,28 +114,37 @@ func (w *Watcher) handleReload() {
 	// Load new configuration
 	newCfg, err := LoadConfig(w.configPath)
 	if err != nil {
-		log.Printf("Failed to load configuration: %v", err)
-		log.Printf("Keeping previous configuration active")
+		logger.Error("Failed to load configuration during hot-reload", map[string]interface{}{
+			"config_path": w.configPath,
+			"error":       err.Error(),
+		})
+		logger.Info("Keeping previous configuration active", nil)
 		return
 	}
 
 	// Validate new configuration
 	validator := NewValidator()
 	if errs := validator.ValidateConfig(newCfg); len(errs) > 0 {
-		log.Printf("Configuration validation failed:")
-		log.Print(FormatValidationErrors(errs))
-		log.Printf("Keeping previous configuration active")
+		logger.Error("Configuration validation failed during hot-reload", map[string]interface{}{
+			"config_path":       w.configPath,
+			"validation_errors": len(errs),
+		})
+		logger.Info("Keeping previous configuration active", nil)
 		return
 	}
 
 	// Call reload callback
 	if err := w.callback(newCfg); err != nil {
-		log.Printf("Failed to apply new configuration: %v", err)
-		log.Printf("Keeping previous configuration active")
+		logger.Error("Failed to apply new configuration", map[string]interface{}{
+			"config_path": w.configPath,
+			"error":       err.Error(),
+		})
+		logger.Info("Keeping previous configuration active", nil)
 		return
 	}
 
-	if w.verbose {
-		log.Printf("Configuration reloaded successfully")
-	}
+	logger.Info("Configuration reloaded successfully", map[string]interface{}{
+		"config_path":    w.configPath,
+		"forwards_count": len(newCfg.GetAllForwards()),
+	})
 }

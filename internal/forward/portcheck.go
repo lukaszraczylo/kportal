@@ -8,6 +8,19 @@ import (
 	"strings"
 )
 
+// isValidPID validates that a PID string contains only digits
+func isValidPID(pid string) bool {
+	if len(pid) == 0 || len(pid) > 9 {
+		return false
+	}
+	for _, c := range pid {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // PortConflict represents a local port that is already in use.
 type PortConflict struct {
 	Port     int    // The conflicting port number
@@ -93,6 +106,10 @@ func (pc *PortChecker) getProcessUsingPortUnix(port int) string {
 	pids := strings.Split(pidStr, "\n")
 	pid := pids[0]
 
+	if !isValidPID(pid) {
+		return "unknown"
+	}
+
 	// Get process name using ps
 	cmd = exec.Command("ps", "-p", pid, "-o", "comm=")
 	output, err = cmd.Output()
@@ -139,6 +156,10 @@ func (pc *PortChecker) getProcessUsingPortWindows(port int) string {
 		}
 
 		pid := fields[len(fields)-1]
+
+		if !isValidPID(pid) {
+			return "unknown"
+		}
 
 		// Get process name using tasklist
 		cmd = exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %s", pid), "/FO", "CSV", "/NH")
@@ -187,17 +208,4 @@ func FormatConflicts(conflicts []PortConflict) string {
 	sb.WriteString("Action: Stop conflicting processes or change localPort in config.\n")
 
 	return sb.String()
-}
-
-// GetPortsFromForwards extracts all local ports from a list of forward configurations.
-func GetPortsFromForwards(forwards []interface{}) []int {
-	ports := make([]int, 0, len(forwards))
-	for _, fwd := range forwards {
-		// This function expects a generic interface to work with different forward types
-		// The actual implementation should use the Forward struct from config package
-		if f, ok := fwd.(interface{ GetLocalPort() int }); ok {
-			ports = append(ports, f.GetLocalPort())
-		}
-	}
-	return ports
 }

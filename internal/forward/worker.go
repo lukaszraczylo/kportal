@@ -10,7 +10,12 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
+	"github.com/nvm/kportal/internal/logger"
 	"github.com/nvm/kportal/internal/retry"
+)
+
+const (
+	portForwardReadyTimeout = 30 * time.Second
 )
 
 // ForwardWorker manages a single port-forward connection with automatic retry.
@@ -86,7 +91,13 @@ func (w *ForwardWorker) run() {
 		)
 
 		if err != nil {
-			log.Printf("[%s] Failed to resolve resource: %v", w.forward.ID(), err)
+			logger.Error("Failed to resolve resource", map[string]interface{}{
+				"forward_id": w.forward.ID(),
+				"context":    w.forward.GetContext(),
+				"namespace":  w.forward.GetNamespace(),
+				"resource":   w.forward.Resource,
+				"error":      err.Error(),
+			})
 			w.sleepWithBackoff(backoff)
 			continue
 		}
@@ -96,10 +107,20 @@ func (w *ForwardWorker) run() {
 			if w.healthChecker != nil {
 				w.healthChecker.MarkReconnecting(w.forward.ID())
 			}
-			log.Printf("[%s] Switched to new pod: %s → %s", w.forward.ID(), w.lastPod, podName)
+			logger.Info("Pod restart detected, switching to new pod", map[string]interface{}{
+				"forward_id": w.forward.ID(),
+				"old_pod":    w.lastPod,
+				"new_pod":    podName,
+				"context":    w.forward.GetContext(),
+				"namespace":  w.forward.GetNamespace(),
+			})
 		} else if w.lastPod == "" {
-			log.Printf("[%s] Forwarding %s → localhost:%d",
-				w.forward.ID(), w.forward.String(), w.forward.LocalPort)
+			logger.Info("Starting port forward", map[string]interface{}{
+				"forward_id": w.forward.ID(),
+				"target":     w.forward.String(),
+				"local_port": w.forward.LocalPort,
+				"pod":        podName,
+			})
 			if w.healthChecker != nil {
 				w.healthChecker.MarkStarting(w.forward.ID())
 			}
@@ -123,7 +144,14 @@ func (w *ForwardWorker) run() {
 			}
 
 			// Log the error
-			log.Printf("[%s] Port-forward connection failed: %v", w.forward.ID(), err)
+			logger.Warn("Port-forward connection failed, will retry", map[string]interface{}{
+				"forward_id": w.forward.ID(),
+				"context":    w.forward.GetContext(),
+				"namespace":  w.forward.GetNamespace(),
+				"resource":   w.forward.Resource,
+				"local_port": w.forward.LocalPort,
+				"error":      err.Error(),
+			})
 
 			// Clear last pod so we re-resolve on next attempt
 			w.lastPod = ""
@@ -206,7 +234,7 @@ func (w *ForwardWorker) establishForward(podName string) error {
 		return fmt.Errorf("failed to establish forward: %w", err)
 	case <-w.ctx.Done():
 		return nil
-	case <-time.After(30 * time.Second):
+	case <-time.After(portForwardReadyTimeout):
 		return fmt.Errorf("timeout waiting for port-forward to become ready")
 	}
 

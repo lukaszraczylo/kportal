@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const (
+	startupGracePeriod = 10 * time.Second
+)
+
 // Status represents the health status of a port forward
 type Status string
 
@@ -85,39 +89,41 @@ func (c *Checker) Unregister(forwardID string) {
 // MarkReconnecting marks a forward as reconnecting (called by worker)
 func (c *Checker) MarkReconnecting(forwardID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if health, exists := c.ports[forwardID]; exists {
 		oldStatus := health.Status
 		health.Status = StatusReconnect
 		health.LastCheck = time.Now()
 
-		// Notify if status changed
+		c.mu.Unlock()
+
 		if oldStatus != StatusReconnect {
-			c.mu.Unlock()
 			c.notifyStatusChange(forwardID, StatusReconnect, "")
-			c.mu.Lock()
 		}
+		return
 	}
+
+	c.mu.Unlock()
 }
 
 // MarkStarting marks a forward as starting (called by worker)
 func (c *Checker) MarkStarting(forwardID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if health, exists := c.ports[forwardID]; exists {
 		oldStatus := health.Status
 		health.Status = StatusStarting
 		health.LastCheck = time.Now()
 
-		// Notify if status changed
+		c.mu.Unlock()
+
 		if oldStatus != StatusStarting {
-			c.mu.Unlock()
 			c.notifyStatusChange(forwardID, StatusStarting, "")
-			c.mu.Lock()
 		}
+		return
 	}
+
+	c.mu.Unlock()
 }
 
 // GetStatus returns the current health status of a forward
@@ -207,7 +213,7 @@ func (c *Checker) checkPort(forwardID string) {
 		// Grace period: if forward is less than 10 seconds old, keep it as "Starting"
 		// This avoids scary "Error" messages during initial connection attempts
 		timeSinceStart := time.Since(registeredAt)
-		if timeSinceStart < 10*time.Second {
+		if timeSinceStart < startupGracePeriod {
 			newStatus = StatusStarting
 		} else {
 			newStatus = StatusUnhealthy

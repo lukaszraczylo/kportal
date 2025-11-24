@@ -9,6 +9,12 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
+	"github.com/nvm/kportal/internal/logger"
+)
+
+const (
+	healthCheckInterval = 5 * time.Second
+	healthCheckTimeout  = 2 * time.Second
 )
 
 // StatusUpdater is an interface for updating forward status
@@ -34,17 +40,17 @@ type Manager struct {
 }
 
 // NewManager creates a new forward Manager.
-func NewManager(verbose bool) *Manager {
+func NewManager(verbose bool) (*Manager, error) {
 	clientPool, err := k8s.NewClientPool()
 	if err != nil {
-		log.Fatalf("Failed to create client pool: %v", err)
+		return nil, fmt.Errorf("failed to create client pool: %w", err)
 	}
 
 	resolver := k8s.NewResourceResolver(clientPool)
 	portForwarder := k8s.NewPortForwarder(clientPool, resolver)
 
 	// Create health checker: check every 5 seconds with 2 second timeout
-	healthChecker := healthcheck.NewChecker(5*time.Second, 2*time.Second)
+	healthChecker := healthcheck.NewChecker(healthCheckInterval, healthCheckTimeout)
 
 	return &Manager{
 		workers:       make(map[string]*ForwardWorker),
@@ -54,7 +60,7 @@ func NewManager(verbose bool) *Manager {
 		portChecker:   NewPortChecker(),
 		healthChecker: healthChecker,
 		verbose:       verbose,
-	}
+	}, nil
 }
 
 // SetStatusUI sets the status updater for the manager
@@ -93,7 +99,14 @@ func (m *Manager) Start(cfg *config.Config) error {
 
 	for _, fwd := range forwards {
 		if err := m.startWorker(fwd); err != nil {
-			log.Printf("Failed to start worker for %s: %v", fwd.ID(), err)
+			logger.Error("Failed to start worker", map[string]interface{}{
+				"forward_id": fwd.ID(),
+				"context":    fwd.GetContext(),
+				"namespace":  fwd.GetNamespace(),
+				"resource":   fwd.Resource,
+				"local_port": fwd.LocalPort,
+				"error":      err.Error(),
+			})
 			// Continue with other workers
 		}
 	}
@@ -146,7 +159,9 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 		return fmt.Errorf("new configuration is nil")
 	}
 
-	log.Printf("Reloading configuration...")
+	logger.Info("Reloading configuration", map[string]interface{}{
+		"new_forwards_count": len(newCfg.GetAllForwards()),
+	})
 
 	// Get all forwards from new config
 	newForwards := newCfg.GetAllForwards()

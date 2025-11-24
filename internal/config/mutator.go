@@ -24,6 +24,38 @@ func NewMutator(configPath string) *Mutator {
 	}
 }
 
+// findOrCreateContext finds an existing context or creates a new one
+func (m *Mutator) findOrCreateContext(cfg *Config, contextName string) *Context {
+	for i := range cfg.Contexts {
+		if cfg.Contexts[i].Name == contextName {
+			return &cfg.Contexts[i]
+		}
+	}
+
+	// Create new context
+	cfg.Contexts = append(cfg.Contexts, Context{
+		Name:       contextName,
+		Namespaces: []Namespace{},
+	})
+	return &cfg.Contexts[len(cfg.Contexts)-1]
+}
+
+// findOrCreateNamespace finds an existing namespace or creates a new one
+func (m *Mutator) findOrCreateNamespace(ctx *Context, namespaceName string) *Namespace {
+	for i := range ctx.Namespaces {
+		if ctx.Namespaces[i].Name == namespaceName {
+			return &ctx.Namespaces[i]
+		}
+	}
+
+	// Create new namespace
+	ctx.Namespaces = append(ctx.Namespaces, Namespace{
+		Name:     namespaceName,
+		Forwards: []Forward{},
+	})
+	return &ctx.Namespaces[len(ctx.Namespaces)-1]
+}
+
 // AddForward adds a new port forward to the configuration.
 // If the context or namespace doesn't exist, they will be created.
 // The new configuration is validated before writing.
@@ -43,41 +75,9 @@ func (m *Mutator) AddForward(contextName, namespaceName string, fwd Forward) err
 		}
 	}
 
-	// Find or create context
-	var targetContext *Context
-	for i := range cfg.Contexts {
-		if cfg.Contexts[i].Name == contextName {
-			targetContext = &cfg.Contexts[i]
-			break
-		}
-	}
-
-	if targetContext == nil {
-		// Create new context
-		cfg.Contexts = append(cfg.Contexts, Context{
-			Name:       contextName,
-			Namespaces: []Namespace{},
-		})
-		targetContext = &cfg.Contexts[len(cfg.Contexts)-1]
-	}
-
-	// Find or create namespace
-	var targetNamespace *Namespace
-	for i := range targetContext.Namespaces {
-		if targetContext.Namespaces[i].Name == namespaceName {
-			targetNamespace = &targetContext.Namespaces[i]
-			break
-		}
-	}
-
-	if targetNamespace == nil {
-		// Create new namespace
-		targetContext.Namespaces = append(targetContext.Namespaces, Namespace{
-			Name:     namespaceName,
-			Forwards: []Forward{},
-		})
-		targetNamespace = &targetContext.Namespaces[len(targetContext.Namespaces)-1]
-	}
+	// Find or create context and namespace
+	targetContext := m.findOrCreateContext(cfg, contextName)
+	targetNamespace := m.findOrCreateNamespace(targetContext, namespaceName)
 
 	// Set context/namespace on the forward for validation
 	fwd.SetContext(contextName, namespaceName)
@@ -211,41 +211,9 @@ func (m *Mutator) UpdateForward(oldID, newContextName, newNamespaceName string, 
 	}
 
 	// Now add the new forward
-	// Find or create context
-	var targetContext *Context
-	for i := range cfg.Contexts {
-		if cfg.Contexts[i].Name == newContextName {
-			targetContext = &cfg.Contexts[i]
-			break
-		}
-	}
-
-	if targetContext == nil {
-		// Create new context
-		cfg.Contexts = append(cfg.Contexts, Context{
-			Name:       newContextName,
-			Namespaces: []Namespace{},
-		})
-		targetContext = &cfg.Contexts[len(cfg.Contexts)-1]
-	}
-
-	// Find or create namespace
-	var targetNamespace *Namespace
-	for i := range targetContext.Namespaces {
-		if targetContext.Namespaces[i].Name == newNamespaceName {
-			targetNamespace = &targetContext.Namespaces[i]
-			break
-		}
-	}
-
-	if targetNamespace == nil {
-		// Create new namespace
-		targetContext.Namespaces = append(targetContext.Namespaces, Namespace{
-			Name:     newNamespaceName,
-			Forwards: []Forward{},
-		})
-		targetNamespace = &targetContext.Namespaces[len(targetContext.Namespaces)-1]
-	}
+	// Find or create context and namespace
+	targetContext := m.findOrCreateContext(cfg, newContextName)
+	targetNamespace := m.findOrCreateNamespace(targetContext, newNamespaceName)
 
 	// Set context/namespace on the forward for validation
 	newFwd.SetContext(newContextName, newNamespaceName)
@@ -290,7 +258,7 @@ func (m *Mutator) writeAtomic(cfg *Config) error {
 	tmpFile := filepath.Join(dir, ".kportal.yaml.tmp")
 
 	// Write to temp file
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 

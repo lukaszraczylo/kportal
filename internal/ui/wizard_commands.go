@@ -10,6 +10,10 @@ import (
 	"github.com/nvm/kportal/internal/k8s"
 )
 
+const (
+	k8sAPITimeout = 10 * time.Second
+)
+
 // Messages sent from async commands back to the update loop
 
 // ContextsLoadedMsg is sent when contexts have been loaded
@@ -82,7 +86,7 @@ func loadContextsCmd(discovery *k8s.Discovery) tea.Cmd {
 // loadNamespacesCmd loads namespaces for the given context
 func loadNamespacesCmd(discovery *k8s.Discovery, contextName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), k8sAPITimeout)
 		defer cancel()
 
 		namespaces, err := discovery.ListNamespaces(ctx, contextName)
@@ -96,7 +100,7 @@ func loadNamespacesCmd(discovery *k8s.Discovery, contextName string) tea.Cmd {
 // loadPodsCmd loads pods for the given context and namespace
 func loadPodsCmd(discovery *k8s.Discovery, contextName, namespace string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), k8sAPITimeout)
 		defer cancel()
 
 		pods, err := discovery.ListPods(ctx, contextName, namespace)
@@ -110,7 +114,7 @@ func loadPodsCmd(discovery *k8s.Discovery, contextName, namespace string) tea.Cm
 // loadServicesCmd loads services for the given context and namespace
 func loadServicesCmd(discovery *k8s.Discovery, contextName, namespace string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), k8sAPITimeout)
 		defer cancel()
 
 		services, err := discovery.ListServices(ctx, contextName, namespace)
@@ -124,7 +128,7 @@ func loadServicesCmd(discovery *k8s.Discovery, contextName, namespace string) te
 // validateSelectorCmd validates a label selector and returns matching pods
 func validateSelectorCmd(discovery *k8s.Discovery, contextName, namespace, selector string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), k8sAPITimeout)
 		defer cancel()
 
 		pods, err := discovery.ListPodsWithSelector(ctx, contextName, namespace, selector)

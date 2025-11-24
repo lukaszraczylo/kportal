@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,17 +16,21 @@ import (
 	"github.com/nvm/kportal/internal/converter"
 	"github.com/nvm/kportal/internal/forward"
 	"github.com/nvm/kportal/internal/k8s"
+	"github.com/nvm/kportal/internal/logger"
 	"github.com/nvm/kportal/internal/ui"
 	"k8s.io/klog/v2"
 )
 
 const (
-	defaultConfigFile = ".kportal.yaml"
+	defaultConfigFile        = ".kportal.yaml"
+	initialForwardSettleTime = 100 * time.Millisecond
+	tableUpdateInterval      = 2 * time.Second
 )
 
 var (
 	configFile    = flag.String("c", defaultConfigFile, "Path to configuration file")
 	verbose       = flag.Bool("v", false, "Enable verbose logging")
+	logFormat     = flag.String("log-format", "text", "Log format: text or json")
 	check         = flag.Bool("check", false, "Validate configuration and exit")
 	showVersion   = flag.Bool("version", false, "Show version and exit")
 	convertInput  = flag.String("convert", "", "Convert kftray JSON config to kportal YAML (provide input file path)")
@@ -39,6 +45,46 @@ func main() {
 		fmt.Printf("kportal version %s\n", version)
 		os.Exit(0)
 	}
+
+	// Validate config path security
+	if *configFile != "" {
+		absConfigPath, err := filepath.Abs(*configFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid config path: %v\n", err)
+			os.Exit(1)
+		}
+		absConfigPath = filepath.Clean(absConfigPath)
+
+		// Block system directories
+		systemDirs := []string{"/etc", "/sys", "/proc", "/dev"}
+		for _, sysDir := range systemDirs {
+			if strings.HasPrefix(absConfigPath, sysDir) {
+				fmt.Fprintf(os.Stderr, "Error: Config file cannot be in system directory: %s\n", sysDir)
+				os.Exit(1)
+			}
+		}
+
+		*configFile = absConfigPath
+	}
+
+	// Initialize structured logger
+	var logLevel logger.Level
+	var logFmt logger.Format
+
+	if *verbose {
+		logLevel = logger.LevelDebug
+	} else {
+		logLevel = logger.LevelInfo
+	}
+
+	switch *logFormat {
+	case "json":
+		logFmt = logger.FormatJSON
+	default:
+		logFmt = logger.FormatText
+	}
+
+	logger.Init(logLevel, logFmt)
 
 	// Handle conversion mode
 	if *convertInput != "" {
@@ -119,7 +165,11 @@ func main() {
 	mutator := config.NewMutator(*configFile)
 
 	// Create forward manager
-	manager := forward.NewManager(*verbose)
+	manager, err := forward.NewManager(*verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating forward manager: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Create UI (bubbletea for interactive, simple table for verbose)
 	var bubbleTeaUI *ui.BubbleTeaUI
@@ -162,7 +212,7 @@ func main() {
 
 		// Start table update loop
 		go func() {
-			ticker := time.NewTicker(2 * time.Second)
+			ticker := time.NewTicker(tableUpdateInterval)
 			defer ticker.Stop()
 			for range ticker.C {
 				tableUI.Render()
@@ -233,7 +283,7 @@ func main() {
 		}()
 
 		// Give a moment for initial forwards to be added
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(initialForwardSettleTime)
 
 		// Start the bubbletea app (blocks until quit)
 		if err := bubbleTeaUI.Start(); err != nil {
