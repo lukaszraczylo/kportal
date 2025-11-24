@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -304,18 +303,4 @@ func CheckPortAvailability(port int) (bool, string, error) {
 	// Port is available, close the listener
 	listener.Close()
 	return true, "", nil
-}
-
-// ValidatePort checks if a port number is valid.
-func ValidatePort(portStr string) (int, error) {
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid port number: %s", portStr)
-	}
-
-	if port < 1 || port > 65535 {
-		return 0, fmt.Errorf("port must be between 1 and 65535, got %d", port)
-	}
-
-	return port, nil
 }
