@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/converter"
 	"github.com/nvm/kportal/internal/forward"
@@ -91,16 +92,35 @@ func main() {
 
 	// Configure klog (used by kubernetes client-go) to route through our logger
 	// This prevents k8s logs from interfering with the UI
+	//
+	// klog v2 uses multiple output mechanisms:
+	// 1. SetOutput() - for basic text output
+	// 2. SetLogger() - for structured/error logs (logr interface)
+	//
+	// We must configure BOTH to capture all logs including error messages
+	// that would otherwise bypass SetOutput() and write directly to stderr.
+	klog.LogToStderr(false) // Disable direct stderr writes
 	if *verbose {
-		// In verbose mode, route klog through our structured logger at DEBUG level
+		// In verbose mode, route all klog through our structured logger at DEBUG level
 		klogLogger := logger.New(logger.LevelDebug, logFmt, os.Stderr)
+
+		// Configure text output routing
 		klogWriter := logger.NewKlogWriter(klogLogger)
 		klog.SetOutput(klogWriter)
+
+		// Configure structured/error log routing via logr interface
+		// This captures "Unhandled Error" and other structured logs that bypass SetOutput
+		logrSink := logger.NewLogrAdapter(klogLogger)
+		klog.SetLogger(logr.New(logrSink))
 	} else {
-		// In non-verbose mode, completely silence klog
+		// In non-verbose mode, completely silence ALL klog output
 		klog.SetOutput(io.Discard)
+
+		// Also silence structured/error logs via a discard logger
+		silentLogger := logger.New(logger.LevelError+1, logFmt, io.Discard) // Level above ERROR = silence all
+		logrSink := logger.NewLogrAdapter(silentLogger)
+		klog.SetLogger(logr.New(logrSink))
 	}
-	klog.LogToStderr(false)
 
 	// Handle conversion mode
 	if *convertInput != "" {

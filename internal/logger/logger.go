@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Logger struct {
 	level  Level
 	format Format
 	output io.Writer
+	mu     sync.Mutex // Protects concurrent writes to output
 }
 
 type logEntry struct {
@@ -54,6 +56,9 @@ func (l *Logger) log(level Level, msg string, fields map[string]interface{}) {
 	}
 
 	levelStr := levelToString(level)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	if l.format == FormatJSON {
 		entry := logEntry{
