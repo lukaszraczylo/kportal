@@ -24,7 +24,8 @@ kportal simplifies managing multiple Kubernetes port-forwards with an elegant, i
 - 🗑️ **Live Delete** - Remove port-forwards instantly from the running session
 - 🔄 **Auto-Reconnect** - Automatic retry with exponential backoff on connection failures (max 10s)
 - ⚡ **Hot-Reload** - Update configuration without restarting - changes applied automatically
-- 🏥 **Health Checks** - Real-time port forward status monitoring with 5-second intervals
+- 🏥 **Advanced Health Checks** - Multiple check methods (tcp-dial, data-transfer) with stale connection detection
+- 🛡️ **Goroutine Watchdog** - Detects and recovers from completely hung workers
 - 🎨 **Multi-Context** - Support for multiple Kubernetes contexts and namespaces
 - 📦 **Batch Management** - Manage all port-forwards from a single configuration file
 - 🔌 **Toggle Forwards** - Enable/disable individual port-forwards on the fly with Space key
@@ -217,7 +218,7 @@ reliability:
 - **`data-transfer`**: More reliable - attempts to read data to verify tunnel is functional
 
 **Stale Detection:**
-- **Max Connection Age**: Kubernetes API typically has 30-minute timeout. kportal reconnects at 25 minutes by default to avoid hitting this limit
+- **Max Connection Age**: Kubernetes API typically has 30-minute timeout. kportal reconnects at 25 minutes by default to avoid hitting this limit. **Important**: Age-based reconnection only occurs when the connection is ALSO idle - active transfers (like database dumps) are never interrupted.
 - **Max Idle Time**: Detects connections with no data transfer, common when intermediate firewalls drop idle TCP connections
 
 **Use Case Example - Database Dumps:**
@@ -225,15 +226,15 @@ reliability:
 # Optimized for long-running pg_dump
 healthCheck:
   method: "data-transfer"
-  maxConnectionAge: "20m"
-  maxIdleTime: "5m"
+  maxConnectionAge: "20m"  # Only applies when idle - won't interrupt active dumps
+  maxIdleTime: "5m"        # Detects truly stale connections
 
 reliability:
   tcpKeepalive: "30s"
   retryOnStale: true
 ```
 
-This configuration ensures multi-hour database dumps complete without connection issues.
+This configuration ensures multi-hour database dumps complete without interruption. The `maxConnectionAge` will only trigger reconnection if the connection has been idle for more than `maxIdleTime`, preventing interruption of active data transfers.
 
 ## 🎮 Usage
 

@@ -29,6 +29,7 @@ type Manager struct {
 	portForwarder *k8s.PortForwarder
 	portChecker   *PortChecker
 	healthChecker *healthcheck.Checker
+	watchdog      *Watchdog
 	verbose       bool
 	currentConfig *config.Config
 	statusUI      StatusUpdater
@@ -50,6 +51,10 @@ func NewManager(verbose bool) (*Manager, error) {
 	// Will be reconfigured when config is loaded
 	healthChecker := healthcheck.NewChecker(3*time.Second, 2*time.Second)
 
+	// Create watchdog with default settings: check every 30 seconds, 60 second hang threshold
+	// Will be reconfigured when config is loaded
+	watchdog := NewWatchdog(30*time.Second, 60*time.Second)
+
 	return &Manager{
 		workers:       make(map[string]*ForwardWorker),
 		clientPool:    clientPool,
@@ -57,6 +62,7 @@ func NewManager(verbose bool) (*Manager, error) {
 		portForwarder: portForwarder,
 		portChecker:   NewPortChecker(),
 		healthChecker: healthChecker,
+		watchdog:      watchdog,
 		verbose:       verbose,
 	}, nil
 }
@@ -122,6 +128,17 @@ func (m *Manager) Start(cfg *config.Config) error {
 	// Configure health checker with settings from config
 	m.configureHealthChecker(cfg)
 
+	// Start watchdog
+	watchdogPeriod := cfg.GetWatchdogPeriod()
+	m.watchdog.checkInterval = watchdogPeriod
+	m.watchdog.hangThreshold = watchdogPeriod * 2 // Hang threshold is 2x check interval
+	m.watchdog.Start()
+
+	logger.Info("Watchdog started", map[string]interface{}{
+		"check_interval": watchdogPeriod.String(),
+		"hang_threshold": (watchdogPeriod * 2).String(),
+	})
+
 	// Get all forwards from config
 	forwards := cfg.GetAllForwards()
 
@@ -165,8 +182,9 @@ func (m *Manager) Start(cfg *config.Config) error {
 func (m *Manager) Stop() {
 	log.Printf("Stopping all port-forwards...")
 
-	// Stop health checker first
+	// Stop health checker and watchdog first
 	m.healthChecker.Stop()
+	m.watchdog.Stop()
 
 	m.workersMu.Lock()
 	workers := make([]*ForwardWorker, 0, len(m.workers))
@@ -319,6 +337,22 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 		m.statusUI.AddForward(fwd.ID(), &fwd)
 	}
 
+	// Register with watchdog
+	m.watchdog.RegisterWorker(fwd.ID(), func(forwardID string) {
+		logger.Warn("Watchdog triggered reconnection for hung worker", map[string]interface{}{
+			"forward_id": forwardID,
+		})
+
+		// Find and trigger reconnect on hung worker
+		m.workersMu.RLock()
+		worker, exists := m.workers[forwardID]
+		m.workersMu.RUnlock()
+
+		if exists {
+			worker.TriggerReconnect("watchdog detected hung worker")
+		}
+	})
+
 	// Register with health checker
 	m.healthChecker.Register(fwd.ID(), fwd.LocalPort, func(forwardID string, status healthcheck.Status, errorMsg string) {
 		if m.statusUI != nil {
@@ -350,7 +384,7 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 	})
 
 	// Create and start worker
-	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI, m.healthChecker)
+	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI, m.healthChecker, m.watchdog)
 	worker.Start()
 
 	// Store worker
@@ -375,8 +409,9 @@ func (m *Manager) stopWorkerInternal(id string, removeFromUI bool) error {
 	delete(m.workers, id)
 	m.workersMu.Unlock()
 
-	// Unregister from health checker
+	// Unregister from health checker and watchdog
 	m.healthChecker.Unregister(id)
+	m.watchdog.UnregisterWorker(id)
 
 	// Notify UI - either remove or update to disabled status
 	if m.statusUI != nil {

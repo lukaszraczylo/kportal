@@ -273,9 +273,12 @@ func (c *Checker) checkPort(forwardID string) {
 	connectionAge := now.Sub(connectionTime)
 	idleTime := now.Sub(lastActivity)
 
-	if c.maxConnectionAge > 0 && connectionAge > c.maxConnectionAge {
+	// Only enforce max connection age if the connection is ALSO idle
+	// This prevents interrupting active transfers (e.g., database dumps)
+	if c.maxConnectionAge > 0 && connectionAge > c.maxConnectionAge && idleTime > c.maxIdleTime {
 		newStatus = StatusStale
-		errorMsg = fmt.Sprintf("connection age %v exceeds max %v", connectionAge.Round(time.Second), c.maxConnectionAge)
+		errorMsg = fmt.Sprintf("connection age %v exceeds max %v (and idle for %v)",
+			connectionAge.Round(time.Second), c.maxConnectionAge, idleTime.Round(time.Second))
 	} else if c.maxIdleTime > 0 && idleTime > c.maxIdleTime {
 		newStatus = StatusStale
 		errorMsg = fmt.Sprintf("idle time %v exceeds max %v", idleTime.Round(time.Second), c.maxIdleTime)

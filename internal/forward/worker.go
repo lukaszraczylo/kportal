@@ -32,13 +32,14 @@ type ForwardWorker struct {
 	lastPod         string // Track the last pod we connected to
 	statusUI        StatusUpdater
 	healthChecker   *healthcheck.Checker
+	watchdog        *Watchdog
 	startTime       time.Time          // Track when the worker started
 	forwardCancel   context.CancelFunc // Cancel function for current forward attempt
 	forwardCancelMu sync.Mutex         // Protects forwardCancel
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
-func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater, healthChecker *healthcheck.Checker) *ForwardWorker {
+func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verbose bool, statusUI StatusUpdater, healthChecker *healthcheck.Checker, watchdog *Watchdog) *ForwardWorker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ForwardWorker{
@@ -52,6 +53,7 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		verbose:       verbose,
 		statusUI:      statusUI,
 		healthChecker: healthChecker,
+		watchdog:      watchdog,
 		startTime:     time.Now(),
 	}
 }
@@ -93,6 +95,11 @@ func (w *ForwardWorker) run() {
 	backoff := retry.NewBackoff()
 
 	for {
+		// Send heartbeat to watchdog to indicate we're alive
+		if w.watchdog != nil {
+			w.watchdog.Heartbeat(w.forward.ID())
+		}
+
 		// Check if we should stop
 		select {
 		case <-w.ctx.Done():
