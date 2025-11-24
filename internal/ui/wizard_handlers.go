@@ -452,12 +452,14 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			filteredServices := wizard.getFilteredServices()
 			if wizard.cursor >= 0 && wizard.cursor < len(filteredServices) {
 				wizard.resourceValue = filteredServices[wizard.cursor].Name
+
+				// Get ports from selected service (must do this BEFORE clearing search filter)
+				wizard.detectedPorts = filteredServices[wizard.cursor].Ports
+
 				wizard.step = StepEnterRemotePort
 				wizard.clearTextInput()
 				wizard.clearSearchFilter()
 
-				// Get ports from selected service
-				wizard.detectedPorts = filteredServices[wizard.cursor].Ports
 				if len(wizard.detectedPorts) > 0 {
 					wizard.inputMode = InputModeList
 					wizard.cursor = 0
@@ -500,13 +502,10 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 		if err != nil || port < 1 || port > 65535 {
 			wizard.error = fmt.Errorf("invalid port number")
 		} else {
+			// Check port availability before proceeding
 			wizard.localPort = port
-			wizard.step = StepConfirmation
-			wizard.clearTextInput()
-			wizard.cursor = 0
-			wizard.inputMode = InputModeList
-			wizard.error = nil
 			wizard.loading = true
+			wizard.error = nil
 			return m, checkPortCmd(port)
 		}
 
@@ -520,6 +519,12 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 
 		// Handle button selection
 		if wizard.cursor == 0 {
+			// Check if port is available before saving
+			if !wizard.portAvailable {
+				wizard.error = fmt.Errorf("port %d is not available. Please choose a different port", wizard.localPort)
+				return m, nil
+			}
+
 			// Confirmed - save the forward
 			wizard.alias = wizard.textInput
 
@@ -771,6 +776,17 @@ func (m model) handlePortChecked(msg PortCheckedMsg) (tea.Model, tea.Cmd) {
 		m.ui.addWizard.loading = false
 		m.ui.addWizard.portAvailable = msg.available
 		m.ui.addWizard.portCheckMsg = msg.message
+
+		// Only proceed to confirmation if port is available
+		if msg.available {
+			m.ui.addWizard.step = StepConfirmation
+			m.ui.addWizard.clearTextInput()
+			m.ui.addWizard.cursor = 0
+			m.ui.addWizard.inputMode = InputModeList
+		} else {
+			// Port is not available - show error and stay on local port step
+			m.ui.addWizard.error = fmt.Errorf("port %d is in use, please choose another port", msg.port)
+		}
 	}
 
 	return m, nil

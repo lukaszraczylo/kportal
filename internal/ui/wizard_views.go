@@ -373,7 +373,7 @@ func (m model) renderEnterRemotePort() string {
 				prefix = "▸ "
 				b.WriteString(selectedStyle.Render(prefix + manualOption))
 			} else {
-				b.WriteString(mutedStyle.Render(prefix + manualOption))
+				b.WriteString(prefix + mutedStyle.Render(manualOption))
 			}
 			b.WriteString("\n")
 		}
