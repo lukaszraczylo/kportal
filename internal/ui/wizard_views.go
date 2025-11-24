@@ -45,6 +45,12 @@ func (m model) renderSelectContext() string {
 	b.WriteString(renderHeader("Add Port Forward", renderProgress(1, 7)))
 	b.WriteString("Select Kubernetes Context:\n\n")
 
+	// Show search input if there's a filter active
+	if wizard.searchFilter != "" {
+		b.WriteString(renderTextInput("Filter: ", wizard.searchFilter, true))
+		b.WriteString("\n\n")
+	}
+
 	if wizard.loading {
 		b.WriteString(spinnerStyle.Render("⣾ Loading contexts..."))
 	} else if wizard.error != nil {
@@ -52,46 +58,56 @@ func (m model) renderSelectContext() string {
 	} else if len(wizard.contexts) == 0 {
 		b.WriteString(mutedStyle.Render("No contexts found in kubeconfig"))
 	} else {
-		const viewportHeight = 20
-		totalItems := len(wizard.contexts)
+		filteredContexts := wizard.getFilteredContexts()
+		if len(filteredContexts) == 0 {
+			b.WriteString(mutedStyle.Render("No matching contexts"))
+		} else {
+			const viewportHeight = 20
+			totalItems := len(filteredContexts)
 
-		// Show scroll up indicator if there are items above the viewport
-		if wizard.scrollOffset > 0 {
-			b.WriteString(mutedStyle.Render("        ↑ More above ↑") + "\n")
-		}
-
-		// Calculate visible range
-		start := wizard.scrollOffset
-		end := wizard.scrollOffset + viewportHeight
-		if end > totalItems {
-			end = totalItems
-		}
-
-		// Render visible contexts with (current) marker on first one
-		for i := start; i < end; i++ {
-			prefix := "  "
-			text := wizard.contexts[i]
-			if i == 0 {
-				text += mutedStyle.Render(" (current)")
+			// Show scroll up indicator if there are items above the viewport
+			if wizard.scrollOffset > 0 {
+				b.WriteString(mutedStyle.Render("        ↑ More above ↑") + "\n")
 			}
 
-			if i == wizard.cursor {
-				prefix = "▸ "
-				b.WriteString(selectedStyle.Render(prefix + text))
-			} else {
-				b.WriteString(prefix + text)
+			// Calculate visible range
+			start := wizard.scrollOffset
+			end := wizard.scrollOffset + viewportHeight
+			if end > totalItems {
+				end = totalItems
 			}
-			b.WriteString("\n")
-		}
 
-		// Show scroll down indicator if there are items below the viewport
-		if end < totalItems {
-			b.WriteString(mutedStyle.Render("        ↓ More below ↓") + "\n")
+			// Render visible contexts with (current) marker on first one (only if not filtered)
+			for i := start; i < end; i++ {
+				prefix := "  "
+				text := filteredContexts[i]
+				// Only show (current) marker if no filter and this is the first item in original list
+				if wizard.searchFilter == "" && i == 0 {
+					text += mutedStyle.Render(" (current)")
+				}
+
+				if i == wizard.cursor {
+					prefix = "▸ "
+					b.WriteString(selectedStyle.Render(prefix + text))
+				} else {
+					b.WriteString(prefix + text)
+				}
+				b.WriteString("\n")
+			}
+
+			// Show scroll down indicator if there are items below the viewport
+			if end < totalItems {
+				b.WriteString(mutedStyle.Render("        ↓ More below ↓") + "\n")
+			}
 		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Select  Esc/Ctrl+C: Cancel"))
+	if wizard.searchFilter != "" {
+		b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Cancel", len(wizard.getFilteredContexts()), len(wizard.contexts))))
+	} else {
+		b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc/Ctrl+C: Cancel"))
+	}
 
 	return b.String()
 }
@@ -105,6 +121,12 @@ func (m model) renderSelectNamespace() string {
 
 	b.WriteString("Select Namespace:\n\n")
 
+	// Show search input if there's a filter active
+	if wizard.searchFilter != "" {
+		b.WriteString(renderTextInput("Filter: ", wizard.searchFilter, true))
+		b.WriteString("\n\n")
+	}
+
 	if wizard.loading {
 		b.WriteString(spinnerStyle.Render("⣾ Loading namespaces..."))
 	} else if wizard.error != nil {
@@ -113,11 +135,20 @@ func (m model) renderSelectNamespace() string {
 	} else if len(wizard.namespaces) == 0 {
 		b.WriteString(mutedStyle.Render("No namespaces found"))
 	} else {
-		b.WriteString(renderList(wizard.namespaces, wizard.cursor, "  ", wizard.scrollOffset))
+		filteredNamespaces := wizard.getFilteredNamespaces()
+		if len(filteredNamespaces) == 0 {
+			b.WriteString(mutedStyle.Render("No matching namespaces"))
+		} else {
+			b.WriteString(renderList(filteredNamespaces, wizard.cursor, "  ", wizard.scrollOffset))
+		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+	if wizard.searchFilter != "" {
+		b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredNamespaces()), len(wizard.namespaces))))
+	} else {
+		b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+	}
 
 	return b.String()
 }
@@ -242,21 +273,41 @@ func (m model) renderEnterResource() string {
 	case ResourceTypeService:
 		b.WriteString("Select service:\n\n")
 
+		// Show search input if there's a filter active
+		if wizard.searchFilter != "" {
+			b.WriteString(renderTextInput("Filter: ", wizard.searchFilter, true))
+			b.WriteString("\n\n")
+		}
+
 		if wizard.loading {
 			b.WriteString(spinnerStyle.Render("⣾ Loading services..."))
 		} else if len(wizard.services) == 0 {
 			b.WriteString(mutedStyle.Render("No services found"))
 		} else {
-			serviceNames := make([]string, len(wizard.services))
-			for i, svc := range wizard.services {
-				serviceNames[i] = svc.Name
+			filteredServices := wizard.getFilteredServices()
+			if len(filteredServices) == 0 {
+				b.WriteString(mutedStyle.Render("No matching services"))
+			} else {
+				serviceNames := make([]string, len(filteredServices))
+				for i, svc := range filteredServices {
+					serviceNames[i] = svc.Name
+				}
+				b.WriteString(renderList(serviceNames, wizard.cursor, "  ", wizard.scrollOffset))
 			}
-			b.WriteString(renderList(serviceNames, wizard.cursor, "  ", wizard.scrollOffset))
 		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Enter: Continue  Esc: Back  Ctrl+C: Cancel"))
+	// Show appropriate help text based on resource type and filter state
+	if wizard.selectedResourceType == ResourceTypeService {
+		if wizard.searchFilter != "" {
+			b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredServices()), len(wizard.services))))
+		} else {
+			b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+		}
+	} else {
+		b.WriteString(helpStyle.Render("Enter: Continue  Esc: Back  Ctrl+C: Cancel"))
+	}
 
 	return b.String()
 }
