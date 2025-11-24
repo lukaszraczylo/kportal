@@ -288,7 +288,8 @@ func (s *HealthCheckTestSuite) TestConnectionAgeDetection() {
 	}
 }
 
-// TestIdleTimeDetection tests max idle time detection
+// TestIdleTimeDetection tests that connections with passing health checks are NOT marked as stale
+// This verifies that successful health checks update LastActivity, preventing false idle detection
 func (s *HealthCheckTestSuite) TestIdleTimeDetection() {
 	statusChanges := make(chan Status, 10)
 	callback := func(forwardID string, status Status, errorMsg string) {
@@ -307,26 +308,23 @@ func (s *HealthCheckTestSuite) TestIdleTimeDetection() {
 
 	checker.Register("test-forward", s.port, callback)
 
-	// Wait for initial healthy status
-	var gotHealthy, gotStale bool
-	timeout := time.After(1 * time.Second)
+	// Wait long enough that idle time WOULD be exceeded if health checks didn't update LastActivity
+	time.Sleep(500 * time.Millisecond)
 
-	for {
-		select {
-		case status := <-statusChanges:
-			if status == StatusHealthy || status == StatusStarting {
-				gotHealthy = true
-			}
-			if status == StatusStale {
-				gotStale = true
-			}
-			if gotHealthy && gotStale {
-				return // Test passed
-			}
-		case <-timeout:
-			s.T().Fatalf("Expected StatusStale after max idle time exceeded. gotHealthy=%v, gotStale=%v",
-				gotHealthy, gotStale)
+	// Verify connection is still healthy, not stale
+	// This proves that successful health checks are updating LastActivity
+	status, exists := checker.GetStatus("test-forward")
+	require.True(s.T(), exists)
+	assert.Equal(s.T(), StatusHealthy, status, "Connection with passing health checks should NOT be marked as stale")
+
+	// Verify we never received a StatusStale callback
+	select {
+	case status := <-statusChanges:
+		if status == StatusStale {
+			s.T().Fatal("Connection should NOT be marked as stale when health checks are passing")
 		}
+	default:
+		// No stale status - this is correct
 	}
 }
 

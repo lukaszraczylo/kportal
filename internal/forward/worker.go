@@ -92,14 +92,15 @@ func (w *ForwardWorker) Stop() {
 func (w *ForwardWorker) run() {
 	defer close(w.doneChan)
 
+	// Start heartbeat goroutine to continuously send heartbeats to watchdog
+	// This prevents false "hung worker" detection when connections are long-lived
+	if w.watchdog != nil {
+		go w.heartbeatLoop()
+	}
+
 	backoff := retry.NewBackoff()
 
 	for {
-		// Send heartbeat to watchdog to indicate we're alive
-		if w.watchdog != nil {
-			w.watchdog.Heartbeat(w.forward.ID())
-		}
-
 		// Check if we should stop
 		select {
 		case <-w.ctx.Done():
@@ -199,6 +200,26 @@ func (w *ForwardWorker) run() {
 		log.Printf("[%s] Connection closed unexpectedly, retrying...", w.forward.ID())
 		w.lastPod = ""
 		w.sleepWithBackoff(backoff)
+	}
+}
+
+// heartbeatLoop sends periodic heartbeats to the watchdog to prove the worker is alive
+// This runs in a separate goroutine and continues throughout the worker's lifetime
+func (w *ForwardWorker) heartbeatLoop() {
+	// Send heartbeats every 15 seconds (well within typical 60s watchdog timeout)
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	// Send immediate heartbeat
+	w.watchdog.Heartbeat(w.forward.ID())
+
+	for {
+		select {
+		case <-ticker.C:
+			w.watchdog.Heartbeat(w.forward.ID())
+		case <-w.ctx.Done():
+			return
+		}
 	}
 }
 

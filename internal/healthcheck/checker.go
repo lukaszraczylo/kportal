@@ -313,6 +313,12 @@ func (c *Checker) checkPort(forwardID string) {
 		health.Status = newStatus
 		health.LastCheck = now
 		health.ErrorMessage = errorMsg
+
+		// Successful health check indicates connection is active
+		// This prevents false positives where healthy connections are marked as idle
+		if newStatus == StatusHealthy {
+			health.LastActivity = now
+		}
 	}
 	c.mu.Unlock()
 
