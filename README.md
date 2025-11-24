@@ -1,10 +1,16 @@
-# kportal
+<p align="center">
+  <img src="docs/kportal-logo-dark.svg" alt="kportal logo" width="400">
+</p>
 
-[![Release](https://img.shields.io/github/v/release/lukaszraczylo/kportal)](https://github.com/lukaszraczylo/kportal/releases)
-[![License](https://img.shields.io/github/license/lukaszraczylo/kportal)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/lukaszraczylo/kportal)](https://goreportcard.com/report/github.com/lukaszraczylo/kportal)
+<p align="center">
+  <a href="https://github.com/lukaszraczylo/kportal/releases"><img src="https://img.shields.io/github/v/release/lukaszraczylo/kportal" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/lukaszraczylo/kportal" alt="License"></a>
+  <a href="https://goreportcard.com/report/github.com/lukaszraczylo/kportal"><img src="https://goreportcard.com/badge/github.com/lukaszraczylo/kportal" alt="Go Report Card"></a>
+</p>
 
-**Modern Kubernetes port-forward manager with interactive terminal UI**
+<p align="center">
+  <strong>Modern Kubernetes port-forward manager with interactive terminal UI</strong>
+</p>
 
 kportal simplifies managing multiple Kubernetes port-forwards with an elegant, interactive terminal interface. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), it provides real-time status updates, automatic reconnection, and hot-reload configuration support.
 
