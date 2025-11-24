@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/k8s"
 )
 
 // ForwardUpdateMsg is sent when a forward status changes
@@ -44,11 +45,29 @@ type BubbleTeaUI struct {
 	toggleCallback func(id string, enable bool)
 	version        string
 	errors         map[string]string // Track error messages by forward ID
+
+	// Modal wizard state
+	viewMode     ViewMode
+	addWizard    *AddWizardState
+	removeWizard *RemoveWizardState
+
+	// Delete confirmation state
+	deleteConfirming    bool
+	deleteConfirmID     string
+	deleteConfirmAlias  string
+	deleteConfirmCursor int // 0 = Yes, 1 = No
+
+	// Dependencies for wizards
+	discovery  *k8s.Discovery
+	mutator    *config.Mutator
+	configPath string
 }
 
 // bubbletea model
 type model struct {
-	ui *BubbleTeaUI
+	ui         *BubbleTeaUI
+	termWidth  int
+	termHeight int
 }
 
 // NewBubbleTeaUI creates a new bubbletea-based UI
@@ -61,9 +80,20 @@ func NewBubbleTeaUI(toggleCallback func(id string, enable bool), version string)
 		toggleCallback: toggleCallback,
 		version:        version,
 		errors:         make(map[string]string),
+		viewMode:       ViewModeMain,
 	}
 
 	return ui
+}
+
+// SetWizardDependencies sets the dependencies needed for the add/remove wizards
+func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *config.Mutator, configPath string) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.discovery = discovery
+	ui.mutator = mutator
+	ui.configPath = configPath
 }
 
 // Start starts the bubbletea application
@@ -187,33 +217,55 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.ui.mu.RLock()
+	viewMode := m.ui.viewMode
+	m.ui.mu.RUnlock()
+
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// Update terminal dimensions on resize
+		m.termWidth = msg.Width
+		m.termHeight = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "up", "k":
-			m.ui.moveSelection(-1)
-		case "down", "j":
-			m.ui.moveSelection(1)
-		case " ", "enter":
-			m.ui.toggleSelected()
+		// Route based on current view mode
+		switch viewMode {
+		case ViewModeMain:
+			return m.handleMainViewKeys(msg)
+		case ViewModeAddWizard:
+			return m.handleAddWizardKeys(msg)
+		case ViewModeRemoveWizard:
+			return m.handleRemoveWizardKeys(msg)
 		}
 
-	case ForwardAddMsg:
-		// Already handled in AddForward, just trigger re-render
+	// Forward management messages (always update main view data)
+	case ForwardAddMsg, ForwardUpdateMsg, ForwardErrorMsg, ForwardRemoveMsg:
 		return m, nil
 
-	case ForwardUpdateMsg:
-		// Already handled in UpdateStatus, just trigger re-render
-		return m, nil
-
-	case ForwardErrorMsg:
-		// Already handled in SetError, just trigger re-render
-		return m, nil
-
-	case ForwardRemoveMsg:
-		// Already handled in Remove, just trigger re-render
+	// Wizard-specific messages
+	case ContextsLoadedMsg:
+		return m.handleContextsLoaded(msg)
+	case NamespacesLoadedMsg:
+		return m.handleNamespacesLoaded(msg)
+	case PodsLoadedMsg:
+		return m.handlePodsLoaded(msg)
+	case ServicesLoadedMsg:
+		return m.handleServicesLoaded(msg)
+	case SelectorValidatedMsg:
+		return m.handleSelectorValidated(msg)
+	case PortCheckedMsg:
+		return m.handlePortChecked(msg)
+	case ForwardSavedMsg:
+		return m.handleForwardSaved(msg)
+	case ForwardsRemovedMsg:
+		return m.handleForwardsRemoved(msg)
+	case WizardCompleteMsg:
+		m.ui.mu.Lock()
+		m.ui.viewMode = ViewModeMain
+		m.ui.addWizard = nil
+		m.ui.removeWizard = nil
+		m.ui.mu.Unlock()
 		return m, nil
 	}
 
@@ -222,9 +274,55 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	m.ui.mu.RLock()
+	viewMode := m.ui.viewMode
+	deleteConfirming := m.ui.deleteConfirming
+	m.ui.mu.RUnlock()
+
+	// Always render main view as base
+	mainView := m.renderMainView()
+
+	// Use actual terminal dimensions for proper centering
+	termWidth := m.termWidth
+	termHeight := m.termHeight
+
+	// Fallback to reasonable defaults if dimensions not yet received
+	if termWidth == 0 {
+		termWidth = 120
+	}
+	if termHeight == 0 {
+		termHeight = 40
+	}
+
+	// Overlay delete confirmation if active
+	if deleteConfirming {
+		modal := m.renderDeleteConfirmation()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	}
+
+	// Overlay wizard if active
+	switch viewMode {
+	case ViewModeAddWizard:
+		modal := m.renderAddWizard()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	case ViewModeRemoveWizard:
+		modal := m.renderRemoveWizard()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	default:
+		return mainView
+	}
+}
+
+func (m model) renderMainView() string {
+	m.ui.mu.RLock()
 	defer m.ui.mu.RUnlock()
 
 	var b strings.Builder
+
+	// Get terminal dimensions for proper sizing
+	termHeight := m.termHeight
+	if termHeight == 0 {
+		termHeight = 40 // Fallback
+	}
 
 	// Styles
 	titleStyle := lipgloss.NewStyle().
@@ -350,21 +448,7 @@ func (m model) View() string {
 		}
 	}
 
-	// Footer
-	b.WriteString("\n")
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-
-	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: Quit  │  Total: %d",
-		keyStyle.Render("↑↓"),
-		keyStyle.Render("jk"),
-		keyStyle.Render("Space"),
-		keyStyle.Render("q"),
-		len(m.ui.forwardOrder))
-
-	b.WriteString(footerStyle.Render(footer))
-
-	// Display errors if any
+	// Display errors if any (before footer)
 	if len(m.ui.errors) > 0 {
 		b.WriteString("\n\n")
 		errorHeaderStyle := lipgloss.NewStyle().
@@ -374,18 +458,102 @@ func (m model) View() string {
 		b.WriteString(errorHeaderStyle.Render("Errors:"))
 		b.WriteString("\n")
 
+		errorLineStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Width(118). // Slightly less than table width (120) for padding
+			MaxWidth(118)
+
 		for id, errMsg := range m.ui.errors {
 			// Find the forward to display its alias
 			if fwd, ok := m.ui.forwards[id]; ok {
-				errorLineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-				line := fmt.Sprintf("  • %s: %s", fwd.Alias, errMsg)
-				b.WriteString(errorLineStyle.Render(line))
-				b.WriteString("\n")
+				// Format: "  • alias: error message"
+				prefix := fmt.Sprintf("  • %s: ", fwd.Alias)
+
+				// Wrap the error message if it's too long
+				// Max line length is 118, subtract prefix length
+				maxErrLen := 118 - len(prefix)
+				wrappedMsg := wrapText(errMsg, maxErrLen)
+
+				// Render first line with prefix
+				lines := strings.Split(wrappedMsg, "\n")
+				if len(lines) > 0 {
+					b.WriteString(errorLineStyle.Render(prefix + lines[0]))
+					b.WriteString("\n")
+
+					// Render subsequent lines with indentation
+					indent := strings.Repeat(" ", len(prefix))
+					for i := 1; i < len(lines); i++ {
+						b.WriteString(errorLineStyle.Render(indent + lines[i]))
+						b.WriteString("\n")
+					}
+				}
 			}
 		}
 	}
 
+	// Calculate current content height
+	currentContent := b.String()
+	currentLines := strings.Count(currentContent, "\n") + 1
+
+	// Footer styles
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+
+	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Quit  │  Total: %d",
+		keyStyle.Render("↑↓"),
+		keyStyle.Render("jk"),
+		keyStyle.Render("Space"),
+		keyStyle.Render("n"),
+		keyStyle.Render("e"),
+		keyStyle.Render("d"),
+		keyStyle.Render("q"),
+		len(m.ui.forwardOrder))
+
+	// Fill space to push footer to bottom (reserve 2 lines: 1 for spacing, 1 for footer)
+	footerHeight := 2
+	remainingLines := termHeight - currentLines - footerHeight
+	if remainingLines > 0 {
+		b.WriteString(strings.Repeat("\n", remainingLines))
+	}
+
+	// Add footer at bottom
+	b.WriteString("\n")
+	b.WriteString(footerStyle.Render(footer))
+
 	return b.String()
+}
+
+// wrapText wraps text to the specified width, breaking at word boundaries
+func wrapText(text string, width int) string {
+	if len(text) <= width {
+		return text
+	}
+
+	var result strings.Builder
+	var line strings.Builder
+	words := strings.Fields(text)
+
+	for i, word := range words {
+		// If adding this word would exceed width, start new line
+		if line.Len()+len(word)+1 > width && line.Len() > 0 {
+			result.WriteString(line.String())
+			result.WriteString("\n")
+			line.Reset()
+		}
+
+		// Add space before word (except first word on line)
+		if line.Len() > 0 {
+			line.WriteString(" ")
+		}
+		line.WriteString(word)
+
+		// Last word - flush the line
+		if i == len(words)-1 {
+			result.WriteString(line.String())
+		}
+	}
+
+	return result.String()
 }
 
 // moveSelection moves the selection up or down
@@ -404,6 +572,65 @@ func (ui *BubbleTeaUI) moveSelection(delta int) {
 	if ui.selectedIndex >= len(ui.forwardOrder) {
 		ui.selectedIndex = len(ui.forwardOrder) - 1
 	}
+}
+
+// renderDeleteConfirmation renders the delete confirmation dialog
+func (m model) renderDeleteConfirmation() string {
+	m.ui.mu.RLock()
+	defer m.ui.mu.RUnlock()
+
+	var b strings.Builder
+
+	// Use wizard color palette for consistency
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(warningColor). // Yellow for warning (delete action)
+		Padding(0, 1)
+
+	buttonSelectedStyle := lipgloss.NewStyle().
+		Background(primaryColor).          // Pink/Magenta background
+		Foreground(lipgloss.Color("230")). // Light yellow text
+		Bold(true).
+		Padding(0, 1)
+
+	buttonUnselectedStyle := lipgloss.NewStyle().
+		Foreground(mutedColor). // Gray
+		Padding(0, 1)
+
+	deleteInfoStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252")). // Light gray for info text
+		Italic(true)
+
+	// Title
+	b.WriteString(titleStyle.Render("⚠ Delete Port Forward"))
+	b.WriteString("\n\n")
+
+	// Message
+	b.WriteString("Are you sure you want to delete:\n\n")
+	b.WriteString(deleteInfoStyle.Render("  " + m.ui.deleteConfirmAlias))
+	b.WriteString("\n\n")
+
+	// Buttons
+	if m.ui.deleteConfirmCursor == 0 {
+		b.WriteString(buttonSelectedStyle.Render(" Yes "))
+		b.WriteString("  ")
+		b.WriteString(buttonUnselectedStyle.Render(" No "))
+	} else {
+		b.WriteString(buttonUnselectedStyle.Render(" Yes "))
+		b.WriteString("  ")
+		b.WriteString(buttonSelectedStyle.Render(" No "))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("←/→: Navigate  Enter: Confirm  Esc: Cancel"))
+
+	// Wrap in a box using wizard style
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor). // Purple border like other wizards
+		Padding(1, 2)
+
+	return boxStyle.Render(b.String())
 }
 
 // toggleSelected toggles the selected forward on/off

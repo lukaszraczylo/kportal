@@ -7,23 +7,30 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/converter"
 	"github.com/nvm/kportal/internal/forward"
+	"github.com/nvm/kportal/internal/k8s"
+	"github.com/nvm/kportal/internal/logger"
 	"github.com/nvm/kportal/internal/ui"
 	"k8s.io/klog/v2"
 )
 
 const (
-	defaultConfigFile = ".kportal.yaml"
+	defaultConfigFile        = ".kportal.yaml"
+	initialForwardSettleTime = 100 * time.Millisecond
+	tableUpdateInterval      = 2 * time.Second
 )
 
 var (
 	configFile    = flag.String("c", defaultConfigFile, "Path to configuration file")
 	verbose       = flag.Bool("v", false, "Enable verbose logging")
+	logFormat     = flag.String("log-format", "text", "Log format: text or json")
 	check         = flag.Bool("check", false, "Validate configuration and exit")
 	showVersion   = flag.Bool("version", false, "Show version and exit")
 	convertInput  = flag.String("convert", "", "Convert kftray JSON config to kportal YAML (provide input file path)")
@@ -38,6 +45,62 @@ func main() {
 		fmt.Printf("kportal version %s\n", version)
 		os.Exit(0)
 	}
+
+	// Validate config path security
+	if *configFile != "" {
+		absConfigPath, err := filepath.Abs(*configFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid config path: %v\n", err)
+			os.Exit(1)
+		}
+		absConfigPath = filepath.Clean(absConfigPath)
+
+		// Block system directories
+		systemDirs := []string{"/etc", "/sys", "/proc", "/dev"}
+		for _, sysDir := range systemDirs {
+			if strings.HasPrefix(absConfigPath, sysDir) {
+				fmt.Fprintf(os.Stderr, "Error: Config file cannot be in system directory: %s\n", sysDir)
+				os.Exit(1)
+			}
+		}
+
+		*configFile = absConfigPath
+	}
+
+	// Initialize structured logger
+	var logLevel logger.Level
+	var logFmt logger.Format
+	var logOutput io.Writer
+
+	if *verbose {
+		logLevel = logger.LevelDebug
+		logOutput = os.Stderr
+	} else {
+		logLevel = logger.LevelInfo
+		logOutput = io.Discard // Silence logger in non-verbose mode to prevent UI corruption
+	}
+
+	switch *logFormat {
+	case "json":
+		logFmt = logger.FormatJSON
+	default:
+		logFmt = logger.FormatText
+	}
+
+	logger.Init(logLevel, logFmt, logOutput)
+
+	// Configure klog (used by kubernetes client-go) to route through our logger
+	// This prevents k8s logs from interfering with the UI
+	if *verbose {
+		// In verbose mode, route klog through our structured logger at DEBUG level
+		klogLogger := logger.New(logger.LevelDebug, logFmt, os.Stderr)
+		klogWriter := logger.NewKlogWriter(klogLogger)
+		klog.SetOutput(klogWriter)
+	} else {
+		// In non-verbose mode, completely silence klog
+		klog.SetOutput(io.Discard)
+	}
+	klog.LogToStderr(false)
 
 	// Handle conversion mode
 	if *convertInput != "" {
@@ -68,11 +131,8 @@ func main() {
 		log.SetOutput(io.Discard)
 		log.SetPrefix("")
 		log.SetFlags(0)
-
-		// Disable klog (used by kubernetes client-go)
-		klog.SetOutput(io.Discard)
-		klog.LogToStderr(false)
 	} else {
+		// Verbose mode - enable standard log formatting
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
@@ -101,8 +161,21 @@ func main() {
 		log.Printf("Loading configuration from: %s", *configFile)
 	}
 
+	// Create Kubernetes client pool and discovery for wizards
+	pool, err := k8s.NewClientPool()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create k8s client pool: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Add/remove wizards will not be available\n")
+	}
+	discovery := k8s.NewDiscovery(pool)
+	mutator := config.NewMutator(*configFile)
+
 	// Create forward manager
-	manager := forward.NewManager(*verbose)
+	manager, err := forward.NewManager(*verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating forward manager: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Create UI (bubbletea for interactive, simple table for verbose)
 	var bubbleTeaUI *ui.BubbleTeaUI
@@ -117,6 +190,11 @@ func main() {
 				manager.DisableForward(id)
 			}
 		}, version)
+
+		// Set wizard dependencies
+		// Note: mutator is always available (for delete/edit), discovery requires valid kubeconfig (for add)
+		bubbleTeaUI.SetWizardDependencies(discovery, mutator, *configFile)
+
 		manager.SetStatusUI(bubbleTeaUI)
 	} else {
 		// Verbose mode with simple table
@@ -140,7 +218,7 @@ func main() {
 
 		// Start table update loop
 		go func() {
-			ticker := time.NewTicker(2 * time.Second)
+			ticker := time.NewTicker(tableUpdateInterval)
 			defer ticker.Stop()
 			for range ticker.C {
 				tableUI.Render()
@@ -211,7 +289,7 @@ func main() {
 		}()
 
 		// Give a moment for initial forwards to be added
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(initialForwardSettleTime)
 
 		// Start the bubbletea app (blocks until quit)
 		if err := bubbleTeaUI.Start(); err != nil {

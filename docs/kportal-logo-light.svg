@@ -1,0 +1,128 @@
+<svg width="310" height="150" viewBox="0 0 310 150" xmlns="http://www.w3.org/2000/svg" id="lightLogo">
+                <defs>
+                    <!-- Simple turbulence for portal edges -->
+                    <filter id="portalTurbulenceLight" x="-50%" y="-50%" width="200%" height="200%">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.03" numOctaves="2" result="turbulence" seed="5">
+                            <animate attributeName="seed" values="5;10;5" dur="8s" repeatCount="indefinite"/>
+                        </feTurbulence>
+                        <feDisplacementMap in2="turbulence" in="SourceGraphic" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+
+                    <!-- Blue glow for light background -->
+                    <filter id="blueGlowLight" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+
+                    <!-- Orange glow for light background -->
+                    <filter id="orangeGlowLight" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+
+                    <!-- Text shadow for light background -->
+                    <filter id="textShadowLight" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="1" stdDeviation="0.5" flood-opacity="0.15"/>
+                    </filter>
+
+                    <!-- Enhanced gradients for light background -->
+                    <radialGradient id="bluePortalLight" cx="50%" cy="50%">
+                        <stop offset="0%" style="stop-color:#001529;stop-opacity:1"/>
+                        <stop offset="20%" style="stop-color:#002766;stop-opacity:0.95"/>
+                        <stop offset="50%" style="stop-color:#0066CC;stop-opacity:0.98"/>
+                        <stop offset="80%" style="stop-color:#0099FF;stop-opacity:1"/>
+                        <stop offset="100%" style="stop-color:#66CCFF;stop-opacity:1"/>
+                    </radialGradient>
+
+                    <radialGradient id="orangePortalLight" cx="50%" cy="50%">
+                        <stop offset="0%" style="stop-color:#2E1A00;stop-opacity:1"/>
+                        <stop offset="20%" style="stop-color:#5C3317;stop-opacity:0.95"/>
+                        <stop offset="50%" style="stop-color:#E66100;stop-opacity:0.98"/>
+                        <stop offset="80%" style="stop-color:#FF9933;stop-opacity:1"/>
+                        <stop offset="100%" style="stop-color:#FFBB66;stop-opacity:1"/>
+                    </radialGradient>
+                </defs>
+
+                <!-- Blue Portal (LEFT) -->
+                <g id="bluePortalGroupLight">
+                    <!-- Outer rings -->
+                    <ellipse cx="50" cy="75" rx="35" ry="50" fill="none" stroke="#0099FF" stroke-width="0.8" opacity="0.3"/>
+                    <ellipse cx="50" cy="75" rx="30" ry="44" fill="none" stroke="#0066CC" stroke-width="1.2" opacity="0.4"/>
+
+                    <!-- Main portal -->
+                    <ellipse cx="50" cy="75" rx="26" ry="40" fill="url(#bluePortalLight)" filter="url(#blueGlowLight)" opacity="1"/>
+
+                    <!-- Inner energy rings -->
+                    <ellipse cx="50" cy="75" rx="20" ry="32" fill="none" stroke="#0099FF" stroke-width="2" opacity="0.8">
+                        <animate attributeName="rx" values="20;18;20" dur="3s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="32;30;32" dur="3s" repeatCount="indefinite"/>
+                    </ellipse>
+                    <ellipse cx="50" cy="75" rx="14" ry="24" fill="none" stroke="#66CCFF" stroke-width="1.5" opacity="0.6">
+                        <animate attributeName="rx" values="14;16;14" dur="2.5s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="24;26;24" dur="2.5s" repeatCount="indefinite"/>
+                    </ellipse>
+
+                    <!-- Portal core -->
+                    <ellipse cx="50" cy="75" rx="7" ry="12" fill="#001529" opacity="1"/>
+                </g>
+
+                <!-- Text: "kportal" with dark colors for light background -->
+                <!-- Orange K -->
+                <text x="76" y="90" font-family="'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="400" fill="#E66100" filter="url(#textShadowLight)">
+                    k
+                    <animate attributeName="x" values="76;79;76" dur="4s" repeatCount="indefinite"/>
+                </text>
+
+                <!-- Dark "porta" for light background -->
+                <text x="105" y="90" font-family="'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="400" fill="#2C3E50" filter="url(#textShadowLight)">
+                    porta
+                </text>
+
+                <!-- Blue L -->
+                <text x="220" y="90" font-family="'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="400" fill="#0066CC" filter="url(#textShadowLight)">
+                    l
+                    <animate attributeName="x" values="220;223;220" dur="4s" repeatCount="indefinite"/>
+                </text>
+
+                <!-- Orange Portal (RIGHT) at x=260 -->
+                <g id="orangePortalGroupLight">
+                    <!-- Outer rings -->
+                    <ellipse cx="260" cy="75" rx="35" ry="50" fill="none" stroke="#FFBB66" stroke-width="0.8" opacity="0.3"/>
+                    <ellipse cx="260" cy="75" rx="30" ry="44" fill="none" stroke="#FF9933" stroke-width="1.2" opacity="0.4"/>
+
+                    <!-- Main portal -->
+                    <ellipse cx="260" cy="75" rx="26" ry="40" fill="url(#orangePortalLight)" filter="url(#orangeGlowLight)" opacity="1"/>
+
+                    <!-- Inner energy rings -->
+                    <ellipse cx="260" cy="75" rx="20" ry="32" fill="none" stroke="#FF9933" stroke-width="2" opacity="0.8">
+                        <animate attributeName="rx" values="20;18;20" dur="3s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="32;30;32" dur="3s" repeatCount="indefinite"/>
+                    </ellipse>
+                    <ellipse cx="260" cy="75" rx="14" ry="24" fill="none" stroke="#FFBB66" stroke-width="1.5" opacity="0.6">
+                        <animate attributeName="rx" values="14;16;14" dur="2.5s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="24;26;24" dur="2.5s" repeatCount="indefinite"/>
+                    </ellipse>
+
+                    <!-- Portal core -->
+                    <ellipse cx="260" cy="75" rx="7" ry="12" fill="#2E1A00" opacity="1"/>
+                </g>
+
+                <!-- Energy connection between portals -->
+                <path d="M 76 75 Q 180 70 222 75" stroke="url(#energyGradientLight)" stroke-width="0.7" fill="none" opacity="0.4">
+                    <animate attributeName="opacity" values="0.2;0.4;0.2" dur="4s" repeatCount="indefinite"/>
+                </path>
+
+                <defs>
+                    <linearGradient id="energyGradientLight" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#0066CC;stop-opacity:1"/>
+                        <stop offset="50%" style="stop-color:#8B7CC6;stop-opacity:1"/>
+                        <stop offset="100%" style="stop-color:#E66100;stop-opacity:1"/>
+                    </linearGradient>
+                </defs>
+            </svg>

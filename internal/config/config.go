@@ -7,6 +7,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	maxConfigSize = 10 * 1024 * 1024 // 10MB
+)
+
 // Config represents the root configuration structure from .kportal.yaml
 type Config struct {
 	Contexts []Context `yaml:"contexts"`
@@ -80,6 +84,16 @@ func (f *Forward) GetNamespace() string {
 
 // LoadConfig loads and parses the configuration file from the given path.
 func LoadConfig(path string) (*Config, error) {
+	// Validate file size before reading
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat config file: %w", err)
+	}
+
+	if fileInfo.Size() > maxConfigSize {
+		return nil, fmt.Errorf("config file too large: %d bytes (max %d)", fileInfo.Size(), maxConfigSize)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)

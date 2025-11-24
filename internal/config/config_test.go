@@ -97,7 +97,7 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 	cfg, err := LoadConfig("/non/existent/path/.kportal.yaml")
 	assert.Error(t, err, "LoadConfig should fail with non-existent file")
 	assert.Nil(t, cfg, "config should be nil on error")
-	assert.Contains(t, err.Error(), "failed to read config file", "error should mention read failure")
+	assert.Contains(t, err.Error(), "failed to stat config file", "error should mention stat failure")
 }
 
 func TestForward_ID(t *testing.T) {
