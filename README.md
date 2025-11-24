@@ -13,6 +13,9 @@ kportal simplifies managing multiple Kubernetes port-forwards with an elegant, i
 ## ✨ Features
 
 - 🎯 **Interactive TUI** - Beautiful terminal interface with keyboard navigation (↑↓/jk, Space to toggle, q to quit)
+- ➕ **Live Add** - Add new port-forwards on-the-fly without editing config files or restarting
+- ✏️ **Live Edit** - Modify existing port-forwards (ports, resources, aliases) in real-time
+- 🗑️ **Live Delete** - Remove port-forwards instantly from the running session
 - 🔄 **Auto-Reconnect** - Automatic retry with exponential backoff on connection failures (max 10s)
 - ⚡ **Hot-Reload** - Update configuration without restarting - changes applied automatically
 - 🏥 **Health Checks** - Real-time port forward status monitoring with 5-second intervals
@@ -93,6 +96,9 @@ kportal
 3. **Navigate the interface**:
    - `↑↓` or `j/k` - Navigate through forwards
    - `Space` or `Enter` - Toggle forward on/off
+   - `a` - Add new port-forward interactively
+   - `e` - Edit selected port-forward
+   - `d` - Delete selected port-forward
    - `q` - Quit application
 
 ## 📖 Configuration

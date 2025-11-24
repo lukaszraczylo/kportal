@@ -65,7 +65,9 @@ type BubbleTeaUI struct {
 
 // bubbletea model
 type model struct {
-	ui *BubbleTeaUI
+	ui         *BubbleTeaUI
+	termWidth  int
+	termHeight int
 }
 
 // NewBubbleTeaUI creates a new bubbletea-based UI
@@ -220,6 +222,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.ui.mu.RUnlock()
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// Update terminal dimensions on resize
+		m.termWidth = msg.Width
+		m.termHeight = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
 		// Route based on current view mode
 		switch viewMode {
@@ -273,20 +281,32 @@ func (m model) View() string {
 	// Always render main view as base
 	mainView := m.renderMainView()
 
+	// Use actual terminal dimensions for proper centering
+	termWidth := m.termWidth
+	termHeight := m.termHeight
+
+	// Fallback to reasonable defaults if dimensions not yet received
+	if termWidth == 0 {
+		termWidth = 120
+	}
+	if termHeight == 0 {
+		termHeight = 40
+	}
+
 	// Overlay delete confirmation if active
 	if deleteConfirming {
 		modal := m.renderDeleteConfirmation()
-		return overlayContent(mainView, modal, 60, 10)
+		return overlayContent(mainView, modal, termWidth, termHeight)
 	}
 
 	// Overlay wizard if active
 	switch viewMode {
 	case ViewModeAddWizard:
 		modal := m.renderAddWizard()
-		return overlayContent(mainView, modal, 120, 40)
+		return overlayContent(mainView, modal, termWidth, termHeight)
 	case ViewModeRemoveWizard:
 		modal := m.renderRemoveWizard()
-		return overlayContent(mainView, modal, 120, 40)
+		return overlayContent(mainView, modal, termWidth, termHeight)
 	default:
 		return mainView
 	}
@@ -297,6 +317,12 @@ func (m model) renderMainView() string {
 	defer m.ui.mu.RUnlock()
 
 	var b strings.Builder
+
+	// Get terminal dimensions for proper sizing
+	termHeight := m.termHeight
+	if termHeight == 0 {
+		termHeight = 40 // Fallback
+	}
 
 	// Styles
 	titleStyle := lipgloss.NewStyle().
@@ -422,24 +448,7 @@ func (m model) renderMainView() string {
 		}
 	}
 
-	// Footer
-	b.WriteString("\n")
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-
-	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Quit  │  Total: %d",
-		keyStyle.Render("↑↓"),
-		keyStyle.Render("jk"),
-		keyStyle.Render("Space"),
-		keyStyle.Render("n"),
-		keyStyle.Render("e"),
-		keyStyle.Render("d"),
-		keyStyle.Render("q"),
-		len(m.ui.forwardOrder))
-
-	b.WriteString(footerStyle.Render(footer))
-
-	// Display errors if any
+	// Display errors if any (before footer)
 	if len(m.ui.errors) > 0 {
 		b.WriteString("\n\n")
 		errorHeaderStyle := lipgloss.NewStyle().
@@ -481,6 +490,35 @@ func (m model) renderMainView() string {
 			}
 		}
 	}
+
+	// Calculate current content height
+	currentContent := b.String()
+	currentLines := strings.Count(currentContent, "\n") + 1
+
+	// Footer styles
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+
+	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Quit  │  Total: %d",
+		keyStyle.Render("↑↓"),
+		keyStyle.Render("jk"),
+		keyStyle.Render("Space"),
+		keyStyle.Render("n"),
+		keyStyle.Render("e"),
+		keyStyle.Render("d"),
+		keyStyle.Render("q"),
+		len(m.ui.forwardOrder))
+
+	// Fill space to push footer to bottom (reserve 2 lines: 1 for spacing, 1 for footer)
+	footerHeight := 2
+	remainingLines := termHeight - currentLines - footerHeight
+	if remainingLines > 0 {
+		b.WriteString(strings.Repeat("\n", remainingLines))
+	}
+
+	// Add footer at bottom
+	b.WriteString("\n")
+	b.WriteString(footerStyle.Render(footer))
 
 	return b.String()
 }

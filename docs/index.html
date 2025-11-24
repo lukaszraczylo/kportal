@@ -6,7 +6,7 @@
         <title>kportal - Kubernetes Port-Forward Manager</title>
         <meta
             name="description"
-            content="Professional Kubernetes port-forward manager with interactive terminal UI. Manage multiple port-forwards with auto-reconnect, hot-reload, and real-time health checks."
+            content="Kubernetes port-forward manager for professionals with interactive terminal UI. Live add, edit, delete, and pause port-forwards. Auto-reconnect, hot-reload, and real-time health monitoring."
         />
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
@@ -141,7 +141,7 @@
         >
             <div class="max-w-6xl mx-auto px-4 sm:px-6">
                 <div class="flex justify-between h-16 items-center">
-                    <div class="flex items-center space-x-3">
+                    <a href="#" class="flex items-center space-x-3 hover:opacity-80 transition-opacity duration-300">
                         <i
                             class="fas fa-network-wired text-blue-600 dark:text-blue-400 text-xl"
                         ></i>
@@ -149,7 +149,7 @@
                             class="text-xl font-semibold text-gray-900 dark:text-gray-100"
                             >kportal</span
                         >
-                    </div>
+                    </a>
                     <!-- Desktop Navigation -->
                     <div class="hidden md:flex space-x-8">
                         <a
@@ -318,7 +318,7 @@
             class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition"
         >
             <div class="max-w-6xl mx-auto px-4 sm:px-6">
-                <div class="text-center mb-10 sm:mb-12 md:mb-16">
+                <div class="text-center mb-8 sm:mb-10">
                     <h2
                         class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"
                     >
@@ -328,149 +328,104 @@
                         Everything you need for production-grade port-forwarding
                     </p>
                 </div>
-                <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-desktop text-white text-xl"
-                                ></i>
+
+                <!-- Feature Grid - Compact Cards -->
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Live Management Features -->
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-400 dark:to-emerald-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-plus text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Interactive TUI
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Beautiful terminal interface powered by Bubble Tea.
-                                Toggle forwards on/off, view real-time status
-                                updates.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Live Add</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Add forwards on-the-fly</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 dark:from-green-400 dark:to-green-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-sync-alt text-white text-xl"
-                                ></i>
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-400 dark:to-amber-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-edit text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Auto-Reconnect
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Automatic reconnection on failure with exponential
-                                backoff. Never lose connectivity to your services.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Live Edit</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Modify in real-time</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-400 dark:to-purple-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-fire text-white text-xl"
-                                ></i>
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 dark:from-rose-400 dark:to-rose-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-trash-alt text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Hot-Reload
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Configuration changes applied automatically. Add,
-                                remove, or modify forwards without restarting.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Live Delete</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Remove instantly</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 dark:from-yellow-400 dark:to-yellow-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-heartbeat text-white text-xl"
-                                ></i>
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-toggle-on text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Health Checks
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Real-time health monitoring with 5-second intervals.
-                                Grace period prevents false error alerts.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Toggle Forwards</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Enable/disable with Space</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-rose-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 dark:from-red-400 dark:to-red-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-exclamation-triangle text-white text-xl"
-                                ></i>
+                    <!-- Core Features -->
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-green-600 dark:from-green-400 dark:to-green-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-sync-alt text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Error Reporting
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Detailed error messages displayed in the interface.
-                                Know exactly what went wrong.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Auto-Reconnect</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Exponential backoff retry</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div
-                        class="group relative p-6 sm:p-8 glass rounded-xl hover:shadow-modern transition-all duration-300 hover:-translate-y-1"
-                    >
-                        <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div class="relative">
-                            <div
-                                class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-400 dark:to-indigo-500 rounded-xl flex items-center justify-center mb-4 shadow-lg transform group-hover:scale-110 transition-transform duration-300"
-                            >
-                                <i
-                                    class="fas fa-layer-group text-white text-xl"
-                                ></i>
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-400 dark:to-purple-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-fire text-white text-sm"></i>
                             </div>
-                            <h3
-                                class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3"
-                            >
-                                Multi-Context
-                            </h3>
-                            <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
-                                Support for multiple Kubernetes contexts and
-                                namespaces. Manage all your clusters from one place.
-                            </p>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Hot-Reload</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Config changes auto-apply</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-500 to-yellow-600 dark:from-yellow-400 dark:to-yellow-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-heartbeat text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Health Checks</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Real-time monitoring</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-400 dark:to-indigo-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-layer-group text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Multi-Context</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">All clusters in one place</p>
+                            </div>
                         </div>
                     </div>
                 </div>

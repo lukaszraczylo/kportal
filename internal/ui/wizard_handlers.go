@@ -163,8 +163,10 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.deleteConfirming = false
 		m.ui.deleteConfirmID = ""
 		m.ui.deleteConfirmAlias = ""
+		m.ui.deleteConfirmCursor = 0 // Reset cursor
 		m.ui.mu.Unlock()
-		return m, nil
+		// Force a repaint by returning the model
+		return m, tea.ClearScreen
 
 	case "left", "h", "right", "l":
 		// Toggle between Yes/No
@@ -186,16 +188,18 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.deleteConfirming = false
 		m.ui.deleteConfirmID = ""
 		m.ui.deleteConfirmAlias = ""
+		m.ui.deleteConfirmCursor = 0 // Reset cursor
 		m.ui.mu.Unlock()
-		return m, nil
+		return m, tea.ClearScreen
 
 	case "n":
 		// Quick 'n' for no
 		m.ui.deleteConfirming = false
 		m.ui.deleteConfirmID = ""
 		m.ui.deleteConfirmAlias = ""
+		m.ui.deleteConfirmCursor = 0 // Reset cursor
 		m.ui.mu.Unlock()
-		return m, nil
+		return m, tea.ClearScreen
 	}
 
 	m.ui.mu.Unlock()
@@ -217,14 +221,14 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Hard cancel
 		m.ui.viewMode = ViewModeMain
 		m.ui.addWizard = nil
-		return m, nil
+		return m, tea.ClearScreen
 
 	case "esc":
 		// In edit mode, Esc always cancels (don't navigate back through skipped steps)
 		if wizard.isEditing {
 			m.ui.viewMode = ViewModeMain
 			m.ui.addWizard = nil
-			return m, nil
+			return m, tea.ClearScreen
 		}
 
 		// In add mode, go back or cancel
@@ -232,6 +236,7 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// On first step, cancel entirely
 			m.ui.viewMode = ViewModeMain
 			m.ui.addWizard = nil
+			return m, tea.ClearScreen
 		} else {
 			// Go back one step
 			wizard.step--
@@ -532,7 +537,7 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Hard cancel - always exit
 		m.ui.viewMode = ViewModeMain
 		m.ui.removeWizard = nil
-		return m, nil
+		return m, tea.ClearScreen
 
 	case "esc":
 		if wizard.confirming {
@@ -544,7 +549,7 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.ui.viewMode = ViewModeMain
 			m.ui.removeWizard = nil
 		}
-		return m, nil
+		return m, tea.ClearScreen
 
 	case "up", "k":
 		wizard.moveCursor(-1)
