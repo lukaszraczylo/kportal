@@ -103,9 +103,7 @@ func TestPercentile(t *testing.T) {
 
 func TestRunner(t *testing.T) {
 	// Create a test server
-	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
 		time.Sleep(5 * time.Millisecond) // Simulate some latency
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
