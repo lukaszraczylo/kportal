@@ -871,14 +871,13 @@ func (m model) renderBenchmarkResults() string {
 	return b.String()
 }
 
-// renderHTTPLog renders the HTTP log viewer
+// renderHTTPLog renders the HTTP log viewer as a full-screen table
 func (m model) renderHTTPLog() string {
 	if m.ui.httpLogState == nil {
 		return ""
 	}
 
 	state := m.ui.httpLogState
-	var b strings.Builder
 
 	// Get terminal dimensions
 	termWidth := m.termWidth
@@ -890,37 +889,34 @@ func (m model) renderHTTPLog() string {
 		termHeight = 40
 	}
 
-	// Header
+	// Get filtered entries
+	filteredEntries := state.getFilteredEntries()
+	totalEntries := len(filteredEntries)
+	totalUnfiltered := len(state.entries)
+
+	// Build output
+	var b strings.Builder
+
+	// Header line
 	title := wizardHeaderStyle.Render("HTTP Traffic Log")
 	b.WriteString(title)
 	b.WriteString("  ")
 	b.WriteString(breadcrumbStyle.Render(state.forwardAlias))
-	b.WriteString("\n")
 
-	// Status bar with filter info and auto-scroll
-	statusParts := []string{}
-
-	// Filter mode indicator
+	// Status indicators
+	b.WriteString("  ")
 	filterLabel := state.getFilterModeLabel()
 	if state.filterMode != HTTPLogFilterNone {
-		statusParts = append(statusParts, accentStyle.Render(fmt.Sprintf("Filter: %s", filterLabel)))
-	} else {
-		statusParts = append(statusParts, mutedStyle.Render(fmt.Sprintf("Filter: %s", filterLabel)))
+		b.WriteString(accentStyle.Render(fmt.Sprintf("[Filter: %s]", filterLabel)))
 	}
-
-	// Text filter indicator
 	if state.filterText != "" {
-		statusParts = append(statusParts, accentStyle.Render(fmt.Sprintf("Search: \"%s\"", state.filterText)))
+		b.WriteString("  ")
+		b.WriteString(accentStyle.Render(fmt.Sprintf("[Search: \"%s\"]", state.filterText)))
 	}
-
-	// Auto-scroll indicator
 	if state.autoScroll {
-		statusParts = append(statusParts, successStyle.Render("[Auto-scroll ON]"))
-	} else {
-		statusParts = append(statusParts, mutedStyle.Render("[Auto-scroll OFF]"))
+		b.WriteString("  ")
+		b.WriteString(successStyle.Render("[Auto-scroll]"))
 	}
-
-	b.WriteString(strings.Join(statusParts, "  "))
 	b.WriteString("\n")
 
 	// Filter input line (if active)
@@ -931,89 +927,79 @@ func (m model) renderHTTPLog() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(strings.Repeat("─", termWidth-4))
-	b.WriteString("\n")
-
-	// Calculate viewport height (fullscreen minus header, status, separator, footer)
-	headerLines := 5 // title, status, separator, blank, table header
-	if state.filterActive {
-		headerLines++
-	}
-	footerLines := 3 // entry count, help line, padding
-	viewportHeight := termHeight - headerLines - footerLines
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
-
-	// Get filtered entries
-	filteredEntries := state.getFilteredEntries()
-	totalEntries := len(filteredEntries)
-	totalUnfiltered := len(state.entries)
-
+	// Table or empty message
 	if totalEntries == 0 {
+		b.WriteString("\n")
 		if totalUnfiltered == 0 {
-			b.WriteString(mutedStyle.Render("No HTTP traffic logged yet."))
-			b.WriteString("\n\n")
-			b.WriteString(mutedStyle.Render("To enable HTTP logging, add to your .kportal.yaml:"))
-			b.WriteString("\n")
-			b.WriteString(mutedStyle.Render("  httpLog: true"))
-			b.WriteString("\n\n")
-			b.WriteString(mutedStyle.Render("Then make requests to the forwarded port."))
-			b.WriteString("\n")
+			b.WriteString(mutedStyle.Render("  No HTTP traffic logged yet.\n"))
+			b.WriteString(mutedStyle.Render("  Enable with: httpLog: true in .kportal.yaml\n"))
 		} else {
-			b.WriteString(mutedStyle.Render(fmt.Sprintf("No entries match filter. (%d total entries)", totalUnfiltered)))
-			b.WriteString("\n")
-			b.WriteString(mutedStyle.Render("Press 'c' to clear filters."))
+			b.WriteString(mutedStyle.Render(fmt.Sprintf("  No entries match filter. (%d total entries)\n", totalUnfiltered)))
+			b.WriteString(mutedStyle.Render("  Press 'c' to clear filters.\n"))
+		}
+		// Pad to fill screen
+		for i := 0; i < termHeight-10; i++ {
 			b.WriteString("\n")
 		}
 	} else {
+		// Render simple table without lipgloss table (for better control)
+		b.WriteString("\n")
+
+		// Header
+		header := fmt.Sprintf("  %-10s  %-7s  %-6s  %-8s  %s",
+			"TIME", "METHOD", "STATUS", "LATENCY", "PATH")
+		b.WriteString(mutedStyle.Render(header))
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render(strings.Repeat("─", termWidth-2)))
+		b.WriteString("\n")
+
 		// Calculate visible range
+		viewportHeight := termHeight - 8 // header, filter bar, table header, separator, footer, help
+		if viewportHeight < 5 {
+			viewportHeight = 5
+		}
+
+		// Ensure cursor is in valid range
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
+		if state.cursor >= totalEntries {
+			state.cursor = totalEntries - 1
+		}
+
+		// Calculate scroll offset to keep cursor visible
+		if state.cursor < state.scrollOffset {
+			state.scrollOffset = state.cursor
+		}
+		if state.cursor >= state.scrollOffset+viewportHeight {
+			state.scrollOffset = state.cursor - viewportHeight + 1
+		}
+		if state.scrollOffset < 0 {
+			state.scrollOffset = 0
+		}
+
 		start := state.scrollOffset
 		end := start + viewportHeight
 		if end > totalEntries {
 			end = totalEntries
 		}
 
-		// Adjust scroll to keep cursor visible
-		if state.cursor < start {
-			start = state.cursor
+		// Calculate max path width
+		maxPathWidth := termWidth - 48
+		if maxPathWidth < 10 {
+			maxPathWidth = 10
 		}
-		if state.cursor >= end {
-			start = state.cursor - viewportHeight + 1
-		}
-		if start < 0 {
-			start = 0
-		}
-		end = start + viewportHeight
-		if end > totalEntries {
-			end = totalEntries
-		}
-		state.scrollOffset = start
-
-		// Show scroll indicator
-		if start > 0 {
-			b.WriteString(mutedStyle.Render("  ↑ More above ↑\n"))
-		} else {
-			b.WriteString("\n")
-		}
-
-		// Table header
-		header := fmt.Sprintf("  %-12s  %-7s  %-6s  %-8s  %s", "TIME", "METHOD", "STATUS", "LATENCY", "PATH")
-		b.WriteString(mutedStyle.Render(header))
-		b.WriteString("\n")
 
 		for i := start; i < end; i++ {
 			entry := filteredEntries[i]
-			isSelected := i == state.cursor
 
-			// Format status code
-			statusStr := "---"
+			// Format fields
+			statusStr := ""
 			if entry.StatusCode > 0 {
 				statusStr = fmt.Sprintf("%d", entry.StatusCode)
 			}
 
-			// Format latency
-			latencyStr := "---"
+			latencyStr := ""
 			if entry.LatencyMs > 0 {
 				if entry.LatencyMs >= 1000 {
 					latencyStr = fmt.Sprintf("%.1fs", float64(entry.LatencyMs)/1000)
@@ -1022,74 +1008,65 @@ func (m model) renderHTTPLog() string {
 				}
 			}
 
-			// Calculate max path width
-			fixedWidth := 12 + 2 + 7 + 2 + 6 + 2 + 8 + 2 + 4 // timestamp + gaps + method + status + latency + prefix
-			maxPathWidth := termWidth - fixedWidth
-			if maxPathWidth < 10 {
-				maxPathWidth = 10
-			}
-
-			// Truncate path if needed
+			// Truncate path
 			path := entry.Path
 			if len(path) > maxPathWidth {
 				path = path[:maxPathWidth-3] + "..."
 			}
 
-			// Format: TIME  METHOD  STATUS  LATENCY  PATH
-			line := fmt.Sprintf("%-12s  %-7s  %-6s  %-8s  %s",
+			// Build line
+			line := fmt.Sprintf("%-10s  %-7s  %-6s  %-8s  %s",
 				entry.Timestamp,
 				entry.Method,
 				statusStr,
 				latencyStr,
 				path)
 
+			// Selection prefix
 			prefix := "  "
-			if isSelected {
+			if i == state.cursor {
 				prefix = "▸ "
 			}
 
-			// Color code by status
+			// Apply color based on status
+			// 200s = normal text, 400s = warning (orange), 500s = error (red)
 			var styledLine string
 			if entry.StatusCode >= 500 {
 				styledLine = errorStyle.Render(line)
 			} else if entry.StatusCode >= 400 {
 				styledLine = warningStyle.Render(line)
-			} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
-				styledLine = successStyle.Render(line)
-			} else if entry.StatusCode > 0 {
-				styledLine = mutedStyle.Render(line)
 			} else {
-				// Request (no status yet)
+				// 200s and other codes - normal text color
 				styledLine = line
 			}
 
-			if isSelected {
+			if i == state.cursor {
 				b.WriteString(selectedStyle.Render(prefix))
-				b.WriteString(styledLine)
 			} else {
 				b.WriteString(prefix)
-				b.WriteString(styledLine)
 			}
+			b.WriteString(styledLine)
 			b.WriteString("\n")
 		}
 
-		// Show scroll indicator
-		if end < totalEntries {
-			b.WriteString(mutedStyle.Render("  ↓ More below ↓\n"))
-		} else {
+		// Pad remaining lines
+		linesRendered := end - start
+		for i := linesRendered; i < viewportHeight; i++ {
 			b.WriteString("\n")
-		}
-
-		// Entry count
-		if totalEntries != totalUnfiltered {
-			b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries (filtered from %d total)\n", end-start, totalEntries, totalUnfiltered)))
-		} else {
-			b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries\n", end-start, totalEntries)))
 		}
 	}
 
+	// Footer with entry count
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  g/G: Top/Bottom  a: Auto-scroll  f: Filter mode  /: Search  c: Clear  q: Close"))
+	if totalEntries != totalUnfiltered {
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d of %d entries (filtered from %d)", totalEntries, totalEntries, totalUnfiltered)))
+	} else {
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d entries", totalEntries)))
+	}
+	b.WriteString("\n")
+
+	// Help line at bottom
+	b.WriteString(helpStyle.Render("  ↑/↓/PgUp/PgDn: Navigate  g/G: Top/Bottom  a: Auto-scroll  f: Filter  /: Search  c: Clear  q: Close"))
 
 	return b.String()
 }

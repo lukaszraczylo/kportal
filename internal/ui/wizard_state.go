@@ -490,15 +490,15 @@ func newHTTPLogState(forwardID, alias string) *HTTPLogState {
 }
 
 // getFilteredEntries returns entries matching the current filter
-// Only returns "response" entries since they contain status codes and latency
+// Only returns entries with status codes (responses) since requests don't have useful info
 func (s *HTTPLogState) getFilteredEntries() []HTTPLogEntry {
 	filtered := make([]HTTPLogEntry, 0, len(s.entries))
 	filterLower := strings.ToLower(s.filterText)
 
 	for _, entry := range s.entries {
-		// Only show response entries (they have status code and latency)
-		// Request entries are logged separately but don't add value to the viewer
-		if entry.Direction == "request" {
+		// Only show entries with status codes (completed responses)
+		// Requests, streaming connections, and errors without status are filtered out
+		if entry.StatusCode == 0 {
 			continue
 		}
 

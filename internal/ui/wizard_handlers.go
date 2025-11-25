@@ -40,6 +40,12 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.ui.moveSelection(1)
 
+	case "pgup", "ctrl+u":
+		m.ui.moveSelection(-10)
+
+	case "pgdown", "ctrl+d":
+		m.ui.moveSelection(10)
+
 	case " ", "enter":
 		m.ui.toggleSelected()
 
@@ -359,6 +365,14 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			wizard.moveCursor(1)
 		}
 
+	case "pgup", "ctrl+u":
+		// Page up - move 10 items
+		wizard.moveCursor(-10)
+
+	case "pgdown", "ctrl+d":
+		// Page down - move 10 items
+		wizard.moveCursor(10)
+
 	case "tab":
 		// Tab moves between alias field and buttons in confirmation
 		if wizard.step == StepConfirmation {
@@ -677,6 +691,12 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "down", "j":
 		wizard.moveCursor(1)
+
+	case "pgup", "ctrl+u":
+		wizard.moveCursor(-10)
+
+	case "pgdown", "ctrl+d":
+		wizard.moveCursor(10)
 
 	case " ":
 		if !wizard.confirming {
@@ -1102,6 +1122,28 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			state.autoScroll = true
 		}
 
+	case "pgup", "ctrl+u":
+		// Page up - move 20 entries
+		state.cursor -= 20
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
+		state.autoScroll = false
+
+	case "pgdown", "ctrl+d":
+		// Page down - move 20 entries
+		state.cursor += 20
+		if state.cursor >= len(filteredEntries) {
+			state.cursor = len(filteredEntries) - 1
+		}
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
+		// If at bottom, enable auto-scroll
+		if state.cursor >= len(filteredEntries)-1 {
+			state.autoScroll = true
+		}
+
 	case "g":
 		// Go to top
 		state.cursor = 0
@@ -1150,6 +1192,17 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 
 	state := m.ui.httpLogState
 	state.entries = append(state.entries, msg.Entry)
+
+	// Cap entries to prevent memory growth (keep last 10000 entries)
+	const maxEntries = 10000
+	if len(state.entries) > maxEntries {
+		// Remove oldest entries
+		state.entries = state.entries[len(state.entries)-maxEntries:]
+		// Adjust cursor if needed
+		if state.cursor >= len(state.entries) {
+			state.cursor = len(state.entries) - 1
+		}
+	}
 
 	// Auto-scroll to bottom if enabled
 	if state.autoScroll && len(state.entries) > 0 {
