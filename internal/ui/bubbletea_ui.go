@@ -34,6 +34,10 @@ type ForwardRemoveMsg struct {
 	ID string
 }
 
+// HTTPLogSubscriber is a function that subscribes to HTTP logs for a forward
+// It returns a cleanup function to call when unsubscribing
+type HTTPLogSubscriber func(forwardID string, callback func(entry HTTPLogEntry)) func()
+
 // BubbleTeaUI is a bubbletea-based terminal UI
 type BubbleTeaUI struct {
 	mu             sync.RWMutex
@@ -62,10 +66,22 @@ type BubbleTeaUI struct {
 	deleteConfirmAlias  string
 	deleteConfirmCursor int // 0 = Yes, 1 = No
 
+	// Benchmark state
+	benchmarkState *BenchmarkState
+
+	// HTTP log viewing state
+	httpLogState *HTTPLogState
+
+	// Log callback cleanup function
+	httpLogCleanup func()
+
 	// Dependencies for wizards
 	discovery  *k8s.Discovery
 	mutator    *config.Mutator
 	configPath string
+
+	// Manager for accessing workers
+	httpLogSubscriber HTTPLogSubscriber
 }
 
 // bubbletea model
@@ -99,6 +115,14 @@ func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *
 	ui.discovery = discovery
 	ui.mutator = mutator
 	ui.configPath = configPath
+}
+
+// SetHTTPLogSubscriber sets the function to subscribe to HTTP logs
+func (ui *BubbleTeaUI) SetHTTPLogSubscriber(subscriber HTTPLogSubscriber) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.httpLogSubscriber = subscriber
 }
 
 // SetUpdateAvailable sets the update notification to be displayed
@@ -253,6 +277,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleAddWizardKeys(msg)
 		case ViewModeRemoveWizard:
 			return m.handleRemoveWizardKeys(msg)
+		case ViewModeBenchmark:
+			return m.handleBenchmarkKeys(msg)
+		case ViewModeHTTPLog:
+			return m.handleHTTPLogKeys(msg)
 		}
 
 	// Forward management messages (always update main view data)
@@ -283,6 +311,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ui.removeWizard = nil
 		m.ui.mu.Unlock()
 		return m, tea.ClearScreen
+
+	case BenchmarkCompleteMsg:
+		return m.handleBenchmarkComplete(msg)
+
+	case HTTPLogEntryMsg:
+		return m.handleHTTPLogEntry(msg)
 	}
 
 	return m, nil
@@ -322,6 +356,12 @@ func (m model) View() string {
 		return overlayContent(mainView, modal, termWidth, termHeight)
 	case ViewModeRemoveWizard:
 		modal := m.renderRemoveWizard()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	case ViewModeBenchmark:
+		modal := m.renderBenchmark()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	case ViewModeHTTPLog:
+		modal := m.renderHTTPLog()
 		return overlayContent(mainView, modal, termWidth, termHeight)
 	default:
 		return mainView
@@ -524,13 +564,15 @@ func (m model) renderMainView() string {
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 
-	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Quit  │  Total: %d",
+	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Bench  %s: Logs  %s: Quit  │  Total: %d",
 		keyStyle.Render("↑↓"),
 		keyStyle.Render("jk"),
 		keyStyle.Render("Space"),
 		keyStyle.Render("n"),
 		keyStyle.Render("e"),
 		keyStyle.Render("d"),
+		keyStyle.Render("b"),
+		keyStyle.Render("l"),
 		keyStyle.Render("q"),
 		len(m.ui.forwardOrder))
 

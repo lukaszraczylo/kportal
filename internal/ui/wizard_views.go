@@ -325,11 +325,13 @@ func (m model) renderEnterRemotePort() string {
 	if wizard.selector != "" {
 		resourceInfo = fmt.Sprintf("%s [%s]", wizard.resourceValue, wizard.selector)
 	}
-	b.WriteString(mutedStyle.Render(fmt.Sprintf("Resource: %s\n\n", resourceInfo)))
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Resource: %s", resourceInfo)))
+	b.WriteString("\n\n")
 
 	// If we have detected ports and in list mode, show them as a list
 	if len(wizard.detectedPorts) > 0 && wizard.inputMode == InputModeList {
-		b.WriteString("Select remote port:\n\n")
+		b.WriteString("Select remote port:")
+		b.WriteString("\n\n")
 
 		const viewportHeight = 20
 		totalItems := len(wizard.detectedPorts) + 1 // +1 for manual entry option
@@ -446,8 +448,10 @@ func (m model) renderEnterLocalPort() string {
 	if wizard.selector != "" {
 		resourceInfo = fmt.Sprintf("%s [%s]", wizard.resourceValue, wizard.selector)
 	}
-	b.WriteString(mutedStyle.Render(fmt.Sprintf("Resource: %s\n", resourceInfo)))
-	b.WriteString(mutedStyle.Render(fmt.Sprintf("Remote port: %d\n\n", wizard.remotePort)))
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Resource: %s", resourceInfo)))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Remote port: %d", wizard.remotePort)))
+	b.WriteString("\n\n")
 
 	b.WriteString(renderTextInput("Local port: ", wizard.textInput, wizard.error == nil))
 	b.WriteString("\n\n")
@@ -669,4 +673,324 @@ func (m model) renderRemoveConfirmation() string {
 	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Confirm  Esc: Cancel"))
 
 	return b.String()
+}
+
+// renderBenchmark renders the benchmark wizard
+func (m model) renderBenchmark() string {
+	if m.ui.benchmarkState == nil {
+		return ""
+	}
+
+	state := m.ui.benchmarkState
+
+	var content string
+	switch state.step {
+	case BenchmarkStepConfig:
+		content = m.renderBenchmarkConfig()
+	case BenchmarkStepRunning:
+		content = m.renderBenchmarkRunning()
+	case BenchmarkStepResults:
+		content = m.renderBenchmarkResults()
+	default:
+		content = "Unknown step"
+	}
+
+	return wizardBoxStyle.Render(content)
+}
+
+func (m model) renderBenchmarkConfig() string {
+	state := m.ui.benchmarkState
+	var b strings.Builder
+
+	b.WriteString(renderHeader("HTTP Benchmark", ""))
+	b.WriteString(fmt.Sprintf("Target: %s (localhost:%d)", breadcrumbStyle.Render(state.forwardAlias), state.localPort))
+	b.WriteString("\n\n")
+
+	b.WriteString("Configure benchmark parameters:")
+	b.WriteString("\n\n")
+
+	fields := []struct {
+		label string
+		value string
+	}{
+		{"URL Path", state.urlPath},
+		{"Method", state.method},
+		{"Concurrency", fmt.Sprintf("%d", state.concurrency)},
+		{"Requests", fmt.Sprintf("%d", state.requests)},
+	}
+
+	for i, field := range fields {
+		prefix := "  "
+		if i == state.cursor {
+			prefix = "▸ "
+			b.WriteString(selectedStyle.Render(fmt.Sprintf("%s%-12s", prefix, field.label+":")))
+			b.WriteString(validInputStyle.Render(field.value + "█"))
+		} else {
+			b.WriteString(fmt.Sprintf("%s%-12s %s", prefix, field.label+":", field.value))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Will send %d requests with %d concurrent workers", state.requests, state.concurrency)))
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("↑/↓/Tab: Navigate  Type to edit  Enter: Run  Esc: Cancel"))
+
+	return b.String()
+}
+
+func (m model) renderBenchmarkRunning() string {
+	state := m.ui.benchmarkState
+	var b strings.Builder
+
+	b.WriteString(renderHeader("HTTP Benchmark", ""))
+	b.WriteString(fmt.Sprintf("Target: %s", breadcrumbStyle.Render(state.forwardAlias)))
+	b.WriteString("\n\n")
+
+	// Progress bar
+	progress := float64(state.progress) / float64(state.total)
+	if state.total == 0 {
+		progress = 0
+	}
+	barWidth := 30
+	filled := int(progress * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	percent := int(progress * 100)
+
+	b.WriteString(spinnerStyle.Render("Running benchmark..."))
+	b.WriteString("\n\n")
+
+	b.WriteString(fmt.Sprintf("  [%s] %d%%", successStyle.Render(bar), percent))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d / %d requests completed", state.progress, state.total)))
+	b.WriteString("\n\n")
+
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("URL: http://localhost:%d%s", state.localPort, state.urlPath)))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Method: %s  Concurrency: %d", state.method, state.concurrency)))
+	b.WriteString("\n\n")
+
+	b.WriteString(helpStyle.Render("Please wait..."))
+
+	return b.String()
+}
+
+func (m model) renderBenchmarkResults() string {
+	state := m.ui.benchmarkState
+	var b strings.Builder
+
+	b.WriteString(renderHeader("Benchmark Results", ""))
+	b.WriteString(fmt.Sprintf("Target: %s", breadcrumbStyle.Render(state.forwardAlias)))
+	b.WriteString("\n\n")
+
+	if state.error != nil {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("✗ Error: %v", state.error)))
+		b.WriteString("\n\n")
+		b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+		return b.String()
+	}
+
+	if state.results == nil {
+		b.WriteString(mutedStyle.Render("No results available"))
+		b.WriteString("\n\n")
+		b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+		return b.String()
+	}
+
+	r := state.results
+
+	// Summary
+	successRate := float64(r.Successful) / float64(r.TotalRequests) * 100
+	if r.TotalRequests == 0 {
+		successRate = 0
+	}
+
+	b.WriteString(fmt.Sprintf("Total Requests:  %d", r.TotalRequests))
+	b.WriteString("\n")
+	if r.Failed == 0 {
+		b.WriteString(successStyle.Render(fmt.Sprintf("Successful:      %d (%.1f%%)", r.Successful, successRate)))
+	} else {
+		b.WriteString(fmt.Sprintf("Successful:      %d (%.1f%%)", r.Successful, successRate))
+	}
+	b.WriteString("\n")
+	if r.Failed > 0 {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("Failed:          %d", r.Failed)))
+	} else {
+		b.WriteString(fmt.Sprintf("Failed:          %d", r.Failed))
+	}
+	b.WriteString("\n\n")
+
+	// Latency stats
+	b.WriteString(breadcrumbStyle.Render("Latency (ms)"))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  Min:    %.2f", r.MinLatency))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  Max:    %.2f", r.MaxLatency))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  Avg:    %.2f", r.AvgLatency))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  P50:    %.2f", r.P50Latency))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  P95:    %.2f", r.P95Latency))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  P99:    %.2f", r.P99Latency))
+	b.WriteString("\n\n")
+
+	// Throughput
+	b.WriteString(breadcrumbStyle.Render("Throughput"))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  Requests/sec:  %.2f", r.Throughput))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  Bytes read:    %d", r.BytesRead))
+	b.WriteString("\n")
+
+	// Status codes if interesting
+	if len(r.StatusCodes) > 0 {
+		b.WriteString("\n")
+		b.WriteString(breadcrumbStyle.Render("Status Codes"))
+		b.WriteString("\n")
+		for code, count := range r.StatusCodes {
+			if code >= 200 && code < 300 {
+				b.WriteString(successStyle.Render(fmt.Sprintf("  %d: %d", code, count)))
+			} else if code >= 400 {
+				b.WriteString(errorStyle.Render(fmt.Sprintf("  %d: %d", code, count)))
+			} else {
+				b.WriteString(fmt.Sprintf("  %d: %d", code, count))
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+
+	return b.String()
+}
+
+// renderHTTPLog renders the HTTP log viewer
+func (m model) renderHTTPLog() string {
+	if m.ui.httpLogState == nil {
+		return ""
+	}
+
+	state := m.ui.httpLogState
+	var b strings.Builder
+
+	b.WriteString(renderHeader("HTTP Traffic Log", ""))
+	b.WriteString(fmt.Sprintf("Forward: %s\n", breadcrumbStyle.Render(state.forwardAlias)))
+
+	// Auto-scroll indicator
+	if state.autoScroll {
+		b.WriteString(successStyle.Render("  [Auto-scroll ON]"))
+	} else {
+		b.WriteString(mutedStyle.Render("  [Auto-scroll OFF]"))
+	}
+	b.WriteString("\n\n")
+
+	if len(state.entries) == 0 {
+		b.WriteString(mutedStyle.Render("No HTTP traffic logged yet."))
+		b.WriteString("\n\n")
+		b.WriteString(mutedStyle.Render("To enable HTTP logging, add to your .kportal.yaml:"))
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render("  httpLog:"))
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render("    enabled: true"))
+		b.WriteString("\n\n")
+		b.WriteString(mutedStyle.Render("Then make requests to the forwarded port."))
+		b.WriteString("\n")
+	} else {
+		// Show log entries
+		const viewportHeight = 15
+		totalEntries := len(state.entries)
+
+		// Calculate visible range
+		start := state.scrollOffset
+		end := start + viewportHeight
+		if end > totalEntries {
+			end = totalEntries
+		}
+
+		// Adjust scroll to keep cursor visible
+		if state.cursor < start {
+			start = state.cursor
+		}
+		if state.cursor >= end {
+			start = state.cursor - viewportHeight + 1
+		}
+		if start < 0 {
+			start = 0
+		}
+		end = start + viewportHeight
+		if end > totalEntries {
+			end = totalEntries
+		}
+		state.scrollOffset = start
+
+		// Show scroll indicator
+		if start > 0 {
+			b.WriteString(mutedStyle.Render("  ↑ More above ↑\n"))
+		}
+
+		for i := start; i < end; i++ {
+			entry := state.entries[i]
+			isSelected := i == state.cursor
+
+			// Format: [timestamp] METHOD /path -> STATUS (latency)
+			line := fmt.Sprintf("%s %s %s",
+				entry.Timestamp,
+				entry.Method,
+				entry.Path)
+
+			if entry.StatusCode > 0 {
+				line += fmt.Sprintf(" → %d", entry.StatusCode)
+			}
+			if entry.LatencyMs > 0 {
+				line += fmt.Sprintf(" (%dms)", entry.LatencyMs)
+			}
+
+			prefix := "  "
+			if isSelected {
+				prefix = "▸ "
+				// Color code by status
+				if entry.StatusCode >= 500 {
+					b.WriteString(errorStyle.Render(prefix + line))
+				} else if entry.StatusCode >= 400 {
+					b.WriteString(warningStyle.Render(prefix + line))
+				} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+					b.WriteString(successStyle.Render(prefix + line))
+				} else {
+					b.WriteString(selectedStyle.Render(prefix + line))
+				}
+			} else {
+				// Color code by status
+				if entry.StatusCode >= 500 {
+					b.WriteString(prefix + errorStyle.Render(line))
+				} else if entry.StatusCode >= 400 {
+					b.WriteString(prefix + warningStyle.Render(line))
+				} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+					b.WriteString(prefix + line)
+				} else {
+					b.WriteString(prefix + mutedStyle.Render(line))
+				}
+			}
+			b.WriteString("\n")
+		}
+
+		// Show scroll indicator
+		if end < totalEntries {
+			b.WriteString(mutedStyle.Render("  ↓ More below ↓\n"))
+		}
+
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries\n", end-start, totalEntries)))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("↑/↓: Navigate  g/G: Top/Bottom  a: Toggle auto-scroll  q/Esc: Close"))
+
+	return wizardBoxStyle.Render(b.String())
 }

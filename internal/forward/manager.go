@@ -483,6 +483,14 @@ func (m *Manager) GetWorkerCount() int {
 	return len(m.workers)
 }
 
+// GetWorker returns a worker by ID, or nil if not found.
+func (m *Manager) GetWorker(id string) *ForwardWorker {
+	m.workersMu.RLock()
+	defer m.workersMu.RUnlock()
+
+	return m.workers[id]
+}
+
 // extractPorts extracts all local ports from a list of forwards.
 func (m *Manager) extractPorts(forwards []config.Forward) []int {
 	ports := make([]int, len(forwards))

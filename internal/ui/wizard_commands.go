@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/nvm/kportal/internal/benchmark"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
 )
@@ -234,6 +235,44 @@ func removeForwardByIDCmd(mutator *config.Mutator, id string) tea.Cmd {
 			success: err == nil,
 			count:   1,
 			err:     err,
+		}
+	}
+}
+
+// BenchmarkCompleteMsg is sent when a benchmark run completes
+type BenchmarkCompleteMsg struct {
+	ForwardID string
+	Results   *benchmark.Results
+	Error     error
+}
+
+// HTTPLogEntryMsg is sent when a new HTTP log entry is received
+type HTTPLogEntryMsg struct {
+	Entry HTTPLogEntry
+}
+
+// runBenchmarkCmd runs a benchmark against the given port forward
+func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, concurrency, requests int) tea.Cmd {
+	return func() tea.Msg {
+		runner := benchmark.NewRunner()
+
+		url := fmt.Sprintf("http://localhost:%d%s", localPort, urlPath)
+		cfg := benchmark.Config{
+			URL:         url,
+			Method:      method,
+			Concurrency: concurrency,
+			Requests:    requests,
+			Timeout:     30 * time.Second,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		results, err := runner.Run(ctx, forwardID, cfg)
+		return BenchmarkCompleteMsg{
+			ForwardID: forwardID,
+			Results:   results,
+			Error:     err,
 		}
 	}
 }
