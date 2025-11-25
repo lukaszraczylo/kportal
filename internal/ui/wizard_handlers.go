@@ -468,7 +468,14 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 				wizard.clearTextInput()
 			} else if wizard.cursor >= 0 && wizard.cursor < len(wizard.detectedPorts) {
 				// Selected a detected port
-				wizard.remotePort = int(wizard.detectedPorts[wizard.cursor].Port)
+				// For services, use TargetPort (actual pod port) if available
+				// For pods, TargetPort is 0, so use Port (container port)
+				selectedPort := wizard.detectedPorts[wizard.cursor]
+				if selectedPort.TargetPort > 0 {
+					wizard.remotePort = int(selectedPort.TargetPort)
+				} else {
+					wizard.remotePort = int(selectedPort.Port)
+				}
 				wizard.step = StepEnterLocalPort
 				wizard.clearTextInput()
 				wizard.inputMode = InputModeText

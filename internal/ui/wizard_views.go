@@ -349,9 +349,20 @@ func (m model) renderEnterRemotePort() string {
 		// Render detected ports within viewport
 		for i := start; i < end && i < len(wizard.detectedPorts); i++ {
 			port := wizard.detectedPorts[i]
-			portDesc := fmt.Sprintf("%d", port.Port)
-			if port.Name != "" {
-				portDesc += fmt.Sprintf(" (%s)", port.Name)
+			// For services, show both service port and target port if they differ
+			var portDesc string
+			if port.TargetPort > 0 && port.TargetPort != port.Port {
+				// Service with different target port: "80 → 8000 (http)"
+				portDesc = fmt.Sprintf("%d → %d", port.Port, port.TargetPort)
+				if port.Name != "" {
+					portDesc += fmt.Sprintf(" (%s)", port.Name)
+				}
+			} else {
+				// Pod port or service with same port
+				portDesc = fmt.Sprintf("%d", port.Port)
+				if port.Name != "" {
+					portDesc += fmt.Sprintf(" (%s)", port.Name)
+				}
 			}
 
 			prefix := "  "
@@ -390,9 +401,17 @@ func (m model) renderEnterRemotePort() string {
 		if len(wizard.detectedPorts) > 0 {
 			b.WriteString(mutedStyle.Render("Detected ports:\n"))
 			for _, port := range wizard.detectedPorts {
-				portDesc := fmt.Sprintf("%d", port.Port)
-				if port.Name != "" {
-					portDesc += fmt.Sprintf(" (%s)", port.Name)
+				var portDesc string
+				if port.TargetPort > 0 && port.TargetPort != port.Port {
+					portDesc = fmt.Sprintf("%d → %d", port.Port, port.TargetPort)
+					if port.Name != "" {
+						portDesc += fmt.Sprintf(" (%s)", port.Name)
+					}
+				} else {
+					portDesc = fmt.Sprintf("%d", port.Port)
+					if port.Name != "" {
+						portDesc += fmt.Sprintf(" (%s)", port.Name)
+					}
 				}
 				b.WriteString(mutedStyle.Render(fmt.Sprintf("  • %s\n", portDesc)))
 			}

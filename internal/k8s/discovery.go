@@ -9,6 +9,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Discovery provides cluster introspection capabilities for the UI wizards.
@@ -41,9 +43,10 @@ type ContainerInfo struct {
 
 // PortInfo describes a port exposed by a container or service.
 type PortInfo struct {
-	Name     string
-	Port     int32
-	Protocol string
+	Name       string
+	Port       int32
+	TargetPort int32 // For services: the actual pod port to forward to
+	Protocol   string
 }
 
 // ServiceInfo contains information about a service.
@@ -205,7 +208,60 @@ func (d *Discovery) ListPodsWithSelector(ctx context.Context, contextName, names
 	return pods, nil
 }
 
+// resolveTargetPort resolves a service's targetPort to an actual port number.
+// If targetPort is numeric, it returns that number directly.
+// If targetPort is a named port, it looks up the port number from the backing pods.
+// Falls back to the service port if resolution fails.
+func (d *Discovery) resolveTargetPort(ctx context.Context, client kubernetes.Interface, namespace string, svc *corev1.Service, port *corev1.ServicePort) int32 {
+	// If targetPort is not set, Kubernetes defaults to the service port
+	if port.TargetPort.Type == intstr.Int && port.TargetPort.IntVal == 0 {
+		return port.Port
+	}
+
+	// If targetPort is numeric, use it directly
+	if port.TargetPort.Type == intstr.Int {
+		return port.TargetPort.IntVal
+	}
+
+	// targetPort is a named port - need to look up from pods
+	namedPort := port.TargetPort.StrVal
+	if namedPort == "" {
+		return port.Port
+	}
+
+	// Get a backing pod to resolve the named port
+	if len(svc.Spec.Selector) == 0 {
+		// No selector, can't resolve - fall back to service port
+		return port.Port
+	}
+
+	selector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: svc.Spec.Selector})
+	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector,
+		Limit:         1, // We only need one pod to resolve the port name
+	})
+	if err != nil || len(pods.Items) == 0 {
+		// Can't get pods - fall back to service port
+		return port.Port
+	}
+
+	// Look up the named port in the pod's containers
+	pod := &pods.Items[0]
+	for _, container := range pod.Spec.Containers {
+		for _, containerPort := range container.Ports {
+			if containerPort.Name == namedPort {
+				return containerPort.ContainerPort
+			}
+		}
+	}
+
+	// Named port not found - fall back to service port
+	return port.Port
+}
+
 // ListServices returns all services in the given namespace.
+// For each service port, it resolves the targetPort to an actual port number
+// by looking up the backing pods when the targetPort is a named port.
 func (d *Discovery) ListServices(ctx context.Context, contextName, namespace string) ([]ServiceInfo, error) {
 	client, err := d.pool.GetClient(contextName)
 	if err != nil {
@@ -221,10 +277,13 @@ func (d *Discovery) ListServices(ctx context.Context, contextName, namespace str
 	for _, svc := range svcList.Items {
 		ports := make([]PortInfo, 0, len(svc.Spec.Ports))
 		for _, port := range svc.Spec.Ports {
+			targetPort := d.resolveTargetPort(ctx, client, namespace, &svc, &port)
+
 			ports = append(ports, PortInfo{
-				Name:     port.Name,
-				Port:     port.Port,
-				Protocol: string(port.Protocol),
+				Name:       port.Name,
+				Port:       port.Port,
+				TargetPort: targetPort,
+				Protocol:   string(port.Protocol),
 			})
 		}
 
