@@ -152,44 +152,34 @@ func (c *Checker) Unregister(forwardID string) {
 	delete(c.callbacks, forwardID)
 }
 
-// MarkReconnecting marks a forward as reconnecting (called by worker)
-func (c *Checker) MarkReconnecting(forwardID string) {
+// markStatus is a helper to set a forward's status and notify on change.
+func (c *Checker) markStatus(forwardID string, newStatus Status) {
 	c.mu.Lock()
 
-	if health, exists := c.ports[forwardID]; exists {
-		oldStatus := health.Status
-		health.Status = StatusReconnect
-		health.LastCheck = time.Now()
-
+	health, exists := c.ports[forwardID]
+	if !exists {
 		c.mu.Unlock()
-
-		if oldStatus != StatusReconnect {
-			c.notifyStatusChange(forwardID, StatusReconnect, "")
-		}
 		return
 	}
 
+	oldStatus := health.Status
+	health.Status = newStatus
+	health.LastCheck = time.Now()
 	c.mu.Unlock()
+
+	if oldStatus != newStatus {
+		c.notifyStatusChange(forwardID, newStatus, "")
+	}
+}
+
+// MarkReconnecting marks a forward as reconnecting (called by worker)
+func (c *Checker) MarkReconnecting(forwardID string) {
+	c.markStatus(forwardID, StatusReconnect)
 }
 
 // MarkStarting marks a forward as starting (called by worker)
 func (c *Checker) MarkStarting(forwardID string) {
-	c.mu.Lock()
-
-	if health, exists := c.ports[forwardID]; exists {
-		oldStatus := health.Status
-		health.Status = StatusStarting
-		health.LastCheck = time.Now()
-
-		c.mu.Unlock()
-
-		if oldStatus != StatusStarting {
-			c.notifyStatusChange(forwardID, StatusStarting, "")
-		}
-		return
-	}
-
-	c.mu.Unlock()
+	c.markStatus(forwardID, StatusStarting)
 }
 
 // GetStatus returns the current health status of a forward

@@ -50,24 +50,31 @@ type ReliabilitySpec struct {
 	WatchdogPeriod string `yaml:"watchdogPeriod,omitempty"` // e.g., "30s" - goroutine watchdog interval
 }
 
+// parseDurationOrDefault parses a duration string and returns the default if empty or invalid.
+func parseDurationOrDefault(value string, defaultDur time.Duration) time.Duration {
+	if value == "" {
+		return defaultDur
+	}
+	if d, err := time.ParseDuration(value); err == nil {
+		return d
+	}
+	return defaultDur
+}
+
 // GetHealthCheckIntervalOrDefault returns the health check interval or default value
 func (c *Config) GetHealthCheckIntervalOrDefault() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.Interval != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.Interval); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultHealthCheckInterval
 	}
-	return DefaultHealthCheckInterval
+	return parseDurationOrDefault(c.HealthCheck.Interval, DefaultHealthCheckInterval)
 }
 
 // GetHealthCheckTimeoutOrDefault returns the health check timeout or default value
 func (c *Config) GetHealthCheckTimeoutOrDefault() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.Timeout != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.Timeout); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultHealthCheckTimeout
 	}
-	return DefaultHealthCheckTimeout
+	return parseDurationOrDefault(c.HealthCheck.Timeout, DefaultHealthCheckTimeout)
 }
 
 // GetHealthCheckMethod returns the health check method or default
@@ -80,32 +87,26 @@ func (c *Config) GetHealthCheckMethod() string {
 
 // GetMaxConnectionAge returns the max connection age or default
 func (c *Config) GetMaxConnectionAge() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.MaxConnectionAge != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.MaxConnectionAge); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultMaxConnectionAge
 	}
-	return DefaultMaxConnectionAge
+	return parseDurationOrDefault(c.HealthCheck.MaxConnectionAge, DefaultMaxConnectionAge)
 }
 
 // GetMaxIdleTime returns the max idle time or default
 func (c *Config) GetMaxIdleTime() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.MaxIdleTime != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.MaxIdleTime); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultMaxIdleTime
 	}
-	return DefaultMaxIdleTime
+	return parseDurationOrDefault(c.HealthCheck.MaxIdleTime, DefaultMaxIdleTime)
 }
 
 // GetTCPKeepalive returns the TCP keepalive duration or default
 func (c *Config) GetTCPKeepalive() time.Duration {
-	if c.Reliability != nil && c.Reliability.TCPKeepalive != "" {
-		if d, err := time.ParseDuration(c.Reliability.TCPKeepalive); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultTCPKeepalive
 	}
-	return DefaultTCPKeepalive
+	return parseDurationOrDefault(c.Reliability.TCPKeepalive, DefaultTCPKeepalive)
 }
 
 // GetRetryOnStale returns whether to retry on stale connections
@@ -118,22 +119,18 @@ func (c *Config) GetRetryOnStale() bool {
 
 // GetWatchdogPeriod returns the goroutine watchdog check period or default
 func (c *Config) GetWatchdogPeriod() time.Duration {
-	if c.Reliability != nil && c.Reliability.WatchdogPeriod != "" {
-		if d, err := time.ParseDuration(c.Reliability.WatchdogPeriod); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultWatchdogPeriod
 	}
-	return DefaultWatchdogPeriod
+	return parseDurationOrDefault(c.Reliability.WatchdogPeriod, DefaultWatchdogPeriod)
 }
 
 // GetDialTimeout returns the connection dial timeout or default
 func (c *Config) GetDialTimeout() time.Duration {
-	if c.Reliability != nil && c.Reliability.DialTimeout != "" {
-		if d, err := time.ParseDuration(c.Reliability.DialTimeout); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultDialTimeout
 	}
-	return DefaultDialTimeout
+	return parseDurationOrDefault(c.Reliability.DialTimeout, DefaultDialTimeout)
 }
 
 // Context represents a Kubernetes context with its namespaces

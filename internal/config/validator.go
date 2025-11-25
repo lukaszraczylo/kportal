@@ -6,9 +6,14 @@ import (
 )
 
 const (
-	minPort = 1
-	maxPort = 65535
+	MinPort = 1
+	MaxPort = 65535
 )
+
+// IsValidPort returns true if the port number is within the valid range (1-65535).
+func IsValidPort(port int) bool {
+	return port >= MinPort && port <= MaxPort
+}
 
 // ValidationError represents a configuration validation error with context.
 type ValidationError struct {
@@ -130,17 +135,17 @@ func (v *Validator) validateForward(fwd *Forward) []ValidationError {
 	}
 
 	// Validate ports
-	if fwd.Port < minPort || fwd.Port > maxPort {
+	if fwd.Port < MinPort || fwd.Port > MaxPort {
 		errs = append(errs, ValidationError{
 			Field:   "port",
-			Message: fmt.Sprintf("Invalid port %d for forward %s (must be between %d and %d)", fwd.Port, fwd.ID(), minPort, maxPort),
+			Message: fmt.Sprintf("Invalid port %d for forward %s (must be between %d and %d)", fwd.Port, fwd.ID(), MinPort, MaxPort),
 		})
 	}
 
-	if fwd.LocalPort < minPort || fwd.LocalPort > maxPort {
+	if fwd.LocalPort < MinPort || fwd.LocalPort > MaxPort {
 		errs = append(errs, ValidationError{
 			Field:   "localPort",
-			Message: fmt.Sprintf("Invalid localPort %d for forward %s (must be between %d and %d)", fwd.LocalPort, fwd.ID(), minPort, maxPort),
+			Message: fmt.Sprintf("Invalid localPort %d for forward %s (must be between %d and %d)", fwd.LocalPort, fwd.ID(), MinPort, MaxPort),
 		})
 	}
 

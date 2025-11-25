@@ -363,3 +363,13 @@ func (w *AddWizardState) clearSearchFilter() {
 	w.cursor = 0
 	w.scrollOffset = 0
 }
+
+// resetInput clears text input, search filter, and error state.
+// Use this when navigating between wizard steps.
+func (w *AddWizardState) resetInput() {
+	w.textInput = ""
+	w.searchFilter = ""
+	w.cursor = 0
+	w.scrollOffset = 0
+	w.error = nil
+}

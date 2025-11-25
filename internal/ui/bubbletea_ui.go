@@ -266,7 +266,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ui.addWizard = nil
 		m.ui.removeWizard = nil
 		m.ui.mu.Unlock()
-		return m, nil
+		return m, tea.ClearScreen
 	}
 
 	return m, nil
@@ -572,6 +572,15 @@ func (ui *BubbleTeaUI) moveSelection(delta int) {
 	if ui.selectedIndex >= len(ui.forwardOrder) {
 		ui.selectedIndex = len(ui.forwardOrder) - 1
 	}
+}
+
+// resetDeleteConfirmation resets the delete confirmation dialog state.
+// Caller must hold ui.mu lock.
+func (ui *BubbleTeaUI) resetDeleteConfirmation() {
+	ui.deleteConfirming = false
+	ui.deleteConfirmID = ""
+	ui.deleteConfirmAlias = ""
+	ui.deleteConfirmCursor = 0
 }
 
 // renderDeleteConfirmation renders the delete confirmation dialog

@@ -48,6 +48,23 @@ func formatProcessInfo(info processInfo) string {
 	return fmt.Sprintf("PID %s", info.pid)
 }
 
+// formatProcessList formats a list of processes into a human-readable string.
+// Returns "unknown" if the list is empty.
+func formatProcessList(processes []processInfo) string {
+	if len(processes) == 0 {
+		return "unknown"
+	}
+	if len(processes) == 1 {
+		return formatProcessInfo(processes[0])
+	}
+	// Multiple processes - format as comma-separated list
+	parts := make([]string, len(processes))
+	for i, p := range processes {
+		parts[i] = formatProcessInfo(p)
+	}
+	return strings.Join(parts, ", ")
+}
+
 // getProcessNameByPID retrieves the process name for a given PID on Unix systems
 func getProcessNameByPID(pid string) string {
 	cmd := exec.Command("ps", "-p", pid, "-o", "comm=")
@@ -186,21 +203,7 @@ func (pc *PortChecker) getProcessUsingPortUnix(port int) string {
 		})
 	}
 
-	if len(validProcesses) == 0 {
-		return "unknown"
-	}
-
-	// Format output - show all processes if multiple
-	if len(validProcesses) == 1 {
-		return formatProcessInfo(validProcesses[0])
-	}
-
-	// Multiple processes - format as list
-	var parts []string
-	for _, p := range validProcesses {
-		parts = append(parts, formatProcessInfo(p))
-	}
-	return strings.Join(parts, ", ")
+	return formatProcessList(validProcesses)
 }
 
 // isListeningState checks if a netstat line indicates a listening state.
@@ -283,21 +286,7 @@ func (pc *PortChecker) getProcessUsingPortWindows(port int) string {
 		})
 	}
 
-	if len(validProcesses) == 0 {
-		return "unknown"
-	}
-
-	// Format output - show all processes if multiple
-	if len(validProcesses) == 1 {
-		return formatProcessInfo(validProcesses[0])
-	}
-
-	// Multiple processes - format as list
-	var parts []string
-	for _, p := range validProcesses {
-		parts = append(parts, formatProcessInfo(p))
-	}
-	return strings.Join(parts, ", ")
+	return formatProcessList(validProcesses)
 }
 
 // FormatConflicts formats port conflicts into a human-readable error message.
