@@ -87,12 +87,13 @@ func (r *Runner) Run(ctx context.Context, forwardID string, cfg Config) (*Result
 	// Start workers
 	var wg sync.WaitGroup
 	var completed int64
+	var resultsMu sync.Mutex // Shared mutex for results access
 
 	for i := 0; i < cfg.Concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.worker(runCtx, cfg, results, workCh, &completed)
+			r.worker(runCtx, cfg, results, &resultsMu, workCh, &completed)
 		}()
 	}
 
@@ -154,9 +155,7 @@ func (r *Runner) Run(ctx context.Context, forwardID string, cfg Config) (*Result
 }
 
 // worker processes requests from the work channel
-func (r *Runner) worker(ctx context.Context, cfg Config, results *Results, workCh <-chan struct{}, completed *int64) {
-	var mu sync.Mutex
-
+func (r *Runner) worker(ctx context.Context, cfg Config, results *Results, resultsMu *sync.Mutex, workCh <-chan struct{}, completed *int64) {
 	for range workCh {
 		select {
 		case <-ctx.Done():
@@ -168,13 +167,13 @@ func (r *Runner) worker(ctx context.Context, cfg Config, results *Results, workC
 		statusCode, bytesRead, bytesWritten, err := r.makeRequestSafe(ctx, cfg)
 		latency := time.Since(start)
 
-		mu.Lock()
+		resultsMu.Lock()
 		if err != nil {
 			results.RecordFailure(err, latency)
 		} else {
 			results.RecordSuccess(statusCode, latency, bytesRead, bytesWritten)
 		}
-		mu.Unlock()
+		resultsMu.Unlock()
 
 		atomic.AddInt64(completed, 1)
 	}

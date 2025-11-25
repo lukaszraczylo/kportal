@@ -1139,6 +1139,7 @@ func (m model) handleBenchmarkComplete(msg BenchmarkCompleteMsg) (tea.Model, tea
 	state := m.ui.benchmarkState
 	state.running = false
 	state.step = BenchmarkStepResults
+	state.progressCh = nil // Clear progress channel since benchmark is complete
 
 	if msg.Error != nil {
 		state.error = msg.Error
