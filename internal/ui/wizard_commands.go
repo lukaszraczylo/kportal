@@ -246,6 +246,13 @@ type BenchmarkCompleteMsg struct {
 	Error     error
 }
 
+// BenchmarkProgressMsg is sent periodically during benchmark execution
+type BenchmarkProgressMsg struct {
+	ForwardID string
+	Completed int
+	Total     int
+}
+
 // HTTPLogEntryMsg is sent when a new HTTP log entry is received
 type HTTPLogEntryMsg struct {
 	Entry HTTPLogEntry

@@ -11,16 +11,20 @@ import (
 	"time"
 )
 
+// ProgressCallback is called periodically with benchmark progress
+type ProgressCallback func(completed, total int)
+
 // Config holds the benchmark configuration
 type Config struct {
-	URL         string            // Target URL
-	Method      string            // HTTP method
-	Headers     map[string]string // Custom headers
-	Body        []byte            // Request body
-	Concurrency int               // Number of concurrent workers
-	Requests    int               // Total number of requests (0 = use duration)
-	Duration    time.Duration     // Duration to run (0 = use requests)
-	Timeout     time.Duration     // Request timeout
+	URL              string            // Target URL
+	Method           string            // HTTP method
+	Headers          map[string]string // Custom headers
+	Body             []byte            // Request body
+	Concurrency      int               // Number of concurrent workers
+	Requests         int               // Total number of requests (0 = use duration)
+	Duration         time.Duration     // Duration to run (0 = use requests)
+	Timeout          time.Duration     // Request timeout
+	ProgressCallback ProgressCallback  // Optional callback for progress updates
 }
 
 // DefaultConfig returns a default benchmark configuration
@@ -89,6 +93,22 @@ func (r *Runner) Run(ctx context.Context, forwardID string, cfg Config) (*Result
 		go func() {
 			defer wg.Done()
 			r.worker(runCtx, cfg, results, workCh, &completed)
+		}()
+	}
+
+	// Start progress reporter if callback is provided
+	if cfg.ProgressCallback != nil {
+		go func() {
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					cfg.ProgressCallback(int(atomic.LoadInt64(&completed)), cfg.Requests)
+				}
+			}
 		}()
 	}
 
