@@ -169,8 +169,9 @@ func (ui *BubbleTeaUI) UpdateStatus(id string, status string) {
 	if fwd, ok := ui.forwards[id]; ok {
 		fwd.Status = status
 	}
-	// Clear error if status is not Error
-	if status != "Error" {
+	// Only clear error when forward becomes Active again
+	// This keeps error visible during Reconnecting/Starting states
+	if status == "Active" {
 		delete(ui.errors, id)
 	}
 	ui.mu.Unlock()
