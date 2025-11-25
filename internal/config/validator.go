@@ -61,6 +61,11 @@ func (v *Validator) ValidateConfig(cfg *Config) []ValidationError {
 	// Check for duplicate local ports
 	errs = append(errs, v.validateDuplicatePorts(cfg)...)
 
+	// Validate mDNS configuration
+	if cfg.IsMDNSEnabled() {
+		errs = append(errs, v.validateMDNS(cfg)...)
+	}
+
 	return errs
 }
 
@@ -269,4 +274,86 @@ func FormatValidationErrors(errs []ValidationError) string {
 	}
 
 	return sb.String()
+}
+
+// validateMDNS validates mDNS configuration when enabled.
+// It checks that aliases used for mDNS hostnames are valid and unique.
+// This includes both explicit aliases and auto-generated ones from resource names.
+func (v *Validator) validateMDNS(cfg *Config) []ValidationError {
+	var errs []ValidationError
+
+	aliasMap := make(map[string][]string) // alias -> list of forward IDs using it
+
+	for _, ctx := range cfg.Contexts {
+		for _, ns := range ctx.Namespaces {
+			for _, fwd := range ns.Forwards {
+				// Get the mDNS alias (explicit or generated from resource name)
+				mdnsAlias := fwd.GetMDNSAlias()
+				if mdnsAlias == "" {
+					// No alias available (e.g., "pod" with selector only)
+					continue
+				}
+
+				// Validate alias is a valid hostname (RFC 1123)
+				if !isValidHostname(mdnsAlias) {
+					errs = append(errs, ValidationError{
+						Field:   "alias",
+						Message: fmt.Sprintf("Forward %s has invalid mDNS hostname '%s' (must be a valid RFC 1123 hostname)", fwd.ID(), mdnsAlias),
+					})
+				}
+
+				aliasMap[mdnsAlias] = append(aliasMap[mdnsAlias], fwd.ID())
+			}
+		}
+	}
+
+	// Check for duplicate aliases (would cause mDNS conflicts)
+	for alias, forwards := range aliasMap {
+		if len(forwards) > 1 {
+			errs = append(errs, ValidationError{
+				Field:   "alias",
+				Message: fmt.Sprintf("Duplicate mDNS hostname '%s' used by multiple forwards (would cause conflict)", alias),
+				Context: map[string]string{
+					"alias":    alias,
+					"forwards": strings.Join(forwards, ", "),
+				},
+			})
+		}
+	}
+
+	return errs
+}
+
+// isValidHostname checks if a string is a valid RFC 1123 hostname.
+// Hostnames must start with alphanumeric, contain only alphanumeric and hyphens,
+// and be 1-63 characters long.
+func isValidHostname(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+
+	// Must start with alphanumeric
+	if !isAlphanumeric(name[0]) {
+		return false
+	}
+
+	// Must end with alphanumeric
+	if !isAlphanumeric(name[len(name)-1]) {
+		return false
+	}
+
+	// Check all characters
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if !isAlphanumeric(c) && c != '-' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isAlphanumeric returns true if the character is a letter or digit.
+func isAlphanumeric(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }

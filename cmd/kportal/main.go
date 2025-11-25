@@ -19,6 +19,7 @@ import (
 	"github.com/nvm/kportal/internal/forward"
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/logger"
+	"github.com/nvm/kportal/internal/mdns"
 	"github.com/nvm/kportal/internal/ui"
 	"github.com/nvm/kportal/internal/version"
 	"k8s.io/klog/v2"
@@ -209,6 +210,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create mDNS publisher if enabled in config
+	mdnsPublisher := mdns.NewPublisher(cfg.IsMDNSEnabled())
+	manager.SetMDNSPublisher(mdnsPublisher)
+
+	if cfg.IsMDNSEnabled() && *verbose {
+		log.Printf("mDNS hostname publishing enabled - aliases will be accessible via <alias>.local")
+	}
+
 	// Create UI (bubbletea for interactive, simple table for verbose)
 	var bubbleTeaUI *ui.BubbleTeaUI
 	var tableUI *ui.TableUI
@@ -318,7 +327,23 @@ func main() {
 
 			case os.Interrupt, syscall.SIGTERM:
 				log.Printf("Received shutdown signal, stopping...")
-				manager.Stop()
+
+				// Graceful shutdown with timeout - force exit if it takes too long
+				shutdownDone := make(chan struct{})
+				go func() {
+					manager.Stop()
+					close(shutdownDone)
+				}()
+
+				select {
+				case <-shutdownDone:
+					log.Printf("Graceful shutdown complete")
+				case <-time.After(5 * time.Second):
+					log.Printf("Shutdown timed out, forcing exit...")
+				case sig := <-sigChan:
+					// Second signal received - force exit immediately
+					log.Printf("Received second signal (%v), forcing exit...", sig)
+				}
 				os.Exit(0)
 			}
 		}

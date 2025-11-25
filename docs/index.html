@@ -348,7 +348,7 @@
                 </div>
 
                 <!-- Feature Grid - Compact Cards -->
-                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <!-- Live Management Features -->
                     <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
                         <div class="flex items-start gap-3">
@@ -443,6 +443,18 @@
                             <div>
                                 <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Multi-Context</h3>
                                 <p class="text-xs text-gray-600 dark:text-gray-400">All clusters in one place</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass p-4 rounded-lg group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 dark:from-cyan-400 dark:to-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-broadcast-tower text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">mDNS Hostnames</h3>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Access via .local domains</p>
                             </div>
                         </div>
                     </div>
@@ -610,7 +622,11 @@
                             </div>
                             <pre
                                 class="text-xs sm:text-sm text-gray-100 overflow-x-auto"
-                            ><code id="config-code" class="font-mono">contexts:
+                            ><code id="config-code" class="font-mono"># Enable mDNS for .local hostnames
+mdns:
+  enabled: true
+
+contexts:
   - name: production
     namespaces:
       - name: backend
@@ -619,7 +635,7 @@
             protocol: tcp
             port: 5432
             localPort: 5432
-            alias: prod-db
+            alias: prod-db  # Access via prod-db.local
 
       - name: frontend
         forwards:
@@ -627,7 +643,7 @@
             protocol: tcp
             port: 6379
             localPort: 6379
-            alias: prod-redis</code></pre>
+            # Auto-generates redis.local from resource name</code></pre>
                         </div>
                     </div>
 
@@ -688,6 +704,7 @@
                                 <li>Label selectors</li>
                                 <li>Alias support</li>
                                 <li>Auto-reconnect</li>
+                                <li>mDNS hostnames (.local)</li>
                             </ul>
                         </div>
                     </div>

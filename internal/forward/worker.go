@@ -85,7 +85,16 @@ func (w *ForwardWorker) Start() {
 func (w *ForwardWorker) Stop() {
 	w.cancel()
 	close(w.stopChan)
-	<-w.doneChan // Wait for worker to finish
+
+	// Wait for worker to finish with timeout to prevent blocking forever
+	select {
+	case <-w.doneChan:
+		// Worker finished gracefully
+	case <-time.After(3 * time.Second):
+		// Worker didn't finish in time, but we've cancelled its context
+		// so it will clean up eventually
+		log.Printf("[%s] Worker stop timed out, continuing...", w.forward.ID())
+	}
 }
 
 // run is the main worker loop that handles retries.

@@ -701,3 +701,274 @@ func TestValidator_ValidateStructure(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_ValidateMDNS(t *testing.T) {
+	validator := NewValidator()
+
+	tests := []struct {
+		name          string
+		config        *Config
+		expectErrors  bool
+		errorContains []string
+	}{
+		{
+			name: "mDNS disabled - no validation",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080, Alias: "invalid_alias", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "mDNS enabled - valid aliases",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app1", Port: 8080, LocalPort: 8080, Alias: "my-app", contextName: "dev", namespaceName: "default"},
+									{Resource: "pod/app2", Port: 8081, LocalPort: 8081, Alias: "my-service", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "mDNS enabled - no alias (allowed)",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080, contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "mDNS enabled - invalid alias with underscore",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080, Alias: "my_app", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors:  true,
+			errorContains: []string{"invalid mDNS hostname", "RFC 1123"},
+		},
+		{
+			name: "mDNS enabled - alias starts with hyphen",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080, Alias: "-myapp", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors:  true,
+			errorContains: []string{"invalid mDNS hostname"},
+		},
+		{
+			name: "mDNS enabled - alias ends with hyphen",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080, Alias: "myapp-", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors:  true,
+			errorContains: []string{"invalid mDNS hostname"},
+		},
+		{
+			name: "mDNS enabled - duplicate aliases",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app1", Port: 8080, LocalPort: 8080, Alias: "myapp", contextName: "dev", namespaceName: "default"},
+									{Resource: "pod/app2", Port: 8081, LocalPort: 8081, Alias: "myapp", contextName: "dev", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors:  true,
+			errorContains: []string{"Duplicate mDNS hostname", "conflict"},
+		},
+		{
+			name: "mDNS enabled - duplicate aliases across contexts",
+			config: &Config{
+				MDNS: &MDNSSpec{Enabled: true},
+				Contexts: []Context{
+					{
+						Name: "cluster1",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app1", Port: 8080, LocalPort: 8080, Alias: "shared-name", contextName: "cluster1", namespaceName: "default"},
+								},
+							},
+						},
+					},
+					{
+						Name: "cluster2",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app2", Port: 8081, LocalPort: 8081, Alias: "shared-name", contextName: "cluster2", namespaceName: "default"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErrors:  true,
+			errorContains: []string{"Duplicate mDNS hostname", "shared-name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validator.ValidateConfig(tt.config)
+
+			if tt.expectErrors {
+				assert.NotEmpty(t, errs, "expected validation errors")
+
+				// Check that expected error messages are present
+				for _, expectedMsg := range tt.errorContains {
+					found := false
+					for _, err := range errs {
+						if strings.Contains(err.Message, expectedMsg) {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "expected error message '%s' not found in errors: %v", expectedMsg, errs)
+				}
+			} else {
+				assert.Empty(t, errs, "expected no validation errors, got: %v", errs)
+			}
+		})
+	}
+}
+
+func TestIsValidHostname(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		valid    bool
+	}{
+		{"valid simple", "myservice", true},
+		{"valid with hyphen", "my-service", true},
+		{"valid with numbers", "service123", true},
+		{"valid mixed", "my-service-123", true},
+		{"valid uppercase", "MyService", true},
+		{"valid single char", "a", true},
+		{"valid single digit", "1", true},
+		{"valid max length (63)", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true},
+		{"invalid empty", "", false},
+		{"invalid too long (64)", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+		{"invalid starts with hyphen", "-myservice", false},
+		{"invalid ends with hyphen", "myservice-", false},
+		{"invalid underscore", "my_service", false},
+		{"invalid dot", "my.service", false},
+		{"invalid space", "my service", false},
+		{"invalid special char", "my@service", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidHostname(tt.hostname)
+			assert.Equal(t, tt.valid, result, "isValidHostname(%q) = %v, want %v", tt.hostname, result, tt.valid)
+		})
+	}
+}
+
+func TestIsAlphanumeric(t *testing.T) {
+	tests := []struct {
+		char  byte
+		valid bool
+	}{
+		{'a', true},
+		{'z', true},
+		{'A', true},
+		{'Z', true},
+		{'0', true},
+		{'9', true},
+		{'-', false},
+		{'_', false},
+		{'.', false},
+		{' ', false},
+		{'@', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.char), func(t *testing.T) {
+			result := isAlphanumeric(tt.char)
+			assert.Equal(t, tt.valid, result, "isAlphanumeric(%q) = %v, want %v", tt.char, result, tt.valid)
+		})
+	}
+}
