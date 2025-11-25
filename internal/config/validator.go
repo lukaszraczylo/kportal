@@ -84,7 +84,7 @@ func (v *Validator) validateStructure(cfg *Config) []ValidationError {
 				Field:   fmt.Sprintf("contexts[%d].namespaces", i),
 				Message: fmt.Sprintf("Context '%s' must have at least one namespace", ctx.Name),
 			})
-			continue
+			// Don't continue - still validate other aspects of the context if any
 		}
 
 		for j, ns := range ctx.Namespaces {

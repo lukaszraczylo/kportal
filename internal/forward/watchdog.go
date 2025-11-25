@@ -123,11 +123,18 @@ func (w *Watchdog) monitorLoop() {
 	}
 }
 
+// hungWorkerInfo stores information about a hung worker for deferred callback execution
+type hungWorkerInfo struct {
+	forwardID string
+	callback  func(string)
+}
+
 // checkWorkers checks all registered workers for hung state
 func (w *Watchdog) checkWorkers() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	// Collect hung workers while holding the lock
+	var hungWorkers []hungWorkerInfo
 
+	w.mu.Lock()
 	now := time.Now()
 	for forwardID, state := range w.workers {
 		timeSinceHeartbeat := now.Sub(state.lastHeartbeat)
@@ -145,14 +152,23 @@ func (w *Watchdog) checkWorkers() {
 					"heartbeat_count":      state.heartbeatCount,
 				})
 
-				// Trigger callback to handle hung worker (without holding lock)
+				// Collect callback for deferred execution outside the lock
 				if state.onHungCallback != nil {
-					callback := state.onHungCallback
-					w.mu.Unlock()
-					callback(forwardID)
-					w.mu.Lock()
+					hungWorkers = append(hungWorkers, hungWorkerInfo{
+						forwardID: forwardID,
+						callback:  state.onHungCallback,
+					})
 				}
 			}
 		}
+	}
+	w.mu.Unlock()
+
+	// Execute callbacks outside the lock to prevent deadlocks and ensure
+	// consistent state during callback execution. Callbacks are idempotent
+	// (they trigger reconnection via channels), so concurrent state changes
+	// between detection and callback execution are safe.
+	for _, hw := range hungWorkers {
+		hw.callback(hw.forwardID)
 	}
 }

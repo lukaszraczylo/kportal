@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nvm/kportal/internal/config"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -30,8 +32,8 @@ func NewPortForwarder(clientPool *ClientPool, resolver *ResourceResolver) *PortF
 	return &PortForwarder{
 		clientPool:   clientPool,
 		resolver:     resolver,
-		tcpKeepalive: 30 * time.Second, // Default: 30 second keepalive
-		dialTimeout:  30 * time.Second, // Default: 30 second dial timeout
+		tcpKeepalive: config.DefaultTCPKeepalive,
+		dialTimeout:  config.DefaultDialTimeout,
 	}
 }
 
@@ -140,6 +142,9 @@ func (pf *PortForwarder) forwardToService(ctx context.Context, req *ForwardReque
 	}
 
 	// Get pods backing the service using label selector
+	if len(service.Spec.Selector) == 0 {
+		return fmt.Errorf("service %s has no selector (headless service without selector cannot be port-forwarded)", serviceName)
+	}
 	selector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: service.Spec.Selector})
 	pods, err := client.CoreV1().Pods(req.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: selector,
@@ -257,6 +262,9 @@ func (pf *PortForwarder) GetPodForResource(ctx context.Context, contextName, nam
 			return "", fmt.Errorf("failed to get service: %w", err)
 		}
 
+		if len(service.Spec.Selector) == 0 {
+			return "", fmt.Errorf("service %s has no selector (headless service without selector cannot be port-forwarded)", resourceName)
+		}
 		selector := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: service.Spec.Selector})
 		pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: selector,

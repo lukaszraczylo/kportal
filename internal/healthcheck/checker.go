@@ -7,6 +7,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/nvm/kportal/internal/config"
 )
 
 const (
@@ -77,8 +79,8 @@ func NewChecker(interval, timeout time.Duration) *Checker {
 		Interval:         interval,
 		Timeout:          timeout,
 		Method:           CheckMethodDataTransfer,
-		MaxConnectionAge: 25 * time.Minute,
-		MaxIdleTime:      10 * time.Minute,
+		MaxConnectionAge: config.DefaultMaxConnectionAge,
+		MaxIdleTime:      config.DefaultMaxIdleTime,
 	})
 }
 

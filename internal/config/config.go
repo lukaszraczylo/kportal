@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"time"
@@ -9,7 +10,20 @@ import (
 )
 
 const (
-	maxConfigSize = 10 * 1024 * 1024 // 10MB
+	// maxConfigSize is the maximum allowed configuration file size (10MB)
+	maxConfigSize = 10 * 1024 * 1024
+
+	// Default health check settings
+	DefaultHealthCheckInterval = 3 * time.Second  // How often to check connection health
+	DefaultHealthCheckTimeout  = 2 * time.Second  // Timeout for health check probes
+	DefaultHealthCheckMethod   = "data-transfer"  // More reliable than tcp-dial
+	DefaultMaxConnectionAge    = 25 * time.Minute // Reconnect before k8s 30min timeout
+	DefaultMaxIdleTime         = 10 * time.Minute // Reconnect if no activity
+
+	// Default reliability settings
+	DefaultTCPKeepalive   = 30 * time.Second // OS-level TCP keepalive interval
+	DefaultDialTimeout    = 30 * time.Second // Connection establishment timeout
+	DefaultWatchdogPeriod = 30 * time.Second // Goroutine health check interval
 )
 
 // Config represents the root configuration structure from .kportal.yaml
@@ -43,7 +57,7 @@ func (c *Config) GetHealthCheckIntervalOrDefault() time.Duration {
 			return d
 		}
 	}
-	return 3 * time.Second // Default: check every 3 seconds
+	return DefaultHealthCheckInterval
 }
 
 // GetHealthCheckTimeoutOrDefault returns the health check timeout or default value
@@ -53,7 +67,7 @@ func (c *Config) GetHealthCheckTimeoutOrDefault() time.Duration {
 			return d
 		}
 	}
-	return 2 * time.Second // Default: 2 second timeout
+	return DefaultHealthCheckTimeout
 }
 
 // GetHealthCheckMethod returns the health check method or default
@@ -61,7 +75,7 @@ func (c *Config) GetHealthCheckMethod() string {
 	if c.HealthCheck != nil && c.HealthCheck.Method != "" {
 		return c.HealthCheck.Method
 	}
-	return "data-transfer" // Default: more reliable data transfer test
+	return DefaultHealthCheckMethod
 }
 
 // GetMaxConnectionAge returns the max connection age or default
@@ -71,7 +85,7 @@ func (c *Config) GetMaxConnectionAge() time.Duration {
 			return d
 		}
 	}
-	return 25 * time.Minute // Default: 25 minutes (before typical 30min k8s timeout)
+	return DefaultMaxConnectionAge
 }
 
 // GetMaxIdleTime returns the max idle time or default
@@ -81,7 +95,7 @@ func (c *Config) GetMaxIdleTime() time.Duration {
 			return d
 		}
 	}
-	return 10 * time.Minute // Default: 10 minutes idle before reconnect
+	return DefaultMaxIdleTime
 }
 
 // GetTCPKeepalive returns the TCP keepalive duration or default
@@ -91,7 +105,7 @@ func (c *Config) GetTCPKeepalive() time.Duration {
 			return d
 		}
 	}
-	return 30 * time.Second // Default: 30 second keepalive
+	return DefaultTCPKeepalive
 }
 
 // GetRetryOnStale returns whether to retry on stale connections
@@ -109,7 +123,7 @@ func (c *Config) GetWatchdogPeriod() time.Duration {
 			return d
 		}
 	}
-	return 30 * time.Second // Default: check every 30 seconds
+	return DefaultWatchdogPeriod
 }
 
 // GetDialTimeout returns the connection dial timeout or default
@@ -119,7 +133,7 @@ func (c *Config) GetDialTimeout() time.Duration {
 			return d
 		}
 	}
-	return 30 * time.Second // Default: 30 second dial timeout
+	return DefaultDialTimeout
 }
 
 // Context represents a Kubernetes context with its namespaces
@@ -209,9 +223,15 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 // ParseConfig parses YAML configuration data into a Config struct.
+// It uses strict parsing that rejects unknown keys to catch typos.
 func ParseConfig(data []byte) (*Config, error) {
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+
+	// Use decoder with KnownFields to reject unknown keys (catches typos)
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+
+	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
