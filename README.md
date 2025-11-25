@@ -28,6 +28,9 @@ kportal manages multiple Kubernetes port-forwards with an interactive terminal i
 - **Label selectors** - Dynamic pod targeting using label selectors
 - **Port conflict detection** - Validates port availability with PID information
 - **mDNS hostnames** - Access forwards via `.local` hostnames
+- **HTTP traffic logging** - Real-time HTTP request/response logging for debugging
+- **Connection benchmarking** - Built-in HTTP benchmarking with latency statistics
+- **Headless mode** - Background operation for scripting and automation
 
 ## 📦 Installation
 
@@ -71,10 +74,12 @@ contexts:
             localPort: 5432
             alias: prod-db
 
-          - resource: service/redis
+          - resource: service/api
             protocol: tcp
-            port: 6379
-            localPort: 6379
+            port: 8080
+            localPort: 8080
+            alias: api
+            httpLog: true  # Enable HTTP traffic logging
 ```
 
 Run:
@@ -89,9 +94,11 @@ kportal
 |-----|--------|
 | `↑↓` / `j/k` | Navigate |
 | `Space` / `Enter` | Toggle forward |
-| `a` | Add forward |
+| `n` | Add new forward |
 | `e` | Edit forward |
 | `d` | Delete forward |
+| `b` | Benchmark connection |
+| `l` | View HTTP logs |
 | `q` | Quit |
 
 ## 📖 Configuration
@@ -110,6 +117,7 @@ contexts:
             localPort: <local-port>
             alias: <display-name>      # optional
             selector: <label-selector> # optional
+            httpLog: true              # optional - enable HTTP logging
 ```
 
 ### Forward Options
@@ -122,6 +130,7 @@ contexts:
 | `localPort` | Yes | Local port |
 | `alias` | No | Display name and mDNS hostname |
 | `selector` | No | Label selector for pod resolution |
+| `httpLog` | No | Enable HTTP traffic logging (`true`/`false`) |
 
 ### Resource Formats
 
@@ -198,6 +207,20 @@ kportal
 kportal -v
 ```
 
+### Headless Mode
+
+Run without TUI for scripting and automation:
+
+```bash
+kportal -headless
+```
+
+Combines well with verbose mode for background operation:
+
+```bash
+kportal -headless -v &
+```
+
 ### Validate Configuration
 
 ```bash
@@ -221,6 +244,33 @@ kportal -c /path/to/config.yaml
 | `○ Disabled` | Manually disabled |
 
 ## Advanced Features
+
+### HTTP Traffic Logging
+
+Press `l` in the TUI to view real-time HTTP traffic for a selected forward. The log viewer shows:
+
+- Request method and path
+- Response status codes
+- Request/response latency
+- Body sizes
+
+Use arrow keys to scroll through entries. Press `a` to toggle auto-scroll.
+
+### Connection Benchmarking
+
+Press `b` in the TUI to benchmark a selected forward. Configure:
+
+- **URL Path** - Target endpoint (default: `/`)
+- **Method** - HTTP method (GET, POST, etc.)
+- **Concurrency** - Number of parallel workers
+- **Requests** - Total number of requests
+
+Results include:
+- Success/failure counts
+- Min/Max/Avg latency
+- P50/P95/P99 percentiles
+- Throughput (requests/sec)
+- Status code distribution
 
 ### Hot-Reload
 

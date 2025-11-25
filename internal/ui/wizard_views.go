@@ -880,33 +880,93 @@ func (m model) renderHTTPLog() string {
 	state := m.ui.httpLogState
 	var b strings.Builder
 
-	b.WriteString(renderHeader("HTTP Traffic Log", ""))
-	b.WriteString(fmt.Sprintf("Forward: %s\n", breadcrumbStyle.Render(state.forwardAlias)))
+	// Get terminal dimensions
+	termWidth := m.termWidth
+	termHeight := m.termHeight
+	if termWidth == 0 {
+		termWidth = 120
+	}
+	if termHeight == 0 {
+		termHeight = 40
+	}
+
+	// Header
+	title := wizardHeaderStyle.Render("HTTP Traffic Log")
+	b.WriteString(title)
+	b.WriteString("  ")
+	b.WriteString(breadcrumbStyle.Render(state.forwardAlias))
+	b.WriteString("\n")
+
+	// Status bar with filter info and auto-scroll
+	statusParts := []string{}
+
+	// Filter mode indicator
+	filterLabel := state.getFilterModeLabel()
+	if state.filterMode != HTTPLogFilterNone {
+		statusParts = append(statusParts, accentStyle.Render(fmt.Sprintf("Filter: %s", filterLabel)))
+	} else {
+		statusParts = append(statusParts, mutedStyle.Render(fmt.Sprintf("Filter: %s", filterLabel)))
+	}
+
+	// Text filter indicator
+	if state.filterText != "" {
+		statusParts = append(statusParts, accentStyle.Render(fmt.Sprintf("Search: \"%s\"", state.filterText)))
+	}
 
 	// Auto-scroll indicator
 	if state.autoScroll {
-		b.WriteString(successStyle.Render("  [Auto-scroll ON]"))
+		statusParts = append(statusParts, successStyle.Render("[Auto-scroll ON]"))
 	} else {
-		b.WriteString(mutedStyle.Render("  [Auto-scroll OFF]"))
+		statusParts = append(statusParts, mutedStyle.Render("[Auto-scroll OFF]"))
 	}
-	b.WriteString("\n\n")
 
-	if len(state.entries) == 0 {
-		b.WriteString(mutedStyle.Render("No HTTP traffic logged yet."))
-		b.WriteString("\n\n")
-		b.WriteString(mutedStyle.Render("To enable HTTP logging, add to your .kportal.yaml:"))
+	b.WriteString(strings.Join(statusParts, "  "))
+	b.WriteString("\n")
+
+	// Filter input line (if active)
+	if state.filterActive {
+		b.WriteString(accentStyle.Render("Search: "))
+		b.WriteString(state.filterText)
+		b.WriteString(accentStyle.Render("_"))
 		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render("  httpLog:"))
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render("    enabled: true"))
-		b.WriteString("\n\n")
-		b.WriteString(mutedStyle.Render("Then make requests to the forwarded port."))
-		b.WriteString("\n")
+	}
+
+	b.WriteString(strings.Repeat("─", termWidth-4))
+	b.WriteString("\n")
+
+	// Calculate viewport height (fullscreen minus header, status, separator, footer)
+	headerLines := 5 // title, status, separator, blank, table header
+	if state.filterActive {
+		headerLines++
+	}
+	footerLines := 3 // entry count, help line, padding
+	viewportHeight := termHeight - headerLines - footerLines
+	if viewportHeight < 5 {
+		viewportHeight = 5
+	}
+
+	// Get filtered entries
+	filteredEntries := state.getFilteredEntries()
+	totalEntries := len(filteredEntries)
+	totalUnfiltered := len(state.entries)
+
+	if totalEntries == 0 {
+		if totalUnfiltered == 0 {
+			b.WriteString(mutedStyle.Render("No HTTP traffic logged yet."))
+			b.WriteString("\n\n")
+			b.WriteString(mutedStyle.Render("To enable HTTP logging, add to your .kportal.yaml:"))
+			b.WriteString("\n")
+			b.WriteString(mutedStyle.Render("  httpLog: true"))
+			b.WriteString("\n\n")
+			b.WriteString(mutedStyle.Render("Then make requests to the forwarded port."))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(mutedStyle.Render(fmt.Sprintf("No entries match filter. (%d total entries)", totalUnfiltered)))
+			b.WriteString("\n")
+			b.WriteString(mutedStyle.Render("Press 'c' to clear filters."))
+			b.WriteString("\n")
+		}
 	} else {
-		// Show log entries
-		const viewportHeight = 15
-		totalEntries := len(state.entries)
-
 		// Calculate visible range
 		start := state.scrollOffset
 		end := start + viewportHeight
@@ -933,49 +993,82 @@ func (m model) renderHTTPLog() string {
 		// Show scroll indicator
 		if start > 0 {
 			b.WriteString(mutedStyle.Render("  ↑ More above ↑\n"))
+		} else {
+			b.WriteString("\n")
 		}
 
+		// Table header
+		header := fmt.Sprintf("  %-12s  %-7s  %-6s  %-8s  %s", "TIME", "METHOD", "STATUS", "LATENCY", "PATH")
+		b.WriteString(mutedStyle.Render(header))
+		b.WriteString("\n")
+
 		for i := start; i < end; i++ {
-			entry := state.entries[i]
+			entry := filteredEntries[i]
 			isSelected := i == state.cursor
 
-			// Format: [timestamp] METHOD /path -> STATUS (latency)
-			line := fmt.Sprintf("%s %s %s",
+			// Format status code
+			statusStr := "---"
+			if entry.StatusCode > 0 {
+				statusStr = fmt.Sprintf("%d", entry.StatusCode)
+			}
+
+			// Format latency
+			latencyStr := "---"
+			if entry.LatencyMs > 0 {
+				if entry.LatencyMs >= 1000 {
+					latencyStr = fmt.Sprintf("%.1fs", float64(entry.LatencyMs)/1000)
+				} else {
+					latencyStr = fmt.Sprintf("%dms", entry.LatencyMs)
+				}
+			}
+
+			// Calculate max path width
+			fixedWidth := 12 + 2 + 7 + 2 + 6 + 2 + 8 + 2 + 4 // timestamp + gaps + method + status + latency + prefix
+			maxPathWidth := termWidth - fixedWidth
+			if maxPathWidth < 10 {
+				maxPathWidth = 10
+			}
+
+			// Truncate path if needed
+			path := entry.Path
+			if len(path) > maxPathWidth {
+				path = path[:maxPathWidth-3] + "..."
+			}
+
+			// Format: TIME  METHOD  STATUS  LATENCY  PATH
+			line := fmt.Sprintf("%-12s  %-7s  %-6s  %-8s  %s",
 				entry.Timestamp,
 				entry.Method,
-				entry.Path)
-
-			if entry.StatusCode > 0 {
-				line += fmt.Sprintf(" → %d", entry.StatusCode)
-			}
-			if entry.LatencyMs > 0 {
-				line += fmt.Sprintf(" (%dms)", entry.LatencyMs)
-			}
+				statusStr,
+				latencyStr,
+				path)
 
 			prefix := "  "
 			if isSelected {
 				prefix = "▸ "
-				// Color code by status
-				if entry.StatusCode >= 500 {
-					b.WriteString(errorStyle.Render(prefix + line))
-				} else if entry.StatusCode >= 400 {
-					b.WriteString(warningStyle.Render(prefix + line))
-				} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
-					b.WriteString(successStyle.Render(prefix + line))
-				} else {
-					b.WriteString(selectedStyle.Render(prefix + line))
-				}
+			}
+
+			// Color code by status
+			var styledLine string
+			if entry.StatusCode >= 500 {
+				styledLine = errorStyle.Render(line)
+			} else if entry.StatusCode >= 400 {
+				styledLine = warningStyle.Render(line)
+			} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+				styledLine = successStyle.Render(line)
+			} else if entry.StatusCode > 0 {
+				styledLine = mutedStyle.Render(line)
 			} else {
-				// Color code by status
-				if entry.StatusCode >= 500 {
-					b.WriteString(prefix + errorStyle.Render(line))
-				} else if entry.StatusCode >= 400 {
-					b.WriteString(prefix + warningStyle.Render(line))
-				} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
-					b.WriteString(prefix + line)
-				} else {
-					b.WriteString(prefix + mutedStyle.Render(line))
-				}
+				// Request (no status yet)
+				styledLine = line
+			}
+
+			if isSelected {
+				b.WriteString(selectedStyle.Render(prefix))
+				b.WriteString(styledLine)
+			} else {
+				b.WriteString(prefix)
+				b.WriteString(styledLine)
 			}
 			b.WriteString("\n")
 		}
@@ -983,14 +1076,20 @@ func (m model) renderHTTPLog() string {
 		// Show scroll indicator
 		if end < totalEntries {
 			b.WriteString(mutedStyle.Render("  ↓ More below ↓\n"))
+		} else {
+			b.WriteString("\n")
 		}
 
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries\n", end-start, totalEntries)))
+		// Entry count
+		if totalEntries != totalUnfiltered {
+			b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries (filtered from %d total)\n", end-start, totalEntries, totalUnfiltered)))
+		} else {
+			b.WriteString(mutedStyle.Render(fmt.Sprintf("Showing %d of %d entries\n", end-start, totalEntries)))
+		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  g/G: Top/Bottom  a: Toggle auto-scroll  q/Esc: Close"))
+	b.WriteString(helpStyle.Render("↑/↓: Navigate  g/G: Top/Bottom  a: Auto-scroll  f: Filter mode  /: Search  c: Clear  q: Close"))
 
-	return wizardBoxStyle.Render(b.String())
+	return b.String()
 }

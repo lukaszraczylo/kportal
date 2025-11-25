@@ -170,6 +170,26 @@ type HTTPLogSpec struct {
 	FilterPath     string `yaml:"filterPath,omitempty"`     // Optional glob filter for paths
 }
 
+// UnmarshalYAML implements custom unmarshaling to support both bool and struct formats
+// Allows: httpLog: true OR httpLog: { enabled: true, ... }
+func (h *HTTPLogSpec) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// First try to unmarshal as a boolean
+	var boolVal bool
+	if err := unmarshal(&boolVal); err == nil {
+		h.Enabled = boolVal
+		return nil
+	}
+
+	// Otherwise try to unmarshal as a struct
+	type httpLogSpecAlias HTTPLogSpec // Use alias to avoid infinite recursion
+	var spec httpLogSpecAlias
+	if err := unmarshal(&spec); err != nil {
+		return err
+	}
+	*h = HTTPLogSpec(spec)
+	return nil
+}
+
 // Forward represents a single port-forward configuration
 type Forward struct {
 	Resource  string       `yaml:"resource"`          // e.g., "pod/my-app", "service/postgres", "pod"

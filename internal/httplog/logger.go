@@ -38,7 +38,8 @@ type Logger struct {
 }
 
 // NewLogger creates a new HTTP logger
-// If logFile is empty, logs go to stdout
+// If logFile is empty, logs only go to registered callbacks (no file output)
+// This prevents stdout corruption when running in TUI mode
 func NewLogger(forwardID, logFile string, maxBodyLen int) (*Logger, error) {
 	l := &Logger{
 		forwardID:  forwardID,
@@ -46,7 +47,9 @@ func NewLogger(forwardID, logFile string, maxBodyLen int) (*Logger, error) {
 	}
 
 	if logFile == "" {
-		l.output = os.Stdout
+		// Don't write to stdout - use io.Discard
+		// Log entries are delivered via callbacks to the UI
+		l.output = io.Discard
 	} else {
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {

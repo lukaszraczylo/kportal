@@ -1038,6 +1038,43 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// If filter input is active, handle text input
+	if state.filterActive {
+		switch msg.String() {
+		case "esc":
+			// Cancel filter input, clear text
+			state.filterActive = false
+			state.filterText = ""
+			state.cursor = 0
+			state.scrollOffset = 0
+			return m, nil
+		case "enter":
+			// Confirm filter
+			state.filterActive = false
+			state.cursor = 0
+			state.scrollOffset = 0
+			return m, nil
+		case "backspace":
+			if len(state.filterText) > 0 {
+				state.filterText = state.filterText[:len(state.filterText)-1]
+			}
+			return m, nil
+		default:
+			// Add character to filter
+			if len(msg.String()) == 1 {
+				char := rune(msg.String()[0])
+				if char >= 32 && char < 127 {
+					state.filterText += string(char)
+					state.cursor = 0
+					state.scrollOffset = 0
+				}
+			}
+			return m, nil
+		}
+	}
+
+	filteredEntries := state.getFilteredEntries()
+
 	switch msg.String() {
 	case "ctrl+c", "esc", "q":
 		// Cleanup subscription before closing
@@ -1057,11 +1094,11 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down", "j":
-		if state.cursor < len(state.entries)-1 {
+		if state.cursor < len(filteredEntries)-1 {
 			state.cursor++
 		}
 		// If at bottom, enable auto-scroll
-		if state.cursor >= len(state.entries)-1 {
+		if state.cursor >= len(filteredEntries)-1 {
 			state.autoScroll = true
 		}
 
@@ -1073,14 +1110,30 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "G":
 		// Go to bottom
-		if len(state.entries) > 0 {
-			state.cursor = len(state.entries) - 1
+		if len(filteredEntries) > 0 {
+			state.cursor = len(filteredEntries) - 1
 			state.autoScroll = true
 		}
 
 	case "a":
 		// Toggle auto-scroll
 		state.autoScroll = !state.autoScroll
+
+	case "f":
+		// Cycle filter mode
+		state.cycleFilterMode()
+
+	case "/":
+		// Enter text filter mode
+		state.filterActive = true
+		state.filterText = ""
+
+	case "c":
+		// Clear all filters
+		state.filterMode = HTTPLogFilterNone
+		state.filterText = ""
+		state.cursor = 0
+		state.scrollOffset = 0
 	}
 
 	return m, nil

@@ -265,6 +265,39 @@
                             </div>
                         </div>
                     </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-stream text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">HTTP Traffic Logging</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Real-time HTTP request/response logging for debugging</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-tachometer-alt text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Connection Benchmarking</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Built-in HTTP benchmarking with latency percentiles</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-server text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Headless Mode</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Background operation for scripting and automation</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -359,6 +392,14 @@
                         </div>
                         <p class="text-sm text-gray-600 dark:text-gray-400">Use a custom configuration file instead of .kportal.yaml</p>
                     </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4"><i class="fas fa-server text-slate-500 mr-2"></i>Headless Mode</h3>
+                        <div onclick="copyToClipboard('kportal -headless -v &', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-slate-500 transition-all duration-300 mb-3">
+                            <code class="font-mono">kportal -headless -v &</code>
+                            <div class="absolute top-3 right-3"><i class="fas fa-copy text-gray-500 group-hover:text-slate-400 transition-colors"></i></div>
+                        </div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Run without TUI for scripting and background operation.</p>
+                    </div>
                 </div>
 
                 <!-- Keyboard Shortcuts -->
@@ -390,12 +431,12 @@
                             <span class="text-sm text-gray-700 dark:text-gray-300">Vim navigation</span>
                         </div>
                         <div class="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                            <kbd class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono font-semibold">q</kbd>
-                            <span class="text-sm text-gray-700 dark:text-gray-300">Quit</span>
+                            <kbd class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono font-semibold">b</kbd>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">Benchmark</span>
                         </div>
                         <div class="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                            <kbd class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono font-semibold">?</kbd>
-                            <span class="text-sm text-gray-700 dark:text-gray-300">Help</span>
+                            <kbd class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono font-semibold">l</kbd>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">HTTP logs</span>
                         </div>
                     </div>
                 </div>
@@ -602,6 +643,30 @@ contexts:
                             <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded">8s</span>
                             <span class="text-gray-400">→</span>
                             <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded">10s max</span>
+                        </div>
+                    </div>
+
+                    <!-- HTTP Traffic Logging -->
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4"><i class="fas fa-stream text-teal-500 mr-2"></i>HTTP Traffic Logging</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Press <kbd class="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">l</kbd> to view real-time HTTP traffic for debugging.</p>
+                        <ul class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                            <li>• Request method and path</li>
+                            <li>• Response status codes</li>
+                            <li>• Request/response latency</li>
+                            <li>• Auto-scroll with <kbd class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">a</kbd></li>
+                        </ul>
+                    </div>
+
+                    <!-- Connection Benchmarking -->
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4"><i class="fas fa-tachometer-alt text-pink-500 mr-2"></i>Connection Benchmarking</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Press <kbd class="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">b</kbd> to benchmark a connection with configurable parameters.</p>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Concurrency</span><span class="text-gray-900 dark:text-gray-100">Parallel workers</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Requests</span><span class="text-gray-900 dark:text-gray-100">Total request count</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Latency</span><span class="text-gray-900 dark:text-gray-100">P50/P95/P99 percentiles</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Throughput</span><span class="text-gray-900 dark:text-gray-100">Requests per second</span></div>
                         </div>
                     </div>
                 </div>

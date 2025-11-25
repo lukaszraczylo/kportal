@@ -365,8 +365,8 @@ func (m model) View() string {
 		modal := m.renderBenchmark()
 		return overlayContent(mainView, modal, termWidth, termHeight)
 	case ViewModeHTTPLog:
-		modal := m.renderHTTPLog()
-		return overlayContent(mainView, modal, termWidth, termHeight)
+		// HTTP Log is full-screen, don't overlay on main view
+		return m.renderHTTPLog()
 	default:
 		return mainView
 	}

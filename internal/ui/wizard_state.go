@@ -442,6 +442,16 @@ func newBenchmarkState(forwardID, alias string, localPort int) *BenchmarkState {
 	}
 }
 
+// HTTPLogFilterMode represents the active filter type
+type HTTPLogFilterMode int
+
+const (
+	HTTPLogFilterNone HTTPLogFilterMode = iota
+	HTTPLogFilterText
+	HTTPLogFilterNon200
+	HTTPLogFilterErrors // 4xx and 5xx only
+)
+
 // HTTPLogState maintains the state for HTTP log viewing
 type HTTPLogState struct {
 	forwardID    string
@@ -450,6 +460,11 @@ type HTTPLogState struct {
 	cursor       int
 	scrollOffset int
 	autoScroll   bool
+
+	// Filtering
+	filterMode   HTTPLogFilterMode
+	filterText   string
+	filterActive bool // true when typing in filter input
 }
 
 // HTTPLogEntry represents a single HTTP log entry for display
@@ -470,5 +485,66 @@ func newHTTPLogState(forwardID, alias string) *HTTPLogState {
 		forwardAlias: alias,
 		entries:      make([]HTTPLogEntry, 0),
 		autoScroll:   true,
+		filterMode:   HTTPLogFilterNone,
+	}
+}
+
+// getFilteredEntries returns entries matching the current filter
+func (s *HTTPLogState) getFilteredEntries() []HTTPLogEntry {
+	if s.filterMode == HTTPLogFilterNone && s.filterText == "" {
+		return s.entries
+	}
+
+	filtered := make([]HTTPLogEntry, 0, len(s.entries))
+	filterLower := strings.ToLower(s.filterText)
+
+	for _, entry := range s.entries {
+		// Apply filter mode
+		switch s.filterMode {
+		case HTTPLogFilterNon200:
+			if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+				continue
+			}
+		case HTTPLogFilterErrors:
+			if entry.StatusCode < 400 {
+				continue
+			}
+		}
+
+		// Apply text filter
+		if s.filterText != "" {
+			matchPath := strings.Contains(strings.ToLower(entry.Path), filterLower)
+			matchMethod := strings.Contains(strings.ToLower(entry.Method), filterLower)
+			if !matchPath && !matchMethod {
+				continue
+			}
+		}
+
+		filtered = append(filtered, entry)
+	}
+
+	return filtered
+}
+
+// cycleFilterMode cycles through filter modes
+func (s *HTTPLogState) cycleFilterMode() {
+	s.filterMode = (s.filterMode + 1) % 4
+	s.cursor = 0
+	s.scrollOffset = 0
+}
+
+// getFilterModeLabel returns a label for the current filter mode
+func (s *HTTPLogState) getFilterModeLabel() string {
+	switch s.filterMode {
+	case HTTPLogFilterNone:
+		return "All"
+	case HTTPLogFilterText:
+		return "Text"
+	case HTTPLogFilterNon200:
+		return "Non-2xx"
+	case HTTPLogFilterErrors:
+		return "Errors (4xx/5xx)"
+	default:
+		return "All"
 	}
 }

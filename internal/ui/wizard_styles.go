@@ -59,6 +59,10 @@ var (
 	spinnerStyle = lipgloss.NewStyle().
 			Foreground(accentColor).
 			Bold(true)
+
+	accentStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
 )
 
 // Input styles
