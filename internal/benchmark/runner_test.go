@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -214,4 +215,70 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 10, cfg.Concurrency)
 	assert.Equal(t, 100, cfg.Requests)
 	assert.Equal(t, 30*time.Second, cfg.Timeout)
+}
+
+func TestRunnerWithProgressCallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond) // Add small delay so progress ticker can fire
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+
+	runner := NewRunner()
+
+	var progressUpdates []int
+	var mu sync.Mutex
+
+	cfg := Config{
+		URL:         server.URL,
+		Method:      "GET",
+		Concurrency: 5,
+		Requests:    50, // More requests to ensure progress callbacks fire
+		Timeout:     5 * time.Second,
+		ProgressCallback: func(completed, total int) {
+			mu.Lock()
+			progressUpdates = append(progressUpdates, completed)
+			mu.Unlock()
+		},
+	}
+
+	results, err := runner.Run(context.Background(), "test-forward", cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, 50, results.TotalRequests)
+
+	// Should have received some progress updates (ticker fires every 100ms)
+	mu.Lock()
+	updates := len(progressUpdates)
+	mu.Unlock()
+	assert.Greater(t, updates, 0, "Should have received progress updates")
+}
+
+func TestRunnerConcurrencyCappedAtRequests(t *testing.T) {
+	requestCount := 0
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	runner := NewRunner()
+
+	cfg := Config{
+		URL:         server.URL,
+		Method:      "GET",
+		Concurrency: 100, // Higher than requests
+		Requests:    5,
+		Timeout:     5 * time.Second,
+	}
+
+	results, err := runner.Run(context.Background(), "test", cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, 5, results.TotalRequests)
 }
