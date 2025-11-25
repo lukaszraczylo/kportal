@@ -249,12 +249,30 @@ kportal -c /path/to/config.yaml
 
 Press `l` in the TUI to view real-time HTTP traffic for a selected forward. The log viewer shows:
 
-- Request method and path
-- Response status codes
-- Request/response latency
-- Body sizes
+| Column | Description |
+|--------|-------------|
+| TIME | Request timestamp |
+| METHOD | HTTP method (GET, POST, etc.) |
+| STATUS | Response status code |
+| LATENCY | Request duration |
+| PATH | Request path |
 
-Use arrow keys to scroll through entries. Press `a` to toggle auto-scroll.
+**Keyboard shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` | Navigate entries |
+| `g/G` | Jump to top/bottom |
+| `a` | Toggle auto-scroll |
+| `f` | Cycle filter mode (All → Non-2xx → Errors) |
+| `/` | Search by path or method |
+| `c` | Clear all filters |
+| `q` | Close log viewer |
+
+**Filter modes:**
+- **All** - Show all entries
+- **Non-2xx** - Hide successful (2xx) responses
+- **Errors** - Show only 4xx and 5xx responses
 
 ### Connection Benchmarking
 
