@@ -46,6 +46,11 @@ type BubbleTeaUI struct {
 	version        string
 	errors         map[string]string // Track error messages by forward ID
 
+	// Update notification
+	updateAvailable bool
+	updateVersion   string
+	updateURL       string
+
 	// Modal wizard state
 	viewMode     ViewMode
 	addWizard    *AddWizardState
@@ -94,6 +99,16 @@ func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *
 	ui.discovery = discovery
 	ui.mutator = mutator
 	ui.configPath = configPath
+}
+
+// SetUpdateAvailable sets the update notification to be displayed
+func (ui *BubbleTeaUI) SetUpdateAvailable(version, url string) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.updateAvailable = true
+	ui.updateVersion = version
+	ui.updateURL = url
 }
 
 // Start starts the bubbletea application
@@ -169,8 +184,9 @@ func (ui *BubbleTeaUI) UpdateStatus(id string, status string) {
 	if fwd, ok := ui.forwards[id]; ok {
 		fwd.Status = status
 	}
-	// Clear error if status is not Error
-	if status != "Error" {
+	// Only clear error when forward becomes Active again
+	// This keeps error visible during Reconnecting/Starting states
+	if status == "Active" {
 		delete(ui.errors, id)
 	}
 	ui.mu.Unlock()
@@ -266,7 +282,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ui.addWizard = nil
 		m.ui.removeWizard = nil
 		m.ui.mu.Unlock()
-		return m, nil
+		return m, tea.ClearScreen
 	}
 
 	return m, nil
@@ -356,6 +372,15 @@ func (m model) renderMainView() string {
 	// Title with version
 	title := fmt.Sprintf("kportal v%s - Port Forwarding Status", m.ui.version)
 	b.WriteString(titleStyle.Render(title))
+
+	// Show update notification if available
+	if m.ui.updateAvailable {
+		updateStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("42")). // Green
+			Bold(true)
+		updateMsg := fmt.Sprintf("  Update available: v%s", m.ui.updateVersion)
+		b.WriteString(updateStyle.Render(updateMsg))
+	}
 	b.WriteString("\n\n")
 
 	// Header
@@ -572,6 +597,15 @@ func (ui *BubbleTeaUI) moveSelection(delta int) {
 	if ui.selectedIndex >= len(ui.forwardOrder) {
 		ui.selectedIndex = len(ui.forwardOrder) - 1
 	}
+}
+
+// resetDeleteConfirmation resets the delete confirmation dialog state.
+// Caller must hold ui.mu lock.
+func (ui *BubbleTeaUI) resetDeleteConfirmation() {
+	ui.deleteConfirming = false
+	ui.deleteConfirmID = ""
+	ui.deleteConfirmAlias = ""
+	ui.deleteConfirmCursor = 0
 }
 
 // renderDeleteConfirmation renders the delete confirmation dialog

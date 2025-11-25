@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"time"
@@ -9,7 +10,20 @@ import (
 )
 
 const (
-	maxConfigSize = 10 * 1024 * 1024 // 10MB
+	// maxConfigSize is the maximum allowed configuration file size (10MB)
+	maxConfigSize = 10 * 1024 * 1024
+
+	// Default health check settings
+	DefaultHealthCheckInterval = 3 * time.Second  // How often to check connection health
+	DefaultHealthCheckTimeout  = 2 * time.Second  // Timeout for health check probes
+	DefaultHealthCheckMethod   = "data-transfer"  // More reliable than tcp-dial
+	DefaultMaxConnectionAge    = 25 * time.Minute // Reconnect before k8s 30min timeout
+	DefaultMaxIdleTime         = 10 * time.Minute // Reconnect if no activity
+
+	// Default reliability settings
+	DefaultTCPKeepalive   = 30 * time.Second // OS-level TCP keepalive interval
+	DefaultDialTimeout    = 30 * time.Second // Connection establishment timeout
+	DefaultWatchdogPeriod = 30 * time.Second // Goroutine health check interval
 )
 
 // Config represents the root configuration structure from .kportal.yaml
@@ -36,24 +50,31 @@ type ReliabilitySpec struct {
 	WatchdogPeriod string `yaml:"watchdogPeriod,omitempty"` // e.g., "30s" - goroutine watchdog interval
 }
 
+// parseDurationOrDefault parses a duration string and returns the default if empty or invalid.
+func parseDurationOrDefault(value string, defaultDur time.Duration) time.Duration {
+	if value == "" {
+		return defaultDur
+	}
+	if d, err := time.ParseDuration(value); err == nil {
+		return d
+	}
+	return defaultDur
+}
+
 // GetHealthCheckIntervalOrDefault returns the health check interval or default value
 func (c *Config) GetHealthCheckIntervalOrDefault() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.Interval != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.Interval); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultHealthCheckInterval
 	}
-	return 3 * time.Second // Default: check every 3 seconds
+	return parseDurationOrDefault(c.HealthCheck.Interval, DefaultHealthCheckInterval)
 }
 
 // GetHealthCheckTimeoutOrDefault returns the health check timeout or default value
 func (c *Config) GetHealthCheckTimeoutOrDefault() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.Timeout != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.Timeout); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultHealthCheckTimeout
 	}
-	return 2 * time.Second // Default: 2 second timeout
+	return parseDurationOrDefault(c.HealthCheck.Timeout, DefaultHealthCheckTimeout)
 }
 
 // GetHealthCheckMethod returns the health check method or default
@@ -61,37 +82,31 @@ func (c *Config) GetHealthCheckMethod() string {
 	if c.HealthCheck != nil && c.HealthCheck.Method != "" {
 		return c.HealthCheck.Method
 	}
-	return "data-transfer" // Default: more reliable data transfer test
+	return DefaultHealthCheckMethod
 }
 
 // GetMaxConnectionAge returns the max connection age or default
 func (c *Config) GetMaxConnectionAge() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.MaxConnectionAge != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.MaxConnectionAge); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultMaxConnectionAge
 	}
-	return 25 * time.Minute // Default: 25 minutes (before typical 30min k8s timeout)
+	return parseDurationOrDefault(c.HealthCheck.MaxConnectionAge, DefaultMaxConnectionAge)
 }
 
 // GetMaxIdleTime returns the max idle time or default
 func (c *Config) GetMaxIdleTime() time.Duration {
-	if c.HealthCheck != nil && c.HealthCheck.MaxIdleTime != "" {
-		if d, err := time.ParseDuration(c.HealthCheck.MaxIdleTime); err == nil {
-			return d
-		}
+	if c.HealthCheck == nil {
+		return DefaultMaxIdleTime
 	}
-	return 10 * time.Minute // Default: 10 minutes idle before reconnect
+	return parseDurationOrDefault(c.HealthCheck.MaxIdleTime, DefaultMaxIdleTime)
 }
 
 // GetTCPKeepalive returns the TCP keepalive duration or default
 func (c *Config) GetTCPKeepalive() time.Duration {
-	if c.Reliability != nil && c.Reliability.TCPKeepalive != "" {
-		if d, err := time.ParseDuration(c.Reliability.TCPKeepalive); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultTCPKeepalive
 	}
-	return 30 * time.Second // Default: 30 second keepalive
+	return parseDurationOrDefault(c.Reliability.TCPKeepalive, DefaultTCPKeepalive)
 }
 
 // GetRetryOnStale returns whether to retry on stale connections
@@ -104,22 +119,18 @@ func (c *Config) GetRetryOnStale() bool {
 
 // GetWatchdogPeriod returns the goroutine watchdog check period or default
 func (c *Config) GetWatchdogPeriod() time.Duration {
-	if c.Reliability != nil && c.Reliability.WatchdogPeriod != "" {
-		if d, err := time.ParseDuration(c.Reliability.WatchdogPeriod); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultWatchdogPeriod
 	}
-	return 30 * time.Second // Default: check every 30 seconds
+	return parseDurationOrDefault(c.Reliability.WatchdogPeriod, DefaultWatchdogPeriod)
 }
 
 // GetDialTimeout returns the connection dial timeout or default
 func (c *Config) GetDialTimeout() time.Duration {
-	if c.Reliability != nil && c.Reliability.DialTimeout != "" {
-		if d, err := time.ParseDuration(c.Reliability.DialTimeout); err == nil {
-			return d
-		}
+	if c.Reliability == nil {
+		return DefaultDialTimeout
 	}
-	return 30 * time.Second // Default: 30 second dial timeout
+	return parseDurationOrDefault(c.Reliability.DialTimeout, DefaultDialTimeout)
 }
 
 // Context represents a Kubernetes context with its namespaces
@@ -209,9 +220,15 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 // ParseConfig parses YAML configuration data into a Config struct.
+// It uses strict parsing that rejects unknown keys to catch typos.
 func ParseConfig(data []byte) (*Config, error) {
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+
+	// Use decoder with KnownFields to reject unknown keys (catches typos)
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+
+	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 

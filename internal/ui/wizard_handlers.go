@@ -173,12 +173,8 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		// Cancel deletion
-		m.ui.deleteConfirming = false
-		m.ui.deleteConfirmID = ""
-		m.ui.deleteConfirmAlias = ""
-		m.ui.deleteConfirmCursor = 0 // Reset cursor
+		m.ui.resetDeleteConfirmation()
 		m.ui.mu.Unlock()
-		// Force a repaint by returning the model
 		return m, tea.ClearScreen
 
 	case "left", "h", "right", "l":
@@ -191,26 +187,18 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Confirm deletion (either Enter on Yes or pressing 'y')
 		if m.ui.deleteConfirmCursor == 0 || msg.String() == "y" {
 			id := m.ui.deleteConfirmID
-			m.ui.deleteConfirming = false
-			m.ui.deleteConfirmID = ""
-			m.ui.deleteConfirmAlias = ""
+			m.ui.resetDeleteConfirmation()
 			m.ui.mu.Unlock()
 			return m, removeForwardByIDCmd(m.ui.mutator, id)
 		}
 		// Enter on No = cancel
-		m.ui.deleteConfirming = false
-		m.ui.deleteConfirmID = ""
-		m.ui.deleteConfirmAlias = ""
-		m.ui.deleteConfirmCursor = 0 // Reset cursor
+		m.ui.resetDeleteConfirmation()
 		m.ui.mu.Unlock()
 		return m, tea.ClearScreen
 
 	case "n":
 		// Quick 'n' for no
-		m.ui.deleteConfirming = false
-		m.ui.deleteConfirmID = ""
-		m.ui.deleteConfirmAlias = ""
-		m.ui.deleteConfirmCursor = 0 // Reset cursor
+		m.ui.resetDeleteConfirmation()
 		m.ui.mu.Unlock()
 		return m, tea.ClearScreen
 	}
@@ -259,10 +247,7 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			// Go back one step
 			wizard.step--
-			wizard.cursor = 0
-			wizard.clearTextInput()
-			wizard.clearSearchFilter()
-			wizard.error = nil
+			wizard.resetInput()
 
 			// Reset input mode based on the step we're going back to
 			switch wizard.step {
@@ -492,7 +477,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 		} else {
 			// Text mode - manual entry
 			port, err := strconv.Atoi(wizard.textInput)
-			if err != nil || port < 1 || port > 65535 {
+			if err != nil || !config.IsValidPort(port) {
 				wizard.error = fmt.Errorf("invalid port number")
 			} else {
 				wizard.remotePort = port
@@ -504,7 +489,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 
 	case StepEnterLocalPort:
 		port, err := strconv.Atoi(wizard.textInput)
-		if err != nil || port < 1 || port > 65535 {
+		if err != nil || !config.IsValidPort(port) {
 			wizard.error = fmt.Errorf("invalid port number")
 		} else {
 			// Check port availability before proceeding
@@ -559,9 +544,10 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 
 			return m, saveForwardCmd(m.ui.mutator, wizard.selectedContext, wizard.selectedNamespace, fwd)
 		} else {
-			// Cancelled
+			// Cancelled - return to main view with screen clear
 			m.ui.viewMode = ViewModeMain
 			m.ui.addWizard = nil
+			return m, tea.ClearScreen
 		}
 
 	case StepSuccess:
@@ -571,9 +557,10 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			m.ui.addWizard.loading = true
 			return m, loadContextsCmd(m.ui.discovery)
 		} else {
-			// Return to main view
+			// Return to main view with screen clear
 			m.ui.viewMode = ViewModeMain
 			m.ui.addWizard = nil
+			return m, tea.ClearScreen
 		}
 	}
 
@@ -828,5 +815,5 @@ func (m model) handleForwardsRemoved(msg ForwardsRemovedMsg) (tea.Model, tea.Cmd
 	// If there was an error, it will be logged but we don't show it in UI for now
 	// The config watcher will either reload (success) or keep old config (failure)
 
-	return m, nil
+	return m, tea.ClearScreen
 }
