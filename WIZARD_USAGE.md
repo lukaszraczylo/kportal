@@ -1,171 +1,104 @@
-# Interactive Add/Remove Wizards
+# Interactive Wizards
 
-kportal now includes interactive wizards for adding and removing port forwards directly from the running UI!
+kportal includes wizards for adding and removing port forwards from the running UI.
 
-## Quick Start
+## ⌨️ Quick Reference
 
-Run kportal normally:
-```bash
-./kportal
-```
+| Key | Action |
+|-----|--------|
+| `a` | Add new forward |
+| `d` | Delete forwards |
 
-From the main view:
-- Press **`n`** to add a new port forward
-- Press **`d`** to delete existing port forwards
+## ➕ Add Forward Wizard
 
-## Add Forward Wizard (`n` key)
+Press `a` from the main view to start the wizard.
 
-The wizard guides you through 7 steps to add a new forward:
+### Steps
 
-### Step 1: Select Context
-Choose from available Kubernetes contexts in your kubeconfig.
+1. **Context** - Select Kubernetes context
+2. **Namespace** - Select namespace
+3. **Resource Type** - Choose pod (prefix), pod (selector), or service
+4. **Resource** - Enter prefix, selector, or select service
+5. **Remote Port** - Enter port on the resource
+6. **Local Port** - Enter local port (validates availability)
+7. **Confirm** - Review and optionally add an alias
 
-### Step 2: Select Namespace
-Pick the namespace where your resource lives.
+### Navigation
 
-### Step 3: Select Resource Type
-Three options:
-- **Pod (by name prefix)** - Forward to a specific pod by prefix matching
-- **Pod (by label selector)** - Forward to pods matching labels (survives restarts)
-- **Service** - Most stable, load-balanced option
+| Key | Action |
+|-----|--------|
+| `↑↓` / `j/k` | Navigate options |
+| `Enter` | Confirm and proceed |
+| `Esc` | Go back / Cancel |
+| `Ctrl+C` | Cancel immediately |
 
-### Step 4: Enter Resource
-- **Pod prefix**: Type a prefix like `nginx-` to match pods
-- **Label selector**: Enter labels like `app=nginx,env=prod`
-- **Service**: Select from a list of services
+## 🗑️ Delete Forward Wizard
 
-The wizard shows real-time validation and matching resources!
+Press `d` from the main view.
 
-### Step 5: Remote Port
-Enter the port number on the remote resource. The wizard displays detected ports from running containers.
+### Navigation
 
-### Step 6: Local Port
-Enter the local port to bind to. The wizard checks availability in real-time.
+| Key | Action |
+|-----|--------|
+| `↑↓` / `j/k` | Navigate |
+| `Space` | Toggle selection |
+| `a` | Select all |
+| `n` | Deselect all |
+| `Enter` | Confirm deletion |
+| `Esc` | Cancel |
 
-### Step 7: Confirmation
-Review your configuration and optionally add an alias (friendly name). Confirm to save!
+## 🎯 Resource Selection
 
-### Navigation Keys
+### Pod by Prefix
 
-- **`↑`/`↓`** or **`j`/`k`** - Navigate options
-- **`Enter`** - Confirm and proceed to next step
-- **`Esc`** - Go back one step (or cancel on first step)
-- **`Ctrl+C`** - Hard cancel and return to main view
-- **`Backspace`** - Delete characters in text fields
-
-## Remove Forward Wizard (`d` key)
-
-Multi-select interface for removing forwards:
-
-1. **Select forwards**: Use arrow keys to navigate, `Space` to toggle selection
-2. **Confirm removal**: Press `Enter` and confirm your choice
-
-### Navigation Keys
-
-- **`↑`/`↓`** or **`j`/`k`** - Navigate forwards
-- **`Space`** - Toggle selection of current forward
-- **`a`** - Select all forwards
-- **`n`** - Deselect all forwards
-- **`Enter`** - Proceed to confirmation
-- **`Esc`** - Cancel and return to main view
-- **`Ctrl+C`** - Hard cancel
-
-## Auto Hot-Reload
-
-When you save a forward via the wizard:
-1. The wizard writes to `.kportal.yaml` atomically
-2. The file watcher detects the change (~100ms)
-3. The manager reloads and starts the new forward
-4. The UI updates automatically
-
-No restart needed!
-
-## Error Handling
-
-The wizards handle errors gracefully:
-
-- **Cluster unreachable**: Shows error but allows manual entry
-- **Port conflicts**: Displays which process is using the port
-- **Invalid selectors**: Shows validation errors in real-time
-- **Duplicate ports**: Prevents adding forwards with conflicting ports
-
-## Tips
-
-### Pod Prefix Matching
-When using pod prefix, you can type just the app name:
+Enter app name prefix to match pods:
 - `nginx` matches `nginx-deployment-abc123`
 - `postgres` matches `postgres-statefulset-0`
 
-### Label Selectors
-Use standard Kubernetes label syntax:
-- `app=nginx` - Single label
-- `app=nginx,env=prod` - Multiple labels (comma-separated)
-- Real-time validation shows matching pods as you type!
+### Pod by Selector
 
-### Aliases
-Use aliases for cleaner UI display:
-- Instead of: `production/default/pod/nginx-deployment-abc123:80→8080`
-- Shows as: `my-nginx:80→8080`
+Use Kubernetes label syntax:
+- `app=nginx`
+- `app=nginx,env=prod`
 
-### Quick Selection
-In list views, you can use `j`/`k` (Vim-style) or arrow keys for navigation.
+Matching pods are shown in real-time.
 
-## Example Workflow
+### Service
 
-Adding a forward for a PostgreSQL database:
+Select from discovered services in the namespace.
 
-1. Press `n` in main view
-2. Select context: `production` (arrow keys + Enter)
-3. Select namespace: `default` (arrow keys + Enter)
-4. Select type: `Service` (arrow keys + Enter)
-5. Select service: `postgres` (arrow keys + Enter)
-6. Enter remote port: `5432` (type + Enter)
-7. Enter local port: `5432` (type + Enter)
-8. Add alias: `prod-db` (optional, type + Enter)
-9. Confirm: Select "Add to .kportal.yaml" (Enter)
+## 🔄 Auto Hot-Reload
 
-Done! The forward starts automatically within seconds.
+Changes are applied automatically:
+1. Wizard writes to `.kportal.yaml` atomically
+2. File watcher detects change (~100ms)
+3. Manager reloads and starts forward
+4. UI updates
 
-## Architecture
+## Error Handling
 
-The wizards use:
-- **Config Mutator**: Safe, atomic YAML writes (temp file + rename)
-- **K8s Discovery**: Lists contexts, namespaces, pods, services
-- **Modal Overlays**: Wizards appear centered over the main view
-- **Async Validation**: Port checks and selector validation run in background
-- **Hot-Reload Integration**: File watcher picks up changes automatically
+The wizards handle:
+- Cluster unreachable - allows manual entry
+- Port conflicts - shows which process is using the port
+- Invalid selectors - real-time validation
+- Duplicate ports - prevents conflicts
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-### Wizards not appearing?
-Check that kportal can connect to your Kubernetes cluster:
+### Wizard not appearing
+
+Verify cluster connectivity:
 ```bash
 kubectl cluster-info
 ```
 
-### Port check showing wrong status?
-The port check happens asynchronously. Wait a moment after typing for validation.
+### Port validation delayed
 
-### Changes not appearing?
-The file watcher triggers within 100ms. If changes aren't visible, check:
+Port checks run asynchronously. Wait briefly after typing.
+
+### Changes not visible
+
+Check:
 1. `.kportal.yaml` was written correctly
-2. No validation errors in the file
-3. kportal process is still running
-
----
-
-**Navigation Summary**
-
-Main View:
-- `n` - New forward wizard
-- `d` - Delete forward wizard
-- `Space` - Toggle forward on/off
-- `↑↓/jk` - Navigate forwards
-- `q` - Quit
-
-Wizards:
-- `Enter` - Next step / Confirm
-- `Esc` - Previous step / Cancel
-- `Ctrl+C` - Hard cancel
-- `↑↓/jk` - Navigate
-- `Space` - Toggle (in delete wizard)
+2. No validation errors in file
+3. kportal process is running

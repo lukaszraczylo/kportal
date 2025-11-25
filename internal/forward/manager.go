@@ -10,6 +10,7 @@ import (
 	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/logger"
+	"github.com/nvm/kportal/internal/mdns"
 )
 
 // StatusUpdater is an interface for updating forward status
@@ -30,6 +31,7 @@ type Manager struct {
 	portChecker   *PortChecker
 	healthChecker *healthcheck.Checker
 	watchdog      *Watchdog
+	mdnsPublisher *mdns.Publisher
 	verbose       bool
 	currentConfig *config.Config
 	statusUI      StatusUpdater
@@ -117,6 +119,11 @@ func (m *Manager) SetStatusUI(ui StatusUpdater) {
 	m.statusUI = ui
 }
 
+// SetMDNSPublisher sets the mDNS publisher for the manager
+func (m *Manager) SetMDNSPublisher(publisher *mdns.Publisher) {
+	m.mdnsPublisher = publisher
+}
+
 // Start initializes and starts all port-forwards from the configuration.
 func (m *Manager) Start(cfg *config.Config) error {
 	if cfg == nil {
@@ -185,6 +192,11 @@ func (m *Manager) Stop() {
 	// Stop health checker and watchdog first
 	m.healthChecker.Stop()
 	m.watchdog.Stop()
+
+	// Stop mDNS publisher
+	if m.mdnsPublisher != nil {
+		m.mdnsPublisher.Stop()
+	}
 
 	m.workersMu.Lock()
 	workers := make([]*ForwardWorker, 0, len(m.workers))
@@ -391,6 +403,22 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 	// Store worker
 	m.workers[fwd.ID()] = worker
 
+	// Register mDNS hostname if enabled
+	// Uses explicit alias if set, otherwise generates from resource name
+	if m.mdnsPublisher != nil {
+		mdnsAlias := fwd.GetMDNSAlias()
+		if mdnsAlias != "" {
+			if err := m.mdnsPublisher.Register(fwd.ID(), mdnsAlias, fwd.LocalPort); err != nil {
+				logger.Warn("Failed to register mDNS hostname", map[string]interface{}{
+					"forward_id": fwd.ID(),
+					"alias":      mdnsAlias,
+					"error":      err.Error(),
+				})
+				// Don't fail the forward start - mDNS is optional
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -413,6 +441,11 @@ func (m *Manager) stopWorkerInternal(id string, removeFromUI bool) error {
 	// Unregister from health checker and watchdog
 	m.healthChecker.Unregister(id)
 	m.watchdog.UnregisterWorker(id)
+
+	// Unregister mDNS hostname
+	if m.mdnsPublisher != nil {
+		m.mdnsPublisher.Unregister(id)
+	}
 
 	// Notify UI - either remove or update to disabled status
 	if m.statusUI != nil {

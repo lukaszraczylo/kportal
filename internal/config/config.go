@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -31,6 +32,13 @@ type Config struct {
 	Contexts    []Context        `yaml:"contexts"`
 	HealthCheck *HealthCheckSpec `yaml:"healthCheck,omitempty"`
 	Reliability *ReliabilitySpec `yaml:"reliability,omitempty"`
+	MDNS        *MDNSSpec        `yaml:"mdns,omitempty"`
+}
+
+// MDNSSpec configures mDNS (multicast DNS) hostname publishing
+// When enabled, forwards with aliases can be accessed via <alias>.local hostnames
+type MDNSSpec struct {
+	Enabled bool `yaml:"enabled"` // Enable mDNS hostname publishing
 }
 
 // HealthCheckSpec configures health check behavior
@@ -133,6 +141,11 @@ func (c *Config) GetDialTimeout() time.Duration {
 	return parseDurationOrDefault(c.Reliability.DialTimeout, DefaultDialTimeout)
 }
 
+// IsMDNSEnabled returns whether mDNS hostname publishing is enabled
+func (c *Config) IsMDNSEnabled() bool {
+	return c.MDNS != nil && c.MDNS.Enabled
+}
+
 // Context represents a Kubernetes context with its namespaces
 type Context struct {
 	Name       string      `yaml:"name"`
@@ -197,6 +210,25 @@ func (f *Forward) GetContext() string {
 // GetNamespace returns the namespace name for this forward.
 func (f *Forward) GetNamespace() string {
 	return f.namespaceName
+}
+
+// GetMDNSAlias returns the alias to use for mDNS hostname registration.
+// If an explicit alias is set, it returns that.
+// Otherwise, it generates one from the resource name (e.g., "service/logto" -> "logto").
+func (f *Forward) GetMDNSAlias() string {
+	if f.Alias != "" {
+		return f.Alias
+	}
+
+	// Generate alias from resource name
+	// Format is "type/name" (e.g., "service/logto", "pod/my-app")
+	parts := strings.SplitN(f.Resource, "/", 2)
+	if len(parts) == 2 && parts[1] != "" {
+		return parts[1]
+	}
+
+	// Fallback: can't generate a valid alias (e.g., "pod" with selector)
+	return ""
 }
 
 // LoadConfig loads and parses the configuration file from the given path.
