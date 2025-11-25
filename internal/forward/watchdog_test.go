@@ -154,12 +154,21 @@ func (s *WatchdogTestSuite) TestMultipleWorkers() {
 	s.watchdog.RegisterWorker("worker-3", makeCallback("worker-3"))
 
 	// worker-1: Keep sending heartbeats (healthy)
+	// Use a done channel to ensure goroutine exits before test ends
 	ticker1 := time.NewTicker(50 * time.Millisecond)
-	defer ticker1.Stop()
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		defer ticker1.Stop()
 		for i := 0; i < 10; i++ {
-			<-ticker1.C
-			s.watchdog.Heartbeat("worker-1")
+			select {
+			case <-ticker1.C:
+				s.watchdog.Heartbeat("worker-1")
+			case <-done:
+				return
+			}
 		}
 	}()
 
@@ -171,6 +180,10 @@ func (s *WatchdogTestSuite) TestMultipleWorkers() {
 
 	// Wait for hung workers to be detected
 	time.Sleep(600 * time.Millisecond)
+
+	// Signal goroutine to stop and wait for it
+	close(done)
+	wg.Wait()
 
 	// Check results
 	mu.Lock()

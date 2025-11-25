@@ -155,7 +155,8 @@ func (p *Publisher) Stop() {
 // goroutines to exit cleanly. This works around a race condition in the
 // grandcat/zeroconf library where recv4() can access ipv4conn after shutdown()
 // sets it to nil. See: https://github.com/grandcat/zeroconf/issues/95
-const shutdownSettleTime = 50 * time.Millisecond
+// Note: 100ms is needed for CI environments where timing can be more variable.
+const shutdownSettleTime = 100 * time.Millisecond
 
 // shutdownWithTimeout attempts to shutdown a zeroconf server with a timeout.
 // If shutdown hangs, it logs a warning and returns anyway.
