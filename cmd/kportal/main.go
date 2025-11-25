@@ -17,6 +17,7 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/converter"
 	"github.com/nvm/kportal/internal/forward"
+	"github.com/nvm/kportal/internal/httplog"
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/logger"
 	"github.com/nvm/kportal/internal/mdns"
@@ -38,6 +39,7 @@ const (
 var (
 	configFile    = flag.String("c", defaultConfigFile, "Path to configuration file")
 	verbose       = flag.Bool("v", false, "Enable verbose logging")
+	headless      = flag.Bool("headless", false, "Run in headless mode (no UI, for background/daemon use)")
 	logFormat     = flag.String("log-format", "text", "Log format: text or json")
 	check         = flag.Bool("check", false, "Validate configuration and exit")
 	showVersion   = flag.Bool("version", false, "Show version and exit")
@@ -91,7 +93,7 @@ func main() {
 		logOutput = os.Stderr
 	} else {
 		logLevel = logger.LevelInfo
-		logOutput = io.Discard // Silence logger in non-verbose mode to prevent UI corruption
+		logOutput = io.Discard // Silence logger in non-verbose/headless mode to prevent UI corruption
 	}
 
 	switch *logFormat {
@@ -218,37 +220,20 @@ func main() {
 		log.Printf("mDNS hostname publishing enabled - aliases will be accessible via <alias>.local")
 	}
 
-	// Create UI (bubbletea for interactive, simple table for verbose)
+	// Create UI based on mode:
+	// - headless: no UI at all (background daemon)
+	// - verbose: simple table UI with logging
+	// - default: interactive bubbletea TUI
 	var bubbleTeaUI *ui.BubbleTeaUI
 	var tableUI *ui.TableUI
 
-	if !*verbose {
-		// Interactive mode with bubbletea
-		bubbleTeaUI = ui.NewBubbleTeaUI(func(id string, enable bool) {
-			if enable {
-				manager.EnableForward(id)
-			} else {
-				manager.DisableForward(id)
-			}
-		}, appVersion)
-
-		// Set wizard dependencies
-		// Note: mutator is always available (for delete/edit), discovery requires valid kubeconfig (for add)
-		bubbleTeaUI.SetWizardDependencies(discovery, mutator, *configFile)
-
-		// Check for updates in background (non-blocking)
-		go func() {
-			checker := version.NewChecker(githubOwner, githubRepo, appVersion)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			if update := checker.CheckForUpdate(ctx); update != nil {
-				bubbleTeaUI.SetUpdateAvailable(update.LatestVersion, update.ReleaseURL)
-			}
-		}()
-
-		manager.SetStatusUI(bubbleTeaUI)
-	} else {
+	if *headless {
+		// Headless mode - no UI, just run forwards in background
+		// StatusUI remains nil, manager will handle this gracefully
+		if *verbose {
+			log.Printf("Running in headless mode with verbose logging")
+		}
+	} else if *verbose {
 		// Verbose mode with simple table
 		tableUI = ui.NewTableUI(*verbose)
 		manager.SetStatusUI(tableUI)
@@ -264,6 +249,68 @@ func main() {
 					update.LatestVersion, update.CurrentVersion, update.ReleaseURL)
 			}
 		}()
+	} else {
+		// Interactive mode with bubbletea
+		bubbleTeaUI = ui.NewBubbleTeaUI(func(id string, enable bool) {
+			if enable {
+				manager.EnableForward(id)
+			} else {
+				manager.DisableForward(id)
+			}
+		}, appVersion)
+
+		// Set wizard dependencies
+		// Note: mutator is always available (for delete/edit), discovery requires valid kubeconfig (for add)
+		bubbleTeaUI.SetWizardDependencies(discovery, mutator, *configFile)
+
+		// Set HTTP log subscriber to enable live log viewing
+		bubbleTeaUI.SetHTTPLogSubscriber(func(forwardID string, callback func(entry ui.HTTPLogEntry)) func() {
+			worker := manager.GetWorker(forwardID)
+			if worker == nil {
+				return func() {} // No-op cleanup
+			}
+
+			proxy := worker.GetHTTPProxy()
+			if proxy == nil {
+				return func() {} // HTTP logging not enabled for this forward
+			}
+
+			proxyLogger := proxy.GetLogger()
+			if proxyLogger == nil {
+				return func() {}
+			}
+
+			// Subscribe to log entries
+			proxyLogger.AddCallback(func(entry httplog.Entry) {
+				callback(ui.HTTPLogEntry{
+					Timestamp:  entry.Timestamp.Format("15:04:05"),
+					Direction:  entry.Direction,
+					Method:     entry.Method,
+					Path:       entry.Path,
+					StatusCode: entry.StatusCode,
+					LatencyMs:  entry.LatencyMs,
+					BodySize:   entry.BodySize,
+				})
+			})
+
+			// Return cleanup function
+			return func() {
+				proxyLogger.ClearCallbacks()
+			}
+		})
+
+		// Check for updates in background (non-blocking)
+		go func() {
+			checker := version.NewChecker(githubOwner, githubRepo, appVersion)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if update := checker.CheckForUpdate(ctx); update != nil {
+				bubbleTeaUI.SetUpdateAvailable(update.LatestVersion, update.ReleaseURL)
+			}
+		}()
+
+		manager.SetStatusUI(bubbleTeaUI)
 	}
 
 	// Start forwards
@@ -272,7 +319,90 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *verbose {
+	if *headless {
+		// Headless mode - no UI, run as background daemon
+		// Setup signal handling
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+
+		// Setup config watcher for hot-reload
+		watcher, err := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
+			return manager.Reload(newCfg)
+		}, *verbose)
+		if err != nil {
+			if *verbose {
+				log.Printf("Warning: Failed to setup config watcher: %v", err)
+				log.Printf("Hot-reload will not be available")
+			}
+		} else {
+			watcher.Start()
+			defer watcher.Stop()
+		}
+
+		if *verbose {
+			log.Printf("Headless mode started. Press Ctrl+C to stop")
+		}
+
+		// Wait for signals
+		for {
+			sig := <-sigChan
+			switch sig {
+			case syscall.SIGHUP:
+				if *verbose {
+					log.Printf("Received SIGHUP, reloading configuration...")
+				}
+				newCfg, err := config.LoadConfig(*configFile)
+				if err != nil {
+					if *verbose {
+						log.Printf("Failed to reload config: %v", err)
+					}
+					continue
+				}
+
+				if errs := validator.ValidateConfig(newCfg); len(errs) > 0 {
+					if *verbose {
+						log.Printf("Config validation failed:")
+						log.Print(config.FormatValidationErrors(errs))
+					}
+					continue
+				}
+
+				if err := manager.Reload(newCfg); err != nil {
+					if *verbose {
+						log.Printf("Failed to reload: %v", err)
+					}
+				}
+
+			case os.Interrupt, syscall.SIGTERM:
+				if *verbose {
+					log.Printf("Received shutdown signal, stopping...")
+				}
+
+				// Graceful shutdown with timeout
+				shutdownDone := make(chan struct{})
+				go func() {
+					manager.Stop()
+					close(shutdownDone)
+				}()
+
+				select {
+				case <-shutdownDone:
+					if *verbose {
+						log.Printf("Graceful shutdown complete")
+					}
+				case <-time.After(5 * time.Second):
+					if *verbose {
+						log.Printf("Shutdown timed out, forcing exit...")
+					}
+				case sig := <-sigChan:
+					if *verbose {
+						log.Printf("Received second signal (%v), forcing exit...", sig)
+					}
+				}
+				os.Exit(0)
+			}
+		}
+	} else if *verbose {
 		// Verbose mode - use simple table with periodic updates
 		tableUI.RenderInitial()
 

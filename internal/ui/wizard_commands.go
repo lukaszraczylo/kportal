@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/nvm/kportal/internal/benchmark"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
 )
@@ -234,6 +235,80 @@ func removeForwardByIDCmd(mutator *config.Mutator, id string) tea.Cmd {
 			success: err == nil,
 			count:   1,
 			err:     err,
+		}
+	}
+}
+
+// BenchmarkCompleteMsg is sent when a benchmark run completes
+type BenchmarkCompleteMsg struct {
+	ForwardID string
+	Results   *benchmark.Results
+	Error     error
+}
+
+// BenchmarkProgressMsg is sent periodically during benchmark execution
+type BenchmarkProgressMsg struct {
+	ForwardID string
+	Completed int
+	Total     int
+}
+
+// HTTPLogEntryMsg is sent when a new HTTP log entry is received
+type HTTPLogEntryMsg struct {
+	Entry HTTPLogEntry
+}
+
+// listenBenchmarkProgressCmd listens for progress updates from the benchmark
+func listenBenchmarkProgressCmd(progressCh <-chan BenchmarkProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-progressCh
+		if !ok {
+			// Channel closed, benchmark complete
+			return nil
+		}
+		return msg
+	}
+}
+
+// runBenchmarkCmd runs a benchmark against the given port forward
+// It sends progress updates via tea.Batch until completion
+func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, concurrency, requests int, progressCh chan<- BenchmarkProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		runner := benchmark.NewRunner()
+
+		url := fmt.Sprintf("http://localhost:%d%s", localPort, urlPath)
+		cfg := benchmark.Config{
+			URL:         url,
+			Method:      method,
+			Concurrency: concurrency,
+			Requests:    requests,
+			Timeout:     30 * time.Second,
+			ProgressCallback: func(completed, total int) {
+				// Non-blocking send to progress channel
+				select {
+				case progressCh <- BenchmarkProgressMsg{
+					ForwardID: forwardID,
+					Completed: completed,
+					Total:     total,
+				}:
+				default:
+					// Drop if channel is full
+				}
+			},
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		results, err := runner.Run(ctx, forwardID, cfg)
+
+		// Close the progress channel when done
+		close(progressCh)
+
+		return BenchmarkCompleteMsg{
+			ForwardID: forwardID,
+			Results:   results,
+			Error:     err,
 		}
 	}
 }

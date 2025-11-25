@@ -36,6 +36,8 @@ const (
 	ViewModeMain ViewMode = iota
 	ViewModeAddWizard
 	ViewModeRemoveWizard
+	ViewModeBenchmark
+	ViewModeHTTPLog
 )
 
 // InputMode represents whether the wizard is in list selection or text input mode
@@ -372,4 +374,180 @@ func (w *AddWizardState) resetInput() {
 	w.cursor = 0
 	w.scrollOffset = 0
 	w.error = nil
+}
+
+// BenchmarkStep represents the current step in the benchmark wizard
+type BenchmarkStep int
+
+const (
+	BenchmarkStepConfig BenchmarkStep = iota
+	BenchmarkStepRunning
+	BenchmarkStepResults
+)
+
+// BenchmarkState maintains the state for the benchmark wizard
+type BenchmarkState struct {
+	step         BenchmarkStep
+	forwardID    string
+	forwardAlias string
+	localPort    int
+
+	// Configuration
+	urlPath     string
+	method      string
+	concurrency int
+	requests    int
+	cursor      int // Current field being edited
+	textInput   string
+
+	// Running state
+	running    bool
+	progress   int
+	total      int
+	progressCh chan BenchmarkProgressMsg // Channel for progress updates
+
+	// Results
+	results *BenchmarkResults
+	error   error
+}
+
+// BenchmarkResults holds benchmark results for display
+type BenchmarkResults struct {
+	TotalRequests int
+	Successful    int
+	Failed        int
+	MinLatency    float64 // milliseconds
+	MaxLatency    float64
+	AvgLatency    float64
+	P50Latency    float64
+	P95Latency    float64
+	P99Latency    float64
+	Throughput    float64 // requests per second
+	BytesRead     int64
+	StatusCodes   map[int]int
+}
+
+// newBenchmarkState creates a new benchmark state for a forward
+func newBenchmarkState(forwardID, alias string, localPort int) *BenchmarkState {
+	return &BenchmarkState{
+		step:         BenchmarkStepConfig,
+		forwardID:    forwardID,
+		forwardAlias: alias,
+		localPort:    localPort,
+		urlPath:      "/",
+		method:       "GET",
+		concurrency:  10,
+		requests:     100,
+		cursor:       0,
+	}
+}
+
+// HTTPLogFilterMode represents the active filter type
+type HTTPLogFilterMode int
+
+const (
+	HTTPLogFilterNone HTTPLogFilterMode = iota
+	HTTPLogFilterText
+	HTTPLogFilterNon200
+	HTTPLogFilterErrors // 4xx and 5xx only
+)
+
+// HTTPLogState maintains the state for HTTP log viewing
+type HTTPLogState struct {
+	forwardID    string
+	forwardAlias string
+	entries      []HTTPLogEntry
+	cursor       int
+	scrollOffset int
+	autoScroll   bool
+
+	// Filtering
+	filterMode   HTTPLogFilterMode
+	filterText   string
+	filterActive bool // true when typing in filter input
+}
+
+// HTTPLogEntry represents a single HTTP log entry for display
+type HTTPLogEntry struct {
+	Timestamp  string
+	Direction  string
+	Method     string
+	Path       string
+	StatusCode int
+	LatencyMs  int64
+	BodySize   int
+}
+
+// newHTTPLogState creates a new HTTP log viewing state
+func newHTTPLogState(forwardID, alias string) *HTTPLogState {
+	return &HTTPLogState{
+		forwardID:    forwardID,
+		forwardAlias: alias,
+		entries:      make([]HTTPLogEntry, 0),
+		autoScroll:   true,
+		filterMode:   HTTPLogFilterNone,
+	}
+}
+
+// getFilteredEntries returns entries matching the current filter
+// Only returns entries with status codes (responses) since requests don't have useful info
+func (s *HTTPLogState) getFilteredEntries() []HTTPLogEntry {
+	filtered := make([]HTTPLogEntry, 0, len(s.entries))
+	filterLower := strings.ToLower(s.filterText)
+
+	for _, entry := range s.entries {
+		// Only show entries with status codes (completed responses)
+		// Requests, streaming connections, and errors without status are filtered out
+		if entry.StatusCode == 0 {
+			continue
+		}
+
+		// Apply filter mode
+		switch s.filterMode {
+		case HTTPLogFilterNon200:
+			if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+				continue
+			}
+		case HTTPLogFilterErrors:
+			if entry.StatusCode < 400 {
+				continue
+			}
+		}
+
+		// Apply text filter
+		if s.filterText != "" {
+			matchPath := strings.Contains(strings.ToLower(entry.Path), filterLower)
+			matchMethod := strings.Contains(strings.ToLower(entry.Method), filterLower)
+			if !matchPath && !matchMethod {
+				continue
+			}
+		}
+
+		filtered = append(filtered, entry)
+	}
+
+	return filtered
+}
+
+// cycleFilterMode cycles through filter modes
+func (s *HTTPLogState) cycleFilterMode() {
+	s.filterMode = (s.filterMode + 1) % 4
+	s.cursor = 0
+	s.scrollOffset = 0
+}
+
+// getFilterModeLabel returns a label for the current filter mode
+func (s *HTTPLogState) getFilterModeLabel() string {
+	switch s.filterMode {
+	case HTTPLogFilterNone:
+		return "All"
+	case HTTPLogFilterText:
+		return "Text"
+	case HTTPLogFilterNon200:
+		return "Non-2xx"
+	case HTTPLogFilterErrors:
+		return "Errors (4xx/5xx)"
+	default:
+		return "All"
+	}
 }

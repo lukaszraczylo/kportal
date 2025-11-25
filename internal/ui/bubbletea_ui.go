@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
 )
@@ -33,6 +34,10 @@ type ForwardAddMsg struct {
 type ForwardRemoveMsg struct {
 	ID string
 }
+
+// HTTPLogSubscriber is a function that subscribes to HTTP logs for a forward
+// It returns a cleanup function to call when unsubscribing
+type HTTPLogSubscriber func(forwardID string, callback func(entry HTTPLogEntry)) func()
 
 // BubbleTeaUI is a bubbletea-based terminal UI
 type BubbleTeaUI struct {
@@ -62,10 +67,22 @@ type BubbleTeaUI struct {
 	deleteConfirmAlias  string
 	deleteConfirmCursor int // 0 = Yes, 1 = No
 
+	// Benchmark state
+	benchmarkState *BenchmarkState
+
+	// HTTP log viewing state
+	httpLogState *HTTPLogState
+
+	// Log callback cleanup function
+	httpLogCleanup func()
+
 	// Dependencies for wizards
 	discovery  *k8s.Discovery
 	mutator    *config.Mutator
 	configPath string
+
+	// Manager for accessing workers
+	httpLogSubscriber HTTPLogSubscriber
 }
 
 // bubbletea model
@@ -99,6 +116,14 @@ func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *
 	ui.discovery = discovery
 	ui.mutator = mutator
 	ui.configPath = configPath
+}
+
+// SetHTTPLogSubscriber sets the function to subscribe to HTTP logs
+func (ui *BubbleTeaUI) SetHTTPLogSubscriber(subscriber HTTPLogSubscriber) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.httpLogSubscriber = subscriber
 }
 
 // SetUpdateAvailable sets the update notification to be displayed
@@ -253,6 +278,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleAddWizardKeys(msg)
 		case ViewModeRemoveWizard:
 			return m.handleRemoveWizardKeys(msg)
+		case ViewModeBenchmark:
+			return m.handleBenchmarkKeys(msg)
+		case ViewModeHTTPLog:
+			return m.handleHTTPLogKeys(msg)
 		}
 
 	// Forward management messages (always update main view data)
@@ -283,6 +312,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ui.removeWizard = nil
 		m.ui.mu.Unlock()
 		return m, tea.ClearScreen
+
+	case BenchmarkCompleteMsg:
+		return m.handleBenchmarkComplete(msg)
+
+	case BenchmarkProgressMsg:
+		return m.handleBenchmarkProgress(msg)
+
+	case HTTPLogEntryMsg:
+		return m.handleHTTPLogEntry(msg)
 	}
 
 	return m, nil
@@ -323,6 +361,12 @@ func (m model) View() string {
 	case ViewModeRemoveWizard:
 		modal := m.renderRemoveWizard()
 		return overlayContent(mainView, modal, termWidth, termHeight)
+	case ViewModeBenchmark:
+		modal := m.renderBenchmark()
+		return overlayContent(mainView, modal, termWidth, termHeight)
+	case ViewModeHTTPLog:
+		// HTTP Log is full-screen, don't overlay on main view
+		return m.renderHTTPLog()
 	default:
 		return mainView
 	}
@@ -340,36 +384,21 @@ func (m model) renderMainView() string {
 		termHeight = 40 // Fallback
 	}
 
-	// Styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("220")).
-		Padding(0, 1)
-
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("220"))
-
-	separatorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("240")).
-		Foreground(lipgloss.Color("230"))
-
-	disabledStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
-	activeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46"))
-
-	startingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("220"))
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196"))
+	// Color palette
+	headerColor := lipgloss.Color("220")  // Yellow
+	activeColor := lipgloss.Color("46")   // Green
+	warningColor := lipgloss.Color("220") // Yellow
+	errorColor := lipgloss.Color("196")   // Red
+	mutedColor := lipgloss.Color("240")   // Gray
+	selectedBg := lipgloss.Color("240")   // Gray background
+	selectedFg := lipgloss.Color("230")   // Light foreground
 
 	// Title with version
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(headerColor).
+		Padding(0, 1)
+
 	title := fmt.Sprintf("kportal v%s - Port Forwarding Status", m.ui.version)
 	b.WriteString(titleStyle.Render(title))
 
@@ -383,94 +412,104 @@ func (m model) renderMainView() string {
 	}
 	b.WriteString("\n\n")
 
-	// Header
-	header := fmt.Sprintf("%-15s %-18s %-20s %-10s %-21s %7s %7s  %s",
-		"CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE", "LOCAL", "STATUS")
-	b.WriteString(headerStyle.Render(header))
-	b.WriteString("\n")
-	b.WriteString(separatorStyle.Render(strings.Repeat("─", 120)))
-	b.WriteString("\n")
-
 	// No forwards
 	if len(m.ui.forwardOrder) == 0 {
-		b.WriteString(disabledStyle.Render("\nNo forwards configured\n"))
+		disabledStyle := lipgloss.NewStyle().Foreground(mutedColor)
+		b.WriteString(disabledStyle.Render("No forwards configured\n"))
 	} else {
-		// Display forwards
-		for idx, id := range m.ui.forwardOrder {
+		// Build table rows
+		var rows [][]string
+		for _, id := range m.ui.forwardOrder {
 			fwd, ok := m.ui.forwards[id]
 			if !ok {
 				continue
 			}
 
-			isSelected := (idx == m.ui.selectedIndex)
 			isDisabled := m.ui.disabledMap[id] || fwd.Status == "Disabled"
 
-			// Selection indicator
-			indicator := "  "
-			if isSelected {
-				indicator = "> "
-			}
-
 			// Status icon and text
-			statusIcon := "● "
+			statusIcon := "●"
 			statusText := fwd.Status
 
 			if isDisabled {
-				statusIcon = "○ "
+				statusIcon = "○"
 				statusText = "Disabled"
 			} else {
 				switch fwd.Status {
 				case "Starting":
-					statusIcon = "○ "
+					statusIcon = "○"
 				case "Reconnecting":
-					statusIcon = "◐ "
+					statusIcon = "◐"
 				case "Error":
-					statusIcon = "✗ "
+					statusIcon = "✗"
 				}
 			}
 
-			// Format row
-			row := fmt.Sprintf("%s%-15s %-18s %-20s %-10s %-21s %7d %7d  %s%s",
-				indicator,
-				truncate(fwd.Context, 15),
-				truncate(fwd.Namespace, 18),
-				truncate(fwd.Alias, 20),
-				truncate(fwd.Type, 10),
-				truncate(fwd.Resource, 21),
-				fwd.RemotePort,
-				fwd.LocalPort,
-				statusIcon,
-				statusText)
-
-			// Apply styling
-			if isSelected {
-				row = selectedStyle.Render(row)
-			} else if isDisabled {
-				row = disabledStyle.Render(row)
-			} else {
-				// Color the status part
-				switch fwd.Status {
-				case "Active":
-					parts := strings.Split(row, statusIcon)
-					if len(parts) == 2 {
-						row = parts[0] + activeStyle.Render(statusIcon+statusText)
-					}
-				case "Starting", "Reconnecting":
-					parts := strings.Split(row, statusIcon)
-					if len(parts) == 2 {
-						row = parts[0] + startingStyle.Render(statusIcon+statusText)
-					}
-				case "Error":
-					parts := strings.Split(row, statusIcon)
-					if len(parts) == 2 {
-						row = parts[0] + errorStyle.Render(statusIcon+statusText)
-					}
-				}
-			}
-
-			b.WriteString(row)
-			b.WriteString("\n")
+			rows = append(rows, []string{
+				truncate(fwd.Context, 14),
+				truncate(fwd.Namespace, 16),
+				truncate(fwd.Alias, 18),
+				truncate(fwd.Type, 8),
+				truncate(fwd.Resource, 20),
+				fmt.Sprintf("%d", fwd.RemotePort),
+				fmt.Sprintf("%d", fwd.LocalPort),
+				statusIcon + " " + statusText,
+			})
 		}
+
+		// Create table with styling (no borders for cleaner look)
+		t := table.New().
+			Border(lipgloss.HiddenBorder()).
+			Headers("CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE", "LOCAL", "STATUS").
+			Rows(rows...).
+			StyleFunc(func(row, col int) lipgloss.Style {
+				// Header row
+				if row == table.HeaderRow {
+					return lipgloss.NewStyle().
+						Bold(true).
+						Foreground(headerColor).
+						Padding(0, 1)
+				}
+
+				// Get the forward for this row to check its status
+				baseStyle := lipgloss.NewStyle().Padding(0, 1)
+
+				if row >= 0 && row < len(m.ui.forwardOrder) {
+					id := m.ui.forwardOrder[row]
+					fwd, ok := m.ui.forwards[id]
+					isSelected := row == m.ui.selectedIndex
+					isDisabled := m.ui.disabledMap[id] || (ok && fwd.Status == "Disabled")
+
+					// Selected row gets background highlight
+					if isSelected {
+						return baseStyle.
+							Background(selectedBg).
+							Foreground(selectedFg)
+					}
+
+					// Disabled rows are muted
+					if isDisabled {
+						return baseStyle.Foreground(mutedColor)
+					}
+
+					// Status column gets colored based on status
+					if col == 7 && ok { // STATUS column
+						switch fwd.Status {
+						case "Active":
+							return baseStyle.Foreground(activeColor)
+						case "Starting", "Reconnecting":
+							return baseStyle.Foreground(warningColor)
+						case "Error":
+							return baseStyle.Foreground(errorColor)
+						}
+					}
+				}
+
+				return baseStyle
+			})
+
+		b.WriteString(t.Render())
+		b.WriteString("\n")
 	}
 
 	// Display errors if any (before footer)
@@ -524,13 +563,15 @@ func (m model) renderMainView() string {
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 
-	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Quit  │  Total: %d",
+	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Bench  %s: Logs  %s: Quit  │  Total: %d",
 		keyStyle.Render("↑↓"),
 		keyStyle.Render("jk"),
 		keyStyle.Render("Space"),
 		keyStyle.Render("n"),
 		keyStyle.Render("e"),
 		keyStyle.Render("d"),
+		keyStyle.Render("b"),
+		keyStyle.Render("l"),
 		keyStyle.Render("q"),
 		len(m.ui.forwardOrder))
 

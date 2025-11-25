@@ -59,6 +59,10 @@ var (
 	spinnerStyle = lipgloss.NewStyle().
 			Foreground(accentColor).
 			Bold(true)
+
+	accentStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
 )
 
 // Input styles
@@ -82,11 +86,11 @@ var (
 
 // Container styles
 var (
+	// wizardBoxStyle creates a bordered modal box
 	wizardBoxStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accentColor).
-		Padding(1, 2).
-		Width(60)
+		Padding(1, 2)
 )
 
 // Helper functions for rendering
@@ -166,46 +170,17 @@ func renderTextInput(label, value string, valid bool) string {
 }
 
 // overlayContent overlays modal content centered on the base view
-func overlayContent(base, modal string, termWidth, termHeight int) string {
-	baseLines := strings.Split(base, "\n")
-	modalLines := strings.Split(modal, "\n")
-
-	// Ensure base has enough lines
-	for len(baseLines) < termHeight {
-		baseLines = append(baseLines, "")
-	}
-
-	modalHeight := len(modalLines)
-	modalWidth := 0
-	for _, line := range modalLines {
-		w := lipgloss.Width(line)
-		if w > modalWidth {
-			modalWidth = w
-		}
-	}
-
-	// Calculate center position
-	startRow := (termHeight - modalHeight) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-
-	// Create result with modal overlaid
-	result := make([]string, len(baseLines))
-	copy(result, baseLines)
-
-	for i, modalLine := range modalLines {
-		row := startRow + i
-		if row >= 0 && row < len(result) {
-			// Center the modal line
-			padding := (termWidth - lipgloss.Width(modalLine)) / 2
-			if padding < 0 {
-				padding = 0
-			}
-
-			result[row] = strings.Repeat(" ", padding) + modalLine
-		}
-	}
-
-	return strings.Join(result, "\n")
+// Note: base parameter is kept for API compatibility but not used since
+// lipgloss.Place provides cleaner centering without background artifacts
+func overlayContent(_, modal string, termWidth, termHeight int) string {
+	// Use lipgloss.Place to center the modal in the terminal viewport
+	// This handles all alignment properly and respects ANSI styling
+	return lipgloss.Place(
+		termWidth,
+		termHeight,
+		lipgloss.Center,
+		lipgloss.Center,
+		modal,
+		lipgloss.WithWhitespaceChars(" "),
+	)
 }

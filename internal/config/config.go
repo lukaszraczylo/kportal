@@ -25,6 +25,9 @@ const (
 	DefaultTCPKeepalive   = 30 * time.Second // OS-level TCP keepalive interval
 	DefaultDialTimeout    = 30 * time.Second // Connection establishment timeout
 	DefaultWatchdogPeriod = 30 * time.Second // Goroutine health check interval
+
+	// Default HTTP logging settings
+	DefaultHTTPLogMaxBodySize = 1024 * 1024 // 1MB max body size for logging
 )
 
 // Config represents the root configuration structure from .kportal.yaml
@@ -158,14 +161,44 @@ type Namespace struct {
 	Forwards []Forward `yaml:"forwards"`
 }
 
+// HTTPLogSpec configures HTTP traffic logging for a forward
+type HTTPLogSpec struct {
+	Enabled        bool   `yaml:"enabled"`                  // Enable HTTP logging
+	LogFile        string `yaml:"logFile,omitempty"`        // Output file (empty = stdout)
+	MaxBodySize    int    `yaml:"maxBodySize,omitempty"`    // Max body size to log (default 1MB)
+	IncludeHeaders bool   `yaml:"includeHeaders,omitempty"` // Include headers in log
+	FilterPath     string `yaml:"filterPath,omitempty"`     // Optional glob filter for paths
+}
+
+// UnmarshalYAML implements custom unmarshaling to support both bool and struct formats
+// Allows: httpLog: true OR httpLog: { enabled: true, ... }
+func (h *HTTPLogSpec) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// First try to unmarshal as a boolean
+	var boolVal bool
+	if err := unmarshal(&boolVal); err == nil {
+		h.Enabled = boolVal
+		return nil
+	}
+
+	// Otherwise try to unmarshal as a struct
+	type httpLogSpecAlias HTTPLogSpec // Use alias to avoid infinite recursion
+	var spec httpLogSpecAlias
+	if err := unmarshal(&spec); err != nil {
+		return err
+	}
+	*h = HTTPLogSpec(spec)
+	return nil
+}
+
 // Forward represents a single port-forward configuration
 type Forward struct {
-	Resource  string `yaml:"resource"`        // e.g., "pod/my-app", "service/postgres", "pod"
-	Selector  string `yaml:"selector"`        // Label selector for pod resolution (e.g., "app=nginx,env=prod")
-	Protocol  string `yaml:"protocol"`        // tcp or udp
-	Port      int    `yaml:"port"`            // Remote port
-	LocalPort int    `yaml:"localPort"`       // Local port
-	Alias     string `yaml:"alias,omitempty"` // Optional human-readable alias for this forward
+	Resource  string       `yaml:"resource"`          // e.g., "pod/my-app", "service/postgres", "pod"
+	Selector  string       `yaml:"selector"`          // Label selector for pod resolution (e.g., "app=nginx,env=prod")
+	Protocol  string       `yaml:"protocol"`          // tcp or udp
+	Port      int          `yaml:"port"`              // Remote port
+	LocalPort int          `yaml:"localPort"`         // Local port
+	Alias     string       `yaml:"alias,omitempty"`   // Optional human-readable alias for this forward
+	HTTPLog   *HTTPLogSpec `yaml:"httpLog,omitempty"` // Optional HTTP traffic logging
 
 	// Runtime fields (not in YAML)
 	contextName   string
@@ -210,6 +243,19 @@ func (f *Forward) GetContext() string {
 // GetNamespace returns the namespace name for this forward.
 func (f *Forward) GetNamespace() string {
 	return f.namespaceName
+}
+
+// IsHTTPLogEnabled returns true if HTTP logging is enabled for this forward
+func (f *Forward) IsHTTPLogEnabled() bool {
+	return f.HTTPLog != nil && f.HTTPLog.Enabled
+}
+
+// GetHTTPLogMaxBodySize returns the max body size for HTTP logging
+func (f *Forward) GetHTTPLogMaxBodySize() int {
+	if f.HTTPLog == nil || f.HTTPLog.MaxBodySize <= 0 {
+		return DefaultHTTPLogMaxBodySize
+	}
+	return f.HTTPLog.MaxBodySize
 }
 
 // GetMDNSAlias returns the alias to use for mDNS hostname registration.

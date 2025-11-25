@@ -313,3 +313,87 @@ func TestForward_SetContext(t *testing.T) {
 	assert.Equal(t, "my-cluster", fwd.GetContext())
 	assert.Equal(t, "my-namespace", fwd.GetNamespace())
 }
+
+func TestHTTPLogSpec_UnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected bool
+	}{
+		{
+			name: "httpLog as boolean true",
+			yaml: `contexts:
+  - name: test
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            port: 8080
+            localPort: 8080
+            httpLog: true
+`,
+			expected: true,
+		},
+		{
+			name: "httpLog as boolean false",
+			yaml: `contexts:
+  - name: test
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            port: 8080
+            localPort: 8080
+            httpLog: false
+`,
+			expected: false,
+		},
+		{
+			name: "httpLog as struct",
+			yaml: `contexts:
+  - name: test
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            port: 8080
+            localPort: 8080
+            httpLog:
+              enabled: true
+              includeHeaders: true
+`,
+			expected: true,
+		},
+		{
+			name: "httpLog not specified",
+			yaml: `contexts:
+  - name: test
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            port: 8080
+            localPort: 8080
+`,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := ParseConfig([]byte(tt.yaml))
+			assert.NoError(t, err)
+			assert.NotNil(t, cfg)
+
+			fwd := cfg.Contexts[0].Namespaces[0].Forwards[0]
+			if tt.expected {
+				assert.NotNil(t, fwd.HTTPLog, "HTTPLog should not be nil")
+				assert.True(t, fwd.HTTPLog.Enabled, "HTTPLog.Enabled should be true")
+			} else {
+				if fwd.HTTPLog != nil {
+					assert.False(t, fwd.HTTPLog.Enabled, "HTTPLog.Enabled should be false")
+				}
+			}
+		})
+	}
+}

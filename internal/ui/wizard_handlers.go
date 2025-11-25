@@ -40,6 +40,12 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.ui.moveSelection(1)
 
+	case "pgup", "ctrl+u":
+		m.ui.moveSelection(-10)
+
+	case "pgdown", "ctrl+d":
+		m.ui.moveSelection(10)
+
 	case " ", "enter":
 		m.ui.toggleSelected()
 
@@ -158,6 +164,75 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.deleteConfirmID = selectedID
 		m.ui.deleteConfirmAlias = selectedForward.Alias
 		m.ui.deleteConfirmCursor = 0 // Default to "No" for safety
+
+		m.ui.mu.Unlock()
+		return m, nil
+
+	case "b": // Benchmark selected forward
+		m.ui.mu.Lock()
+
+		if len(m.ui.forwardOrder) == 0 {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		currentSelectedIndex := m.ui.selectedIndex
+		if currentSelectedIndex < 0 || currentSelectedIndex >= len(m.ui.forwardOrder) {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		selectedID := m.ui.forwardOrder[currentSelectedIndex]
+		selectedForward, ok := m.ui.forwards[selectedID]
+		if !ok {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		// Create benchmark state
+		m.ui.viewMode = ViewModeBenchmark
+		m.ui.benchmarkState = newBenchmarkState(selectedID, selectedForward.Alias, selectedForward.LocalPort)
+		// Initialize textInput with the first field's value
+		m.ui.benchmarkState.textInput = m.ui.benchmarkState.urlPath
+
+		m.ui.mu.Unlock()
+		return m, nil
+
+	case "l": // View HTTP logs for selected forward
+		m.ui.mu.Lock()
+
+		if len(m.ui.forwardOrder) == 0 {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		currentSelectedIndex := m.ui.selectedIndex
+		if currentSelectedIndex < 0 || currentSelectedIndex >= len(m.ui.forwardOrder) {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		selectedID := m.ui.forwardOrder[currentSelectedIndex]
+		selectedForward, ok := m.ui.forwards[selectedID]
+		if !ok {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
+		// Create HTTP log state
+		m.ui.viewMode = ViewModeHTTPLog
+		m.ui.httpLogState = newHTTPLogState(selectedID, selectedForward.Alias)
+
+		// Subscribe to HTTP logs if subscriber is available
+		if m.ui.httpLogSubscriber != nil {
+			cleanup := m.ui.httpLogSubscriber(selectedID, func(entry HTTPLogEntry) {
+				// Add entry to state (thread-safe via Send)
+				if m.ui.program != nil {
+					m.ui.program.Send(HTTPLogEntryMsg{Entry: entry})
+				}
+			})
+			m.ui.httpLogCleanup = cleanup
+		}
 
 		m.ui.mu.Unlock()
 		return m, nil
@@ -289,6 +364,14 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			wizard.moveCursor(1)
 		}
+
+	case "pgup", "ctrl+u":
+		// Page up - move 10 items
+		wizard.moveCursor(-10)
+
+	case "pgdown", "ctrl+d":
+		// Page down - move 10 items
+		wizard.moveCursor(10)
 
 	case "tab":
 		// Tab moves between alias field and buttons in confirmation
@@ -609,6 +692,12 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		wizard.moveCursor(1)
 
+	case "pgup", "ctrl+u":
+		wizard.moveCursor(-10)
+
+	case "pgdown", "ctrl+d":
+		wizard.moveCursor(10)
+
 	case " ":
 		if !wizard.confirming {
 			wizard.toggleSelection()
@@ -823,4 +912,361 @@ func (m model) handleForwardsRemoved(msg ForwardsRemovedMsg) (tea.Model, tea.Cmd
 	// The config watcher will either reload (success) or keep old config (failure)
 
 	return m, tea.ClearScreen
+}
+
+// handleBenchmarkKeys handles keyboard input in the benchmark view
+func (m model) handleBenchmarkKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	state := m.ui.benchmarkState
+	if state == nil {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "ctrl+c", "esc":
+		// Cancel and return to main view
+		m.ui.viewMode = ViewModeMain
+		m.ui.benchmarkState = nil
+		return m, tea.ClearScreen
+
+	case "up", "k":
+		if state.step == BenchmarkStepConfig && state.cursor > 0 {
+			state.cursor--
+			// Load current field value into textInput
+			state.textInput = m.getBenchmarkFieldValue(state.cursor)
+		}
+
+	case "down", "j":
+		if state.step == BenchmarkStepConfig && state.cursor < 3 {
+			state.cursor++
+			// Load current field value into textInput
+			state.textInput = m.getBenchmarkFieldValue(state.cursor)
+		}
+
+	case "tab":
+		// Tab also cycles through fields
+		if state.step == BenchmarkStepConfig {
+			state.cursor = (state.cursor + 1) % 4
+			state.textInput = m.getBenchmarkFieldValue(state.cursor)
+		}
+
+	case "enter":
+		switch state.step {
+		case BenchmarkStepConfig:
+			// Start running the benchmark
+			state.step = BenchmarkStepRunning
+			state.running = true
+			state.progress = 0
+			state.total = state.requests
+			// Create progress channel with buffer for non-blocking sends
+			state.progressCh = make(chan BenchmarkProgressMsg, 10)
+			// Return batch command to run benchmark and listen for progress
+			return m, tea.Batch(
+				runBenchmarkCmd(state.forwardID, state.localPort, state.urlPath, state.method, state.concurrency, state.requests, state.progressCh),
+				listenBenchmarkProgressCmd(state.progressCh),
+			)
+		case BenchmarkStepResults:
+			// Return to main view
+			m.ui.viewMode = ViewModeMain
+			m.ui.benchmarkState = nil
+			return m, tea.ClearScreen
+		}
+
+	case "backspace":
+		if state.step == BenchmarkStepConfig {
+			if len(state.textInput) > 0 {
+				state.textInput = state.textInput[:len(state.textInput)-1]
+				m.applyBenchmarkTextInput()
+			}
+		}
+
+	default:
+		// Handle text input in config step
+		if state.step == BenchmarkStepConfig && len(msg.String()) == 1 {
+			char := rune(msg.String()[0])
+			if char >= 32 && char < 127 {
+				state.textInput += string(char)
+				m.applyBenchmarkTextInput()
+			}
+		}
+	}
+
+	return m, nil
+}
+
+// getBenchmarkFieldValue returns the current value of the selected benchmark field
+func (m model) getBenchmarkFieldValue(cursor int) string {
+	state := m.ui.benchmarkState
+	if state == nil {
+		return ""
+	}
+
+	switch cursor {
+	case 0:
+		return state.urlPath
+	case 1:
+		return state.method
+	case 2:
+		return fmt.Sprintf("%d", state.concurrency)
+	case 3:
+		return fmt.Sprintf("%d", state.requests)
+	default:
+		return ""
+	}
+}
+
+// applyBenchmarkTextInput applies the current text input to the selected field
+func (m model) applyBenchmarkTextInput() {
+	state := m.ui.benchmarkState
+	if state == nil {
+		return
+	}
+
+	switch state.cursor {
+	case 0: // URL path
+		state.urlPath = state.textInput
+	case 1: // Method
+		state.method = strings.ToUpper(state.textInput)
+	case 2: // Concurrency
+		if val, err := strconv.Atoi(state.textInput); err == nil && val > 0 {
+			state.concurrency = val
+			// Cap concurrency at requests
+			if state.concurrency > state.requests {
+				state.concurrency = state.requests
+			}
+		}
+	case 3: // Requests
+		if val, err := strconv.Atoi(state.textInput); err == nil && val > 0 {
+			state.requests = val
+			// Cap concurrency at requests
+			if state.concurrency > state.requests {
+				state.concurrency = state.requests
+			}
+		}
+	}
+}
+
+// handleHTTPLogKeys handles keyboard input in the HTTP log view
+func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	state := m.ui.httpLogState
+	if state == nil {
+		return m, nil
+	}
+
+	// If filter input is active, handle text input
+	if state.filterActive {
+		switch msg.String() {
+		case "esc":
+			// Cancel filter input, clear text
+			state.filterActive = false
+			state.filterText = ""
+			state.cursor = 0
+			state.scrollOffset = 0
+			return m, nil
+		case "enter":
+			// Confirm filter
+			state.filterActive = false
+			state.cursor = 0
+			state.scrollOffset = 0
+			return m, nil
+		case "backspace":
+			if len(state.filterText) > 0 {
+				state.filterText = state.filterText[:len(state.filterText)-1]
+			}
+			return m, nil
+		default:
+			// Add character to filter
+			if len(msg.String()) == 1 {
+				char := rune(msg.String()[0])
+				if char >= 32 && char < 127 {
+					state.filterText += string(char)
+					state.cursor = 0
+					state.scrollOffset = 0
+				}
+			}
+			return m, nil
+		}
+	}
+
+	filteredEntries := state.getFilteredEntries()
+
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		// Cleanup subscription before closing
+		if m.ui.httpLogCleanup != nil {
+			m.ui.httpLogCleanup()
+			m.ui.httpLogCleanup = nil
+		}
+		// Return to main view
+		m.ui.viewMode = ViewModeMain
+		m.ui.httpLogState = nil
+		return m, tea.ClearScreen
+
+	case "up", "k":
+		if state.cursor > 0 {
+			state.cursor--
+			state.autoScroll = false
+		}
+
+	case "down", "j":
+		if state.cursor < len(filteredEntries)-1 {
+			state.cursor++
+		}
+		// If at bottom, enable auto-scroll
+		if state.cursor >= len(filteredEntries)-1 {
+			state.autoScroll = true
+		}
+
+	case "pgup", "ctrl+u":
+		// Page up - move 20 entries
+		state.cursor -= 20
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
+		state.autoScroll = false
+
+	case "pgdown", "ctrl+d":
+		// Page down - move 20 entries
+		state.cursor += 20
+		if state.cursor >= len(filteredEntries) {
+			state.cursor = len(filteredEntries) - 1
+		}
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
+		// If at bottom, enable auto-scroll
+		if state.cursor >= len(filteredEntries)-1 {
+			state.autoScroll = true
+		}
+
+	case "g":
+		// Go to top
+		state.cursor = 0
+		state.scrollOffset = 0
+		state.autoScroll = false
+
+	case "G":
+		// Go to bottom
+		if len(filteredEntries) > 0 {
+			state.cursor = len(filteredEntries) - 1
+			state.autoScroll = true
+		}
+
+	case "a":
+		// Toggle auto-scroll
+		state.autoScroll = !state.autoScroll
+
+	case "f":
+		// Cycle filter mode
+		state.cycleFilterMode()
+
+	case "/":
+		// Enter text filter mode
+		state.filterActive = true
+		state.filterText = ""
+
+	case "c":
+		// Clear all filters
+		state.filterMode = HTTPLogFilterNone
+		state.filterText = ""
+		state.cursor = 0
+		state.scrollOffset = 0
+	}
+
+	return m, nil
+}
+
+// handleHTTPLogEntry handles incoming HTTP log entries
+func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	if m.ui.httpLogState == nil {
+		return m, nil
+	}
+
+	state := m.ui.httpLogState
+	state.entries = append(state.entries, msg.Entry)
+
+	// Cap entries to prevent memory growth (keep last 10000 entries)
+	const maxEntries = 10000
+	if len(state.entries) > maxEntries {
+		// Remove oldest entries
+		state.entries = state.entries[len(state.entries)-maxEntries:]
+		// Adjust cursor if needed
+		if state.cursor >= len(state.entries) {
+			state.cursor = len(state.entries) - 1
+		}
+	}
+
+	// Auto-scroll to bottom if enabled
+	if state.autoScroll && len(state.entries) > 0 {
+		state.cursor = len(state.entries) - 1
+	}
+
+	return m, nil
+}
+
+// handleBenchmarkProgress handles progress updates during benchmark execution
+func (m model) handleBenchmarkProgress(msg BenchmarkProgressMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	if m.ui.benchmarkState == nil || !m.ui.benchmarkState.running {
+		return m, nil
+	}
+
+	state := m.ui.benchmarkState
+	state.progress = msg.Completed
+	state.total = msg.Total
+
+	// Continue listening for more progress updates
+	if state.progressCh != nil {
+		return m, listenBenchmarkProgressCmd(state.progressCh)
+	}
+
+	return m, nil
+}
+
+// handleBenchmarkComplete handles the benchmark completion message
+func (m model) handleBenchmarkComplete(msg BenchmarkCompleteMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	if m.ui.benchmarkState == nil {
+		return m, nil
+	}
+
+	state := m.ui.benchmarkState
+	state.running = false
+	state.step = BenchmarkStepResults
+	state.progressCh = nil // Clear progress channel since benchmark is complete
+
+	if msg.Error != nil {
+		state.error = msg.Error
+		state.results = nil
+	} else if msg.Results != nil {
+		stats := msg.Results.CalculateStats()
+		state.results = &BenchmarkResults{
+			TotalRequests: msg.Results.TotalRequests,
+			Successful:    msg.Results.Successful,
+			Failed:        msg.Results.Failed,
+			MinLatency:    float64(stats.MinLatency.Milliseconds()),
+			MaxLatency:    float64(stats.MaxLatency.Milliseconds()),
+			AvgLatency:    float64(stats.AvgLatency.Milliseconds()),
+			P50Latency:    float64(stats.P50Latency.Milliseconds()),
+			P95Latency:    float64(stats.P95Latency.Milliseconds()),
+			P99Latency:    float64(stats.P99Latency.Milliseconds()),
+			Throughput:    stats.Throughput,
+			BytesRead:     msg.Results.BytesRead,
+			StatusCodes:   msg.Results.StatusCodes,
+		}
+	}
+
+	return m, nil
 }
