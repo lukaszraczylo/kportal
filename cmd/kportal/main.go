@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/logger"
 	"github.com/nvm/kportal/internal/ui"
+	"github.com/nvm/kportal/internal/version"
 	"k8s.io/klog/v2"
 )
 
@@ -26,6 +28,10 @@ const (
 	defaultConfigFile        = ".kportal.yaml"
 	initialForwardSettleTime = 100 * time.Millisecond
 	tableUpdateInterval      = 2 * time.Second
+
+	// GitHub repository info for update checks
+	githubOwner = "lukaszraczylo"
+	githubRepo  = "kportal"
 )
 
 var (
@@ -34,16 +40,22 @@ var (
 	logFormat     = flag.String("log-format", "text", "Log format: text or json")
 	check         = flag.Bool("check", false, "Validate configuration and exit")
 	showVersion   = flag.Bool("version", false, "Show version and exit")
+	checkUpdate   = flag.Bool("update", false, "Check for updates and exit")
 	convertInput  = flag.String("convert", "", "Convert kftray JSON config to kportal YAML (provide input file path)")
 	convertOutput = flag.String("convert-output", ".kportal.yaml", "Output file for converted configuration")
-	version       = "0.1.0" // Set via ldflags during build
+	appVersion    = "0.1.0" // Set via ldflags during build
 )
 
 func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("kportal version %s\n", version)
+		fmt.Printf("kportal version %s\n", appVersion)
+		os.Exit(0)
+	}
+
+	if *checkUpdate {
+		checkForUpdates()
 		os.Exit(0)
 	}
 
@@ -177,7 +189,7 @@ func main() {
 
 	// Only log startup messages in verbose mode
 	if *verbose {
-		log.Printf("kportal v%s", version)
+		log.Printf("kportal v%s", appVersion)
 		log.Printf("Loading configuration from: %s", *configFile)
 	}
 
@@ -209,17 +221,40 @@ func main() {
 			} else {
 				manager.DisableForward(id)
 			}
-		}, version)
+		}, appVersion)
 
 		// Set wizard dependencies
 		// Note: mutator is always available (for delete/edit), discovery requires valid kubeconfig (for add)
 		bubbleTeaUI.SetWizardDependencies(discovery, mutator, *configFile)
+
+		// Check for updates in background (non-blocking)
+		go func() {
+			checker := version.NewChecker(githubOwner, githubRepo, appVersion)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if update := checker.CheckForUpdate(ctx); update != nil {
+				bubbleTeaUI.SetUpdateAvailable(update.LatestVersion, update.ReleaseURL)
+			}
+		}()
 
 		manager.SetStatusUI(bubbleTeaUI)
 	} else {
 		// Verbose mode with simple table
 		tableUI = ui.NewTableUI(*verbose)
 		manager.SetStatusUI(tableUI)
+
+		// Check for updates and print to log
+		go func() {
+			checker := version.NewChecker(githubOwner, githubRepo, appVersion)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if update := checker.CheckForUpdate(ctx); update != nil {
+				log.Printf("Update available: v%s (current: v%s) - %s",
+					update.LatestVersion, update.CurrentVersion, update.ReleaseURL)
+			}
+		}()
 	}
 
 	// Start forwards
@@ -321,4 +356,25 @@ func main() {
 		// Clean shutdown
 		manager.Stop()
 	}
+}
+
+// checkForUpdates checks for available updates and prints the result
+func checkForUpdates() {
+	fmt.Printf("kportal version %s\n", appVersion)
+	fmt.Println("Checking for updates...")
+
+	checker := version.NewChecker(githubOwner, githubRepo, appVersion)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	update := checker.CheckForUpdate(ctx)
+	if update == nil {
+		fmt.Println("You are running the latest version.")
+		return
+	}
+
+	fmt.Printf("\nUpdate available: v%s\n", update.LatestVersion)
+	fmt.Printf("Download: %s\n", update.ReleaseURL)
+	fmt.Println("\nTo update, download the latest release from the URL above")
+	fmt.Println("or use your package manager (e.g., 'brew upgrade kportal').")
 }

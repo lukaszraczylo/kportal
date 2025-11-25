@@ -37,7 +37,7 @@ GOFMT=$(GOCMD) fmt
 
 # Build flags
 BUILD_FLAGS=-buildvcs=false
-LDFLAGS=-ldflags="-s -w -X main.version=$(VERSION)"
+LDFLAGS=-ldflags="-s -w -X main.appVersion=$(VERSION)"
 
 all: fmt vet staticcheck test build
 

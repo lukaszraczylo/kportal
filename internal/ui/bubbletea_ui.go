@@ -46,6 +46,11 @@ type BubbleTeaUI struct {
 	version        string
 	errors         map[string]string // Track error messages by forward ID
 
+	// Update notification
+	updateAvailable bool
+	updateVersion   string
+	updateURL       string
+
 	// Modal wizard state
 	viewMode     ViewMode
 	addWizard    *AddWizardState
@@ -94,6 +99,16 @@ func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *
 	ui.discovery = discovery
 	ui.mutator = mutator
 	ui.configPath = configPath
+}
+
+// SetUpdateAvailable sets the update notification to be displayed
+func (ui *BubbleTeaUI) SetUpdateAvailable(version, url string) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.updateAvailable = true
+	ui.updateVersion = version
+	ui.updateURL = url
 }
 
 // Start starts the bubbletea application
@@ -357,6 +372,15 @@ func (m model) renderMainView() string {
 	// Title with version
 	title := fmt.Sprintf("kportal v%s - Port Forwarding Status", m.ui.version)
 	b.WriteString(titleStyle.Render(title))
+
+	// Show update notification if available
+	if m.ui.updateAvailable {
+		updateStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("42")). // Green
+			Bold(true)
+		updateMsg := fmt.Sprintf("  Update available: v%s", m.ui.updateVersion)
+		b.WriteString(updateStyle.Render(updateMsg))
+	}
 	b.WriteString("\n\n")
 
 	// Header
