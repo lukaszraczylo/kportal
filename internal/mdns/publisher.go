@@ -151,6 +151,12 @@ func (p *Publisher) Stop() {
 	logger.Info("mDNS publisher stopped", nil)
 }
 
+// shutdownSettleTime is a small delay after zeroconf shutdown to allow internal
+// goroutines to exit cleanly. This works around a race condition in the
+// grandcat/zeroconf library where recv4() can access ipv4conn after shutdown()
+// sets it to nil. See: https://github.com/grandcat/zeroconf/issues/95
+const shutdownSettleTime = 50 * time.Millisecond
+
 // shutdownWithTimeout attempts to shutdown a zeroconf server with a timeout.
 // If shutdown hangs, it logs a warning and returns anyway.
 func shutdownWithTimeout(server *zeroconf.Server, forwardID string) {
@@ -164,6 +170,10 @@ func shutdownWithTimeout(server *zeroconf.Server, forwardID string) {
 	select {
 	case <-done:
 		// Shutdown completed successfully
+		// Add a small settle time to let internal goroutines exit cleanly.
+		// This works around a race condition in zeroconf where recv4() can
+		// access ipv4conn after shutdown() sets it to nil.
+		time.Sleep(shutdownSettleTime)
 	case <-time.After(shutdownTimeout):
 		logger.Warn("mDNS shutdown timed out, continuing anyway", map[string]interface{}{
 			"forward_id": forwardID,
