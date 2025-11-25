@@ -144,8 +144,25 @@ func validateSelectorCmd(discovery *k8s.Discovery, contextName, namespace, selec
 }
 
 // checkPortCmd checks if a local port is available
-func checkPortCmd(port int) tea.Cmd {
+func checkPortCmd(port int, configPath string) tea.Cmd {
 	return func() tea.Msg {
+		// First check if port is already in the configuration
+		cfg, err := config.LoadConfig(configPath)
+		if err == nil {
+			// Check all forwards in config for this port
+			allForwards := cfg.GetAllForwards()
+			for _, fwd := range allForwards {
+				if fwd.LocalPort == port {
+					return PortCheckedMsg{
+						port:      port,
+						available: false,
+						message:   fmt.Sprintf("✗ Port %d already assigned to %s", port, fwd.ID()),
+					}
+				}
+			}
+		}
+
+		// Then check if port is available at OS level
 		available, processInfo, err := k8s.CheckPortAvailability(port)
 
 		msg := ""

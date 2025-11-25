@@ -201,6 +201,17 @@ func (c *Checker) GetStatus(forwardID string) (Status, bool) {
 	return StatusUnhealthy, false
 }
 
+// GetLastCheckTime returns the last health check time for a forward
+func (c *Checker) GetLastCheckTime(forwardID string) (time.Time, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if health, exists := c.ports[forwardID]; exists {
+		return health.LastCheck, true
+	}
+	return time.Time{}, false
+}
+
 // GetAllErrors returns all forwards with errors and their error messages
 func (c *Checker) GetAllErrors() map[string]string {
 	c.mu.RLock()

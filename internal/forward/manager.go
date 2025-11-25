@@ -357,6 +357,7 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 	m.healthChecker.Register(fwd.ID(), fwd.LocalPort, func(forwardID string, status healthcheck.Status, errorMsg string) {
 		if m.statusUI != nil {
 			m.statusUI.UpdateStatus(forwardID, string(status))
+
 			// Send error separately if there is one
 			if (status == healthcheck.StatusUnhealthy || status == healthcheck.StatusStale) && errorMsg != "" {
 				if ui, ok := m.statusUI.(interface{ SetError(id, msg string) }); ok {

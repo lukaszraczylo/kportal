@@ -292,12 +292,8 @@ func CheckPortAvailability(port int) (bool, string, error) {
 	addr := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		// Port is in use
-		// Try to get process info (best-effort)
-		processInfo := "unknown process"
-		// Note: Getting process info requires platform-specific code
-		// For now, just return a generic message
-		return false, processInfo, nil
+		// Port is in use - return error details
+		return false, err.Error(), nil
 	}
 
 	// Port is available, close the listener
