@@ -85,6 +85,7 @@
                     </a>
                     <div class="hidden md:flex space-x-6">
                         <a href="#features" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Features</a>
+                        <a href="#comparison" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Comparison</a>
                         <a href="#installation" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Installation</a>
                         <a href="#usage" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Usage</a>
                         <a href="#configuration" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Configuration</a>
@@ -108,6 +109,7 @@
             <div id="mobile-menu" class="hidden md:hidden border-t border-gray-200 dark:border-gray-700">
                 <div class="px-4 py-3 space-y-1 bg-white dark:bg-gray-800">
                     <a href="#features" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Features</a>
+                    <a href="#comparison" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Comparison</a>
                     <a href="#installation" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Installation</a>
                     <a href="#usage" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Usage</a>
                     <a href="#configuration" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Configuration</a>
@@ -302,8 +304,135 @@
             </div>
         </section>
 
+        <!-- Comparison Section -->
+        <section id="comparison" class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Comparison</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">How kportal compares to other Kubernetes port-forwarding tools</p>
+                </div>
+
+                <!-- Comparison Table -->
+                <div class="glass rounded-xl overflow-hidden shadow-modern mb-8">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-semibold">Feature</th>
+                                    <th class="px-4 py-3 text-center font-semibold">kportal</th>
+                                    <th class="px-4 py-3 text-center font-semibold"><a href="https://k9scli.io/" class="hover:underline" target="_blank">k9s</a></th>
+                                    <th class="px-4 py-3 text-center font-semibold"><a href="https://kube-forwarder.pixelpoint.io/" class="hover:underline" target="_blank">Kube Forwarder</a></th>
+                                    <th class="px-4 py-3 text-center font-semibold"><a href="https://kftray.app/" class="hover:underline" target="_blank">kftray</a></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Interface</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Terminal TUI</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Terminal TUI</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Desktop GUI</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Desktop + TUI</td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Persistent Config</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">YAML</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span> <span class="text-xs text-gray-500">Session only</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">JSON</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">JSON + Git</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Auto-reconnect</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Exp. backoff</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Basic</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Watch API</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Hot-reload Config</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Health Checks</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">TCP + data</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Stale Connection Detection</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Age + idle</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">HTTP Traffic Logging</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Built-in</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Connection Benchmarking</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Built-in</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Via Hey</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">mDNS Hostnames</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">.local</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Label Selectors</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Headless Mode</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">System Tray</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">UDP Support</td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-red-500">✗</span></td>
+                                    <td class="px-4 py-3 text-center"><span class="text-green-500">✓</span> <span class="text-xs text-gray-500">Proxy</span></td>
+                                </tr>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">Dependencies</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Single binary</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Single binary</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Electron</td>
+                                    <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">Tauri</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Installation Section -->
-        <section id="installation" class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition">
+        <section id="installation" class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition">
             <div class="max-w-4xl mx-auto px-4 sm:px-6">
                 <div class="text-center mb-10 sm:mb-12">
                     <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Installation</h2>

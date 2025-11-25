@@ -32,6 +32,26 @@ kportal manages multiple Kubernetes port-forwards with an interactive terminal i
 - **Connection benchmarking** - Built-in HTTP benchmarking with latency statistics
 - **Headless mode** - Background operation for scripting and automation
 
+## 🔄 Comparison with Other Tools
+
+| Feature | kportal | [k9s](https://k9scli.io/) | [Kube Forwarder](https://kube-forwarder.pixelpoint.io/) | [kftray](https://kftray.app/) |
+|---------|---------|------|----------------|--------|
+| **Interface** | Terminal TUI | Terminal TUI | Desktop GUI (Electron) | Desktop GUI + TUI |
+| **Persistent Config** | ✅ YAML file | ❌ Session only | ✅ JSON bookmarks | ✅ JSON + Git sync |
+| **Auto-reconnect** | ✅ Exponential backoff | ❌ Manual | ✅ Basic | ✅ Watch API |
+| **Hot-reload Config** | ✅ File watch + SIGHUP | ❌ | ❌ | ❌ |
+| **Health Checks** | ✅ TCP + data-transfer | ❌ | ❌ | ❌ |
+| **Stale Connection Detection** | ✅ Age + idle tracking | ❌ | ❌ | ❌ |
+| **HTTP Traffic Logging** | ✅ Built-in viewer | ❌ | ❌ | ✅ |
+| **Connection Benchmarking** | ✅ Built-in | ✅ Via Hey | ❌ | ❌ |
+| **mDNS Hostnames** | ✅ `.local` domains | ❌ | ❌ | ❌ |
+| **Label Selectors** | ✅ | ✅ | ❌ | ✅ |
+| **Multi-context** | ✅ | ✅ | ✅ | ✅ |
+| **Headless Mode** | ✅ | ❌ | ❌ | ❌ |
+| **System Tray** | ❌ | ❌ | ❌ | ✅ |
+| **UDP Support** | ❌ | ❌ | ❌ | ✅ Proxy relay |
+| **Dependencies** | Single binary | Single binary | Electron | Tauri + kubectl |
+
 ## 📦 Installation
 
 ### Homebrew (macOS/Linux)
