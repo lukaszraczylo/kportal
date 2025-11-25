@@ -511,7 +511,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			wizard.localPort = port
 			wizard.loading = true
 			wizard.error = nil
-			return m, checkPortCmd(port)
+			return m, checkPortCmd(port, m.ui.configPath)
 		}
 
 	case StepConfirmation:
