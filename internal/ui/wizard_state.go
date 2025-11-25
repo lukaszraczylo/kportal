@@ -401,9 +401,10 @@ type BenchmarkState struct {
 	textInput   string
 
 	// Running state
-	running  bool
-	progress int
-	total    int
+	running    bool
+	progress   int
+	total      int
+	progressCh chan BenchmarkProgressMsg // Channel for progress updates
 
 	// Results
 	results *BenchmarkResults

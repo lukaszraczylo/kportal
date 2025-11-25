@@ -940,7 +940,13 @@ func (m model) handleBenchmarkKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			state.running = true
 			state.progress = 0
 			state.total = state.requests
-			return m, runBenchmarkCmd(state.forwardID, state.localPort, state.urlPath, state.method, state.concurrency, state.requests)
+			// Create progress channel with buffer for non-blocking sends
+			state.progressCh = make(chan BenchmarkProgressMsg, 10)
+			// Return batch command to run benchmark and listen for progress
+			return m, tea.Batch(
+				runBenchmarkCmd(state.forwardID, state.localPort, state.urlPath, state.method, state.concurrency, state.requests, state.progressCh),
+				listenBenchmarkProgressCmd(state.progressCh),
+			)
 		case BenchmarkStepResults:
 			// Return to main view
 			m.ui.viewMode = ViewModeMain
@@ -1095,6 +1101,27 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 	// Auto-scroll to bottom if enabled
 	if state.autoScroll && len(state.entries) > 0 {
 		state.cursor = len(state.entries) - 1
+	}
+
+	return m, nil
+}
+
+// handleBenchmarkProgress handles progress updates during benchmark execution
+func (m model) handleBenchmarkProgress(msg BenchmarkProgressMsg) (tea.Model, tea.Cmd) {
+	m.ui.mu.Lock()
+	defer m.ui.mu.Unlock()
+
+	if m.ui.benchmarkState == nil || !m.ui.benchmarkState.running {
+		return m, nil
+	}
+
+	state := m.ui.benchmarkState
+	state.progress = msg.Completed
+	state.total = msg.Total
+
+	// Continue listening for more progress updates
+	if state.progressCh != nil {
+		return m, listenBenchmarkProgressCmd(state.progressCh)
 	}
 
 	return m, nil

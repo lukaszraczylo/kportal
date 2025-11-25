@@ -258,8 +258,21 @@ type HTTPLogEntryMsg struct {
 	Entry HTTPLogEntry
 }
 
+// listenBenchmarkProgressCmd listens for progress updates from the benchmark
+func listenBenchmarkProgressCmd(progressCh <-chan BenchmarkProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-progressCh
+		if !ok {
+			// Channel closed, benchmark complete
+			return nil
+		}
+		return msg
+	}
+}
+
 // runBenchmarkCmd runs a benchmark against the given port forward
-func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, concurrency, requests int) tea.Cmd {
+// It sends progress updates via tea.Batch until completion
+func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, concurrency, requests int, progressCh chan<- BenchmarkProgressMsg) tea.Cmd {
 	return func() tea.Msg {
 		runner := benchmark.NewRunner()
 
@@ -270,12 +283,28 @@ func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, co
 			Concurrency: concurrency,
 			Requests:    requests,
 			Timeout:     30 * time.Second,
+			ProgressCallback: func(completed, total int) {
+				// Non-blocking send to progress channel
+				select {
+				case progressCh <- BenchmarkProgressMsg{
+					ForwardID: forwardID,
+					Completed: completed,
+					Total:     total,
+				}:
+				default:
+					// Drop if channel is full
+				}
+			},
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
 		results, err := runner.Run(ctx, forwardID, cfg)
+
+		// Close the progress channel when done
+		close(progressCh)
+
 		return BenchmarkCompleteMsg{
 			ForwardID: forwardID,
 			Results:   results,

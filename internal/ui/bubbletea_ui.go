@@ -315,6 +315,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BenchmarkCompleteMsg:
 		return m.handleBenchmarkComplete(msg)
 
+	case BenchmarkProgressMsg:
+		return m.handleBenchmarkProgress(msg)
+
 	case HTTPLogEntryMsg:
 		return m.handleHTTPLogEntry(msg)
 	}
