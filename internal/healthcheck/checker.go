@@ -150,16 +150,25 @@ func (c *Checker) Register(forwardID string, port int, callback StatusCallback) 
 	go c.checkPort(forwardID)
 }
 
-// MarkConnected marks a forward as having established a new connection
+// MarkConnected marks a forward as having established a new connection.
+// This updates connection timestamps and triggers an immediate health check
+// to verify the connection is actually working.
 func (c *Checker) MarkConnected(forwardID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
-	if health, exists := c.ports[forwardID]; exists {
-		now := time.Now()
-		health.ConnectionTime = now
-		health.LastActivity = now
+	health, exists := c.ports[forwardID]
+	if !exists {
+		c.mu.Unlock()
+		return
 	}
+
+	now := time.Now()
+	health.ConnectionTime = now
+	health.LastActivity = now
+	c.mu.Unlock()
+
+	// Trigger immediate health check to verify connection and update status
+	go c.checkPort(forwardID)
 }
 
 // RecordActivity records data transfer activity for a forward
