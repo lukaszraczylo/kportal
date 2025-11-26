@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +12,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
-	"golang.design/x/clipboard"
 )
 
 // isFilterableStep returns true if the step supports search/filter
@@ -1186,19 +1187,15 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if entry.ResponseBody != "" {
 					// Decompress if needed before copying
 					body := decompressContent(entry.ResponseBody, entry.ResponseHeaders)
-					if err := clipboard.Init(); err == nil {
-						clipboard.Write(clipboard.FmtText, []byte(body))
+					if err := copyToClipboard(body); err == nil {
 						state.copyMessage = "Copied!"
-						// Clear the message after 2 seconds
-						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-							return clearCopyMessageMsg{}
-						})
 					} else {
 						state.copyMessage = "Clipboard unavailable"
-						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-							return clearCopyMessageMsg{}
-						})
 					}
+					// Clear the message after 2 seconds
+					return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+						return clearCopyMessageMsg{}
+					})
 				}
 			}
 			return m, nil
@@ -1419,4 +1416,47 @@ func (m model) handleBenchmarkComplete(msg BenchmarkCompleteMsg) (tea.Model, tea
 	}
 
 	return m, nil
+}
+
+// copyToClipboard copies text to the system clipboard using OS-specific commands.
+// This avoids CGO dependencies that cause issues in CI environments.
+func copyToClipboard(text string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		// Try xclip first, fall back to xsel
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		} else {
+			return fmt.Errorf("no clipboard tool found (install xclip or xsel)")
+		}
+	case "windows":
+		cmd = exec.Command("clip")
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	if _, err := stdin.Write([]byte(text)); err != nil {
+		return err
+	}
+
+	if err := stdin.Close(); err != nil {
+		return err
+	}
+
+	return cmd.Wait()
 }
