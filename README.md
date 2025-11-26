@@ -277,17 +277,38 @@ Press `l` in the TUI to view real-time HTTP traffic for a selected forward. The 
 | LATENCY | Request duration |
 | PATH | Request path |
 
-**Keyboard shortcuts:**
+**List view shortcuts:**
 
 | Key | Action |
 |-----|--------|
 | `↑/↓` | Navigate entries |
+| `Enter` | View request details |
 | `g/G` | Jump to top/bottom |
 | `a` | Toggle auto-scroll |
 | `f` | Cycle filter mode (All → Non-2xx → Errors) |
 | `/` | Search by path or method |
 | `c` | Clear all filters |
 | `q` | Close log viewer |
+
+**Detail view:**
+
+Press `Enter` on any entry to see full request/response details including:
+- Request and response headers (alphabetically sorted)
+- Request and response bodies
+- Timing information and status codes
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` | Scroll content |
+| `PgUp/PgDn` | Scroll by page |
+| `g` | Jump to top |
+| `c` | Copy response body to clipboard |
+| `Esc/q` | Return to list |
+
+**Body display features:**
+- **JSON formatting** - JSON bodies are pretty-printed with syntax highlighting
+- **Compression handling** - gzip/deflate content is automatically decompressed
+- **Binary detection** - Binary content shows a placeholder instead of garbled data
 
 **Filter modes:**
 - **All** - Show all entries

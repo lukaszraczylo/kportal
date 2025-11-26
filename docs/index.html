@@ -275,7 +275,7 @@
                             </div>
                             <div>
                                 <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">HTTP Traffic Logging</h3>
-                                <p class="text-sm text-gray-600 dark:text-gray-400">Real-time HTTP logging with filters (Non-2xx, Errors, Search)</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Real-time HTTP logging with detail view, JSON highlighting, gzip decompression, and clipboard copy</p>
                             </div>
                         </div>
                     </div>
@@ -891,15 +891,27 @@ contexts:
                         <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3 sm:mb-4">Press <kbd class="px-1.5 sm:px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">l</kbd> to view real-time HTTP traffic.</p>
                         <div class="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                             <div class="text-gray-700 dark:text-gray-300">
-                                <span class="font-medium">Columns:</span> Time, Method, Status, Path
+                                <span class="font-medium">List view:</span> Time, Method, Status, Path
                             </div>
                             <div class="flex flex-wrap gap-1.5 sm:gap-2">
+                                <kbd class="px-1 sm:px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Enter</kbd>
+                                <span class="text-gray-600 dark:text-gray-400">Details</span>
                                 <kbd class="px-1 sm:px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">f</kbd>
                                 <span class="text-gray-600 dark:text-gray-400">Filter</span>
                                 <kbd class="px-1 sm:px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">/</kbd>
                                 <span class="text-gray-600 dark:text-gray-400">Search</span>
+                            </div>
+                            <div class="text-gray-700 dark:text-gray-300 mt-2">
+                                <span class="font-medium">Detail view:</span> Headers, body, timing
+                            </div>
+                            <div class="flex flex-wrap gap-1.5 sm:gap-2">
                                 <kbd class="px-1 sm:px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">c</kbd>
-                                <span class="text-gray-600 dark:text-gray-400">Clear</span>
+                                <span class="text-gray-600 dark:text-gray-400">Copy body</span>
+                                <kbd class="px-1 sm:px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd>
+                                <span class="text-gray-600 dark:text-gray-400">Back</span>
+                            </div>
+                            <div class="text-gray-500 dark:text-gray-500 text-xs mt-1">
+                                <i class="fas fa-magic mr-1"></i>JSON highlighting, gzip decompression, binary detection
                             </div>
                         </div>
                     </div>
