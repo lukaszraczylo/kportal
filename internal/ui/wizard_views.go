@@ -1,7 +1,13 @@
 package ui
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
+	"io"
+	"sort"
 	"strings"
 )
 
@@ -894,6 +900,11 @@ func (m model) renderHTTPLog() string {
 	totalEntries := len(filteredEntries)
 	totalUnfiltered := len(state.entries)
 
+	// If showing detail view, render that instead
+	if state.showingDetail && state.cursor >= 0 && state.cursor < len(filteredEntries) {
+		return m.renderHTTPLogDetail(filteredEntries[state.cursor], termWidth, termHeight)
+	}
+
 	// Build output
 	var b strings.Builder
 
@@ -1066,7 +1077,481 @@ func (m model) renderHTTPLog() string {
 	b.WriteString("\n")
 
 	// Help line at bottom
-	b.WriteString(helpStyle.Render("  ↑/↓/PgUp/PgDn: Navigate  g/G: Top/Bottom  a: Auto-scroll  f: Filter  /: Search  c: Clear  q: Close"))
+	b.WriteString(helpStyle.Render("  ↑/↓: Navigate  Enter: Details  a: Auto-scroll  f: Filter  /: Search  c: Clear  q: Close"))
 
 	return b.String()
+}
+
+// renderHTTPLogDetail renders the detailed view of a single HTTP log entry
+func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int) string {
+	var b strings.Builder
+
+	// Header
+	title := wizardHeaderStyle.Render("HTTP Request Detail")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	// Build content lines for scrolling
+	var lines []string
+
+	// Request summary
+	lines = append(lines, accentStyle.Render("─── Request ───────────────────────────────────────────"))
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("  %s %s", successStyle.Render(entry.Method), entry.Path))
+	lines = append(lines, fmt.Sprintf("  Time: %s", entry.Timestamp))
+	lines = append(lines, "")
+
+	// Request headers (sorted alphabetically)
+	if len(entry.RequestHeaders) > 0 {
+		lines = append(lines, accentStyle.Render("  Request Headers:"))
+		headerKeys := make([]string, 0, len(entry.RequestHeaders))
+		for k := range entry.RequestHeaders {
+			headerKeys = append(headerKeys, k)
+		}
+		sort.Strings(headerKeys)
+		for _, k := range headerKeys {
+			v := entry.RequestHeaders[k]
+			// Truncate long header values
+			if len(v) > termWidth-20 {
+				v = v[:termWidth-23] + "..."
+			}
+			lines = append(lines, fmt.Sprintf("    %s: %s", mutedStyle.Render(k), v))
+		}
+		lines = append(lines, "")
+	}
+
+	// Request body
+	if entry.RequestBody != "" {
+		lines = append(lines, accentStyle.Render("  Request Body:"))
+		// Decompress if needed, then check if binary
+		reqBody := decompressContent(entry.RequestBody, entry.RequestHeaders)
+		if isBinaryContent(reqBody, entry.RequestHeaders) {
+			lines = append(lines, mutedStyle.Render("    [Binary data - not displayed]"))
+			if ct := entry.RequestHeaders["Content-Type"]; ct != "" {
+				lines = append(lines, mutedStyle.Render(fmt.Sprintf("    Content-Type: %s", ct)))
+			}
+		} else {
+			// Format JSON if applicable
+			reqBody = formatJSONContent(reqBody, entry.RequestHeaders)
+			bodyLines := strings.Split(reqBody, "\n")
+			for _, line := range bodyLines {
+				// Truncate long lines
+				if len(line) > termWidth-6 {
+					line = line[:termWidth-9] + "..."
+				}
+				lines = append(lines, "    "+line)
+			}
+		}
+		lines = append(lines, "")
+	}
+
+	// Response summary
+	lines = append(lines, "")
+	lines = append(lines, accentStyle.Render("─── Response ──────────────────────────────────────────"))
+	lines = append(lines, "")
+
+	// Status code with coloring
+	statusStr := fmt.Sprintf("%d", entry.StatusCode)
+	if entry.StatusCode >= 500 {
+		statusStr = errorStyle.Render(statusStr)
+	} else if entry.StatusCode >= 400 {
+		statusStr = warningStyle.Render(statusStr)
+	} else if entry.StatusCode >= 200 && entry.StatusCode < 300 {
+		statusStr = successStyle.Render(statusStr)
+	}
+	lines = append(lines, fmt.Sprintf("  Status: %s", statusStr))
+
+	// Timing
+	latencyStr := ""
+	if entry.LatencyMs >= 1000 {
+		latencyStr = fmt.Sprintf("%.2fs", float64(entry.LatencyMs)/1000)
+	} else {
+		latencyStr = fmt.Sprintf("%dms", entry.LatencyMs)
+	}
+	lines = append(lines, fmt.Sprintf("  Latency: %s", latencyStr))
+	lines = append(lines, fmt.Sprintf("  Body Size: %d bytes", entry.BodySize))
+	lines = append(lines, "")
+
+	// Response headers (sorted alphabetically)
+	if len(entry.ResponseHeaders) > 0 {
+		lines = append(lines, accentStyle.Render("  Response Headers:"))
+		headerKeys := make([]string, 0, len(entry.ResponseHeaders))
+		for k := range entry.ResponseHeaders {
+			headerKeys = append(headerKeys, k)
+		}
+		sort.Strings(headerKeys)
+		for _, k := range headerKeys {
+			v := entry.ResponseHeaders[k]
+			// Truncate long header values
+			if len(v) > termWidth-20 {
+				v = v[:termWidth-23] + "..."
+			}
+			lines = append(lines, fmt.Sprintf("    %s: %s", mutedStyle.Render(k), v))
+		}
+		lines = append(lines, "")
+	}
+
+	// Response body
+	if entry.ResponseBody != "" {
+		lines = append(lines, accentStyle.Render("  Response Body:"))
+		// Decompress if needed, then check if binary
+		respBody := decompressContent(entry.ResponseBody, entry.ResponseHeaders)
+		if isBinaryContent(respBody, entry.ResponseHeaders) {
+			lines = append(lines, mutedStyle.Render("    [Binary data - not displayed]"))
+			if ct := entry.ResponseHeaders["Content-Type"]; ct != "" {
+				lines = append(lines, mutedStyle.Render(fmt.Sprintf("    Content-Type: %s", ct)))
+			}
+		} else {
+			// Format JSON if applicable
+			respBody = formatJSONContent(respBody, entry.ResponseHeaders)
+			bodyLines := strings.Split(respBody, "\n")
+			for _, line := range bodyLines {
+				// Truncate long lines
+				if len(line) > termWidth-6 {
+					line = line[:termWidth-9] + "..."
+				}
+				lines = append(lines, "    "+line)
+			}
+		}
+		lines = append(lines, "")
+	}
+
+	// Error if present
+	if entry.Error != "" {
+		lines = append(lines, "")
+		lines = append(lines, errorStyle.Render("  Error: "+entry.Error))
+		lines = append(lines, "")
+	}
+
+	// Calculate visible range based on scroll
+	viewportHeight := termHeight - 6 // header, footer, help
+	if viewportHeight < 5 {
+		viewportHeight = 5
+	}
+
+	state := m.ui.httpLogState
+	scroll := state.detailScroll
+
+	// Clamp scroll to valid range
+	maxScroll := len(lines) - viewportHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
+		state.detailScroll = scroll
+	}
+
+	// Render visible lines
+	end := scroll + viewportHeight
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	for i := scroll; i < end; i++ {
+		b.WriteString(lines[i])
+		b.WriteString("\n")
+	}
+
+	// Pad remaining space
+	for i := end - scroll; i < viewportHeight; i++ {
+		b.WriteString("\n")
+	}
+
+	// Scroll indicator
+	if len(lines) > viewportHeight {
+		percent := 0
+		if maxScroll > 0 {
+			percent = (scroll * 100) / maxScroll
+		}
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("\n  [%d%%] ", percent)))
+	} else {
+		b.WriteString("\n  ")
+	}
+
+	// Show copy message if present, otherwise show help
+	if state.copyMessage != "" {
+		b.WriteString(successStyle.Render(state.copyMessage))
+		b.WriteString("  ")
+		b.WriteString(helpStyle.Render("↑/↓: Scroll  c: Copy  Esc: Back"))
+	} else {
+		b.WriteString(helpStyle.Render("↑/↓/PgUp/PgDn: Scroll  g: Top  c: Copy response  Esc: Back"))
+	}
+
+	return b.String()
+}
+
+// decompressContent attempts to decompress content based on Content-Encoding header.
+// Returns the decompressed content if successful, or original content if not compressed or on error.
+func decompressContent(content string, headers map[string]string) string {
+	enc := headers["Content-Encoding"]
+	if enc == "" {
+		return content
+	}
+
+	data := []byte(content)
+	var reader io.ReadCloser
+	var err error
+
+	switch enc {
+	case "gzip":
+		reader, err = gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return content // Return original on error
+		}
+		defer reader.Close()
+	case "deflate":
+		reader = flate.NewReader(bytes.NewReader(data))
+		defer reader.Close()
+	default:
+		// br (brotli), compress, zstd - not in stdlib, return original
+		return content
+	}
+
+	decompressed, err := io.ReadAll(reader)
+	if err != nil {
+		return content // Return original on error
+	}
+
+	return string(decompressed)
+}
+
+// isBinaryContent checks if content is binary and shouldn't be displayed as text
+func isBinaryContent(content string, headers map[string]string) bool {
+	// Check Content-Type for binary types
+	if ct := headers["Content-Type"]; ct != "" {
+		// Binary content types
+		binaryPrefixes := []string{
+			"image/", "audio/", "video/", "application/octet-stream",
+			"application/zip", "application/gzip", "application/pdf",
+			"application/x-gzip", "application/x-tar", "application/x-bzip",
+		}
+		for _, prefix := range binaryPrefixes {
+			if strings.HasPrefix(ct, prefix) {
+				return true
+			}
+		}
+	}
+
+	// Check for non-printable characters in the content
+	// If more than 10% of first 200 bytes are non-printable, treat as binary
+	checkLen := len(content)
+	if checkLen > 200 {
+		checkLen = 200
+	}
+	nonPrintable := 0
+	for i := 0; i < checkLen; i++ {
+		c := content[i]
+		// Allow printable ASCII, newline, carriage return, tab
+		if c < 32 && c != '\n' && c != '\r' && c != '\t' {
+			nonPrintable++
+		}
+		// Check for bytes outside ASCII range (common in compressed/binary data)
+		if c > 126 {
+			nonPrintable++
+		}
+	}
+	if checkLen > 0 && float64(nonPrintable)/float64(checkLen) > 0.1 {
+		return true
+	}
+
+	return false
+}
+
+// formatJSONContent attempts to pretty-print and colorize JSON content.
+// Returns the formatted JSON if valid, or original content if not JSON.
+func formatJSONContent(content string, headers map[string]string) string {
+	// Check Content-Type for JSON
+	ct := headers["Content-Type"]
+	isJSON := strings.Contains(ct, "application/json") || strings.Contains(ct, "+json")
+
+	// If not explicitly JSON, try to detect by content
+	if !isJSON {
+		trimmed := strings.TrimSpace(content)
+		// Quick check: must start with { or [ to be JSON
+		if len(trimmed) == 0 || (trimmed[0] != '{' && trimmed[0] != '[') {
+			return content
+		}
+	}
+
+	// Try to parse and format
+	var data interface{}
+	if err := json.Unmarshal([]byte(content), &data); err != nil {
+		return content // Not valid JSON
+	}
+
+	formatted, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return content
+	}
+
+	// Colorize the formatted JSON
+	return colorizeJSON(string(formatted))
+}
+
+// colorizeJSON applies syntax highlighting to formatted JSON.
+// It processes line by line to handle the indented output from MarshalIndent.
+func colorizeJSON(jsonStr string) string {
+	var result strings.Builder
+	lines := strings.Split(jsonStr, "\n")
+
+	for i, line := range lines {
+		result.WriteString(colorizeLine(line))
+		if i < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
+}
+
+// colorizeLine colorizes a single line of formatted JSON
+func colorizeLine(line string) string {
+	// Find leading whitespace
+	trimmed := strings.TrimLeft(line, " \t")
+	indent := line[:len(line)-len(trimmed)]
+
+	if len(trimmed) == 0 {
+		return line
+	}
+
+	var result strings.Builder
+	result.WriteString(indent)
+
+	// Check for key: value pattern (key starts with ")
+	if strings.HasPrefix(trimmed, "\"") {
+		// Find the end of the key
+		colonIdx := strings.Index(trimmed, "\":")
+		if colonIdx > 0 {
+			// This is a key-value line
+			key := trimmed[:colonIdx+1] // includes the closing quote
+			rest := trimmed[colonIdx+1:]
+
+			// Colorize the key (without quotes for cleaner look, or with - let's keep quotes)
+			result.WriteString(jsonKeyStyle.Render(key))
+			result.WriteString(":")
+
+			// rest starts after the colon
+			if len(rest) > 1 {
+				value := strings.TrimPrefix(rest, " ")
+				hasComma := strings.HasSuffix(value, ",")
+				if hasComma {
+					value = value[:len(value)-1]
+				}
+
+				result.WriteString(" ")
+				result.WriteString(colorizeValue(value))
+				if hasComma {
+					result.WriteString(",")
+				}
+			}
+			return result.String()
+		}
+	}
+
+	// Not a key-value line, could be array element or structural
+	// Check for array values or closing braces
+	hasComma := strings.HasSuffix(trimmed, ",")
+	value := trimmed
+	if hasComma {
+		value = value[:len(value)-1]
+	}
+
+	result.WriteString(colorizeValue(value))
+	if hasComma {
+		result.WriteString(",")
+	}
+
+	return result.String()
+}
+
+// colorizeValue colorizes a JSON value (string, number, bool, null, or structural)
+func colorizeValue(value string) string {
+	value = strings.TrimSpace(value)
+
+	if len(value) == 0 {
+		return value
+	}
+
+	// Structural characters - no color
+	if value == "{" || value == "}" || value == "[" || value == "]" ||
+		value == "{}" || value == "[]" {
+		return value
+	}
+
+	// Null
+	if value == "null" {
+		return jsonNullStyle.Render(value)
+	}
+
+	// Boolean
+	if value == "true" || value == "false" {
+		return jsonBoolStyle.Render(value)
+	}
+
+	// String (starts and ends with quotes)
+	if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+		return jsonStringStyle.Render(value)
+	}
+
+	// Number (try to detect)
+	if isJSONNumber(value) {
+		return jsonNumberStyle.Render(value)
+	}
+
+	// Unknown - return as is
+	return value
+}
+
+// isJSONNumber checks if a string looks like a JSON number
+func isJSONNumber(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	i := 0
+	// Optional negative sign
+	if s[0] == '-' {
+		i++
+		if i >= len(s) {
+			return false
+		}
+	}
+
+	// Must have at least one digit
+	if s[i] < '0' || s[i] > '9' {
+		return false
+	}
+
+	// Skip digits
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+
+	// Optional decimal part
+	if i < len(s) && s[i] == '.' {
+		i++
+		if i >= len(s) || s[i] < '0' || s[i] > '9' {
+			return false
+		}
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+	}
+
+	// Optional exponent
+	if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+		i++
+		if i < len(s) && (s[i] == '+' || s[i] == '-') {
+			i++
+		}
+		if i >= len(s) || s[i] < '0' || s[i] > '9' {
+			return false
+		}
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+	}
+
+	return i == len(s)
 }

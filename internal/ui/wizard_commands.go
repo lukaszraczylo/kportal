@@ -258,6 +258,9 @@ type HTTPLogEntryMsg struct {
 	Entry HTTPLogEntry
 }
 
+// clearCopyMessageMsg is sent to clear the copy confirmation message
+type clearCopyMessageMsg struct{}
+
 // listenBenchmarkProgressCmd listens for progress updates from the benchmark
 func listenBenchmarkProgressCmd(progressCh <-chan BenchmarkProgressMsg) tea.Cmd {
 	return func() tea.Msg {

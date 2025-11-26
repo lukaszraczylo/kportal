@@ -16,6 +16,13 @@ var (
 	mutedColor     = lipgloss.Color("241") // Gray
 	accentColor    = lipgloss.Color("63")  // Purple
 	highlightColor = lipgloss.Color("117") // Light blue
+
+	// JSON syntax highlighting colors
+	jsonKeyColor    = lipgloss.Color("81")  // Cyan
+	jsonStringColor = lipgloss.Color("180") // Light orange/tan
+	jsonNumberColor = lipgloss.Color("141") // Light purple
+	jsonBoolColor   = lipgloss.Color("209") // Orange
+	jsonNullColor   = lipgloss.Color("243") // Dark gray
 )
 
 // Text styles
@@ -82,6 +89,24 @@ var (
 
 	uncheckedBoxStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
+)
+
+// JSON syntax highlighting styles
+var (
+	jsonKeyStyle = lipgloss.NewStyle().
+			Foreground(jsonKeyColor)
+
+	jsonStringStyle = lipgloss.NewStyle().
+			Foreground(jsonStringColor)
+
+	jsonNumberStyle = lipgloss.NewStyle().
+			Foreground(jsonNumberColor)
+
+	jsonBoolStyle = lipgloss.NewStyle().
+			Foreground(jsonBoolColor)
+
+	jsonNullStyle = lipgloss.NewStyle().
+			Foreground(jsonNullColor)
 )
 
 // Container styles

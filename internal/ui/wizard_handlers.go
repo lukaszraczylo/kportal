@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
+	"golang.design/x/clipboard"
 )
 
 // isFilterableStep returns true if the step supports search/filter
@@ -1148,6 +1150,62 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	filteredEntries := state.getFilteredEntries()
 
+	// If viewing detail, handle detail view keys
+	if state.showingDetail {
+		switch msg.String() {
+		case "esc", "q", "enter":
+			// Return to list view
+			state.showingDetail = false
+			state.detailScroll = 0
+			state.copyMessage = ""
+			return m, nil
+		case "up", "k":
+			if state.detailScroll > 0 {
+				state.detailScroll--
+			}
+			return m, nil
+		case "down", "j":
+			state.detailScroll++
+			return m, nil
+		case "pgup", "ctrl+u":
+			state.detailScroll -= 20
+			if state.detailScroll < 0 {
+				state.detailScroll = 0
+			}
+			return m, nil
+		case "pgdown", "ctrl+d":
+			state.detailScroll += 20
+			return m, nil
+		case "g":
+			state.detailScroll = 0
+			return m, nil
+		case "c":
+			// Copy response body to clipboard
+			if state.cursor >= 0 && state.cursor < len(filteredEntries) {
+				entry := filteredEntries[state.cursor]
+				if entry.ResponseBody != "" {
+					// Decompress if needed before copying
+					body := decompressContent(entry.ResponseBody, entry.ResponseHeaders)
+					if err := clipboard.Init(); err == nil {
+						clipboard.Write(clipboard.FmtText, []byte(body))
+						state.copyMessage = "Copied!"
+						// Clear the message after 2 seconds
+						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+							return clearCopyMessageMsg{}
+						})
+					} else {
+						state.copyMessage = "Clipboard unavailable"
+						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+							return clearCopyMessageMsg{}
+						})
+					}
+				}
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "esc", "q":
 		// Cleanup subscription before closing
@@ -1159,6 +1217,14 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.viewMode = ViewModeMain
 		m.ui.httpLogState = nil
 		return m, tea.ClearScreen
+
+	case "enter":
+		// Show detail view for selected entry
+		if len(filteredEntries) > 0 && state.cursor >= 0 && state.cursor < len(filteredEntries) {
+			state.showingDetail = true
+			state.detailScroll = 0
+		}
+		return m, nil
 
 	case "up", "k":
 		if state.cursor > 0 {
@@ -1250,7 +1316,28 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 	}
 
 	state := m.ui.httpLogState
-	state.entries = append(state.entries, msg.Entry)
+	entry := msg.Entry
+
+	// If this is a response, try to find and merge with the matching request
+	if entry.Direction == "response" && entry.RequestID != "" {
+		// Search backwards (responses follow requests closely)
+		for i := len(state.entries) - 1; i >= 0 && i >= len(state.entries)-100; i-- {
+			if state.entries[i].RequestID == entry.RequestID && state.entries[i].Direction == "request" {
+				// Merge response data into the existing request entry
+				state.entries[i].Direction = "response"
+				state.entries[i].StatusCode = entry.StatusCode
+				state.entries[i].LatencyMs = entry.LatencyMs
+				state.entries[i].BodySize = entry.BodySize
+				state.entries[i].ResponseHeaders = entry.ResponseHeaders
+				state.entries[i].ResponseBody = entry.ResponseBody
+				state.entries[i].Error = entry.Error
+				return m, nil
+			}
+		}
+	}
+
+	// For requests or unmatched responses, append as new entry
+	state.entries = append(state.entries, entry)
 
 	// Cap entries to prevent memory growth (keep last 10000 entries)
 	const maxEntries = 10000
@@ -1265,7 +1352,11 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 
 	// Auto-scroll to bottom if enabled
 	if state.autoScroll && len(state.entries) > 0 {
-		state.cursor = len(state.entries) - 1
+		filteredEntries := state.getFilteredEntries()
+		state.cursor = len(filteredEntries) - 1
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
 	}
 
 	return m, nil

@@ -282,7 +282,8 @@ func main() {
 
 			// Subscribe to log entries
 			proxyLogger.AddCallback(func(entry httplog.Entry) {
-				callback(ui.HTTPLogEntry{
+				uiEntry := ui.HTTPLogEntry{
+					RequestID:  entry.RequestID,
 					Timestamp:  entry.Timestamp.Format("15:04:05"),
 					Direction:  entry.Direction,
 					Method:     entry.Method,
@@ -290,7 +291,19 @@ func main() {
 					StatusCode: entry.StatusCode,
 					LatencyMs:  entry.LatencyMs,
 					BodySize:   entry.BodySize,
-				})
+					Error:      entry.Error,
+				}
+
+				// Populate headers based on direction
+				if entry.Direction == "request" {
+					uiEntry.RequestHeaders = entry.Headers
+					uiEntry.RequestBody = entry.Body
+				} else if entry.Direction == "response" {
+					uiEntry.ResponseHeaders = entry.Headers
+					uiEntry.ResponseBody = entry.Body
+				}
+
+				callback(uiEntry)
 			})
 
 			// Return cleanup function

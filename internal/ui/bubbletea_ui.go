@@ -352,6 +352,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case HTTPLogEntryMsg:
 		return m.handleHTTPLogEntry(msg)
+
+	case clearCopyMessageMsg:
+		m.ui.mu.Lock()
+		if m.ui.httpLogState != nil {
+			m.ui.httpLogState.copyMessage = ""
+		}
+		m.ui.mu.Unlock()
+		return m, nil
 	}
 
 	return m, nil
