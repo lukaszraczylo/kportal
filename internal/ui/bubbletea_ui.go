@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -11,6 +12,14 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
 )
+
+// safeRecover recovers from panics and logs them
+// Use with defer at the start of goroutines and callbacks that could panic
+func safeRecover(context string) {
+	if r := recover(); r != nil {
+		log.Printf("[UI] Panic recovered in %s: %v", context, r)
+	}
+}
 
 // ForwardUpdateMsg is sent when a forward status changes
 type ForwardUpdateMsg struct {
@@ -237,12 +246,34 @@ func (ui *BubbleTeaUI) Remove(id string) {
 	ui.mu.Lock()
 	delete(ui.forwards, id)
 
+	// Clear any error associated with this forward
+	delete(ui.errors, id)
+
 	// Remove from order
+	removedIndex := -1
 	for i, fid := range ui.forwardOrder {
 		if fid == id {
+			removedIndex = i
 			ui.forwardOrder = append(ui.forwardOrder[:i], ui.forwardOrder[i+1:]...)
 			break
 		}
+	}
+
+	// Adjust selectedIndex if necessary
+	if removedIndex >= 0 {
+		// If we removed the selected item or an item before it, adjust
+		if ui.selectedIndex >= len(ui.forwardOrder) {
+			ui.selectedIndex = len(ui.forwardOrder) - 1
+		}
+		// Ensure selectedIndex is never negative
+		if ui.selectedIndex < 0 {
+			ui.selectedIndex = 0
+		}
+	}
+
+	// Clear delete confirmation if we're deleting the same forward
+	if ui.deleteConfirming && ui.deleteConfirmID == id {
+		ui.resetDeleteConfirmation()
 	}
 	ui.mu.Unlock()
 

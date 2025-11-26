@@ -405,6 +405,7 @@ type BenchmarkState struct {
 	progress   int
 	total      int
 	progressCh chan BenchmarkProgressMsg // Channel for progress updates
+	cancelFunc func()                    // Function to cancel the running benchmark
 
 	// Results
 	results *BenchmarkResults
@@ -527,13 +528,6 @@ func (s *HTTPLogState) getFilteredEntries() []HTTPLogEntry {
 	}
 
 	return filtered
-}
-
-// cycleFilterMode cycles through filter modes
-func (s *HTTPLogState) cycleFilterMode() {
-	s.filterMode = (s.filterMode + 1) % 4
-	s.cursor = 0
-	s.scrollOffset = 0
 }
 
 // getFilterModeLabel returns a label for the current filter mode
