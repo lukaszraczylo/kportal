@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/events"
 )
 
 // bufferPool is a sync.Pool for reusing buffers in data transfer health checks.
@@ -58,7 +59,9 @@ type PortHealth struct {
 // StatusCallback is called when a port's health status changes
 type StatusCallback func(forwardID string, status Status, errorMsg string)
 
-// Checker performs periodic health checks on local ports
+// Checker performs periodic health checks on local ports.
+// Uses a single goroutine to check all registered ports, reducing overhead
+// compared to one goroutine per port.
 type Checker struct {
 	mu               sync.RWMutex
 	ports            map[string]*PortHealth // key: forward ID
@@ -71,6 +74,8 @@ type Checker struct {
 	ctx              context.Context
 	cancel           context.CancelFunc
 	wg               sync.WaitGroup
+	started          bool
+	eventBus         *events.Bus // Optional event bus for decoupled communication
 }
 
 // CheckerOptions configures the health checker
@@ -96,7 +101,7 @@ func NewChecker(interval, timeout time.Duration) *Checker {
 // NewCheckerWithOptions creates a new health checker with custom options
 func NewCheckerWithOptions(opts CheckerOptions) *Checker {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Checker{
+	c := &Checker{
 		ports:            make(map[string]*PortHealth),
 		callbacks:        make(map[string]StatusCallback),
 		interval:         opts.Interval,
@@ -107,12 +112,25 @@ func NewCheckerWithOptions(opts CheckerOptions) *Checker {
 		ctx:              ctx,
 		cancel:           cancel,
 	}
+
+	// Start the single monitoring loop
+	c.wg.Add(1)
+	go c.monitorLoop()
+	c.started = true
+
+	return c
+}
+
+// SetEventBus sets the event bus for publishing health events
+func (c *Checker) SetEventBus(bus *events.Bus) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.eventBus = bus
 }
 
 // Register adds a port to monitor
 func (c *Checker) Register(forwardID string, port int, callback StatusCallback) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	now := time.Now()
 	c.ports[forwardID] = &PortHealth{
@@ -124,10 +142,12 @@ func (c *Checker) Register(forwardID string, port int, callback StatusCallback) 
 		LastActivity:   now,
 	}
 	c.callbacks[forwardID] = callback
+	c.mu.Unlock()
 
-	// Start checking this port
-	c.wg.Add(1)
-	go c.checkLoop(forwardID)
+	// Perform immediate first check so status updates quickly
+	// This prevents the forward from being stuck in "Starting" state
+	// until the next ticker interval
+	go c.checkPort(forwardID)
 }
 
 // MarkConnected marks a forward as having established a new connection
@@ -233,32 +253,49 @@ func (c *Checker) Stop() {
 	c.wg.Wait()
 }
 
-// checkLoop continuously checks a single port's health
-func (c *Checker) checkLoop(forwardID string) {
+// monitorLoop is the single goroutine that checks all registered ports periodically.
+// This is more efficient than one goroutine per port as it reduces:
+// - Goroutine overhead (stack memory, scheduler work)
+// - Timer/ticker allocations
+// - Lock contention (one lock acquisition per interval vs N)
+func (c *Checker) monitorLoop() {
 	defer c.wg.Done()
 
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
-
-	// Do immediate first check - grace period logic will handle early failures
-	c.checkPort(forwardID)
 
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
 		case <-ticker.C:
-			// Check if this forward still exists
-			c.mu.RLock()
-			_, exists := c.ports[forwardID]
-			c.mu.RUnlock()
-
-			if !exists {
-				return
-			}
-
-			c.checkPort(forwardID)
+			c.checkAllPorts()
 		}
+	}
+}
+
+// checkAllPorts performs health checks on all registered ports
+func (c *Checker) checkAllPorts() {
+	// Get snapshot of ports to check
+	c.mu.RLock()
+	forwardIDs := make([]string, 0, len(c.ports))
+	for id := range c.ports {
+		forwardIDs = append(forwardIDs, id)
+	}
+	c.mu.RUnlock()
+
+	// Check each port
+	for _, forwardID := range forwardIDs {
+		// Check if still registered (may have been unregistered during iteration)
+		c.mu.RLock()
+		_, exists := c.ports[forwardID]
+		c.mu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		c.checkPort(forwardID)
 	}
 }
 
@@ -337,6 +374,19 @@ func (c *Checker) checkPort(forwardID string) {
 	// Notify if status changed
 	if oldStatus != newStatus {
 		c.notifyStatusChange(forwardID, newStatus, errorMsg)
+
+		// Publish to event bus if available
+		c.mu.RLock()
+		bus := c.eventBus
+		c.mu.RUnlock()
+
+		if bus != nil {
+			if newStatus == StatusStale {
+				bus.Publish(events.NewStaleEvent(forwardID, errorMsg))
+			} else {
+				bus.Publish(events.NewHealthEvent(forwardID, string(newStatus), errorMsg))
+			}
+		}
 	}
 }
 

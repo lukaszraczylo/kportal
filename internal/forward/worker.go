@@ -112,16 +112,33 @@ func (w *ForwardWorker) Stop() {
 	}
 }
 
+// IsAlive implements HeartbeatResponder interface.
+// Returns true if the worker goroutine is still running and responsive.
+func (w *ForwardWorker) IsAlive() bool {
+	select {
+	case <-w.doneChan:
+		return false
+	case <-w.ctx.Done():
+		return false
+	default:
+		return true
+	}
+}
+
+// GetForwardID implements HeartbeatResponder interface.
+func (w *ForwardWorker) GetForwardID() string {
+	return w.forward.ID()
+}
+
 // run is the main worker loop that handles retries.
 func (w *ForwardWorker) run() {
 	defer close(w.doneChan)
 	defer w.stopHTTPProxy() // Ensure proxy is stopped on exit
 
-	// Start heartbeat goroutine to continuously send heartbeats to watchdog
-	// This prevents false "hung worker" detection when connections are long-lived
-	if w.watchdog != nil {
-		go w.heartbeatLoop()
-	}
+	// Note: Heartbeat management is now centralized in the Watchdog.
+	// The watchdog polls workers via the HeartbeatResponder interface (IsAlive method)
+	// instead of each worker spawning its own heartbeat goroutine.
+	// This reduces goroutine count from 2N to N for N workers.
 
 	// Start HTTP logging proxy if enabled
 	if err := w.startHTTPProxy(); err != nil {
@@ -237,26 +254,6 @@ func (w *ForwardWorker) run() {
 		log.Printf("[%s] Connection closed unexpectedly, retrying...", w.forward.ID())
 		w.lastPod = ""
 		w.sleepWithBackoff(backoff)
-	}
-}
-
-// heartbeatLoop sends periodic heartbeats to the watchdog to prove the worker is alive
-// This runs in a separate goroutine and continues throughout the worker's lifetime
-func (w *ForwardWorker) heartbeatLoop() {
-	// Send heartbeats every 15 seconds (well within typical 60s watchdog timeout)
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
-
-	// Send immediate heartbeat
-	w.watchdog.Heartbeat(w.forward.ID())
-
-	for {
-		select {
-		case <-ticker.C:
-			w.watchdog.Heartbeat(w.forward.ID())
-		case <-w.ctx.Done():
-			return
-		}
 	}
 }
 
