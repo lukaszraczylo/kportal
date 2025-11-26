@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/events"
 	"github.com/nvm/kportal/internal/healthcheck"
 	"github.com/nvm/kportal/internal/k8s"
 	"github.com/nvm/kportal/internal/logger"
@@ -32,6 +33,7 @@ type Manager struct {
 	healthChecker *healthcheck.Checker
 	watchdog      *Watchdog
 	mdnsPublisher *mdns.Publisher
+	eventBus      *events.Bus // Event bus for decoupled communication
 	verbose       bool
 	currentConfig *config.Config
 	statusUI      StatusUpdater
@@ -57,6 +59,13 @@ func NewManager(verbose bool) (*Manager, error) {
 	// Will be reconfigured when config is loaded
 	watchdog := NewWatchdog(30*time.Second, 60*time.Second)
 
+	// Create event bus for decoupled communication between components
+	eventBus := events.NewBus()
+
+	// Wire up event bus to components
+	healthChecker.SetEventBus(eventBus)
+	watchdog.SetEventBus(eventBus)
+
 	return &Manager{
 		workers:       make(map[string]*ForwardWorker),
 		clientPool:    clientPool,
@@ -65,6 +74,7 @@ func NewManager(verbose bool) (*Manager, error) {
 		portChecker:   NewPortChecker(),
 		healthChecker: healthChecker,
 		watchdog:      watchdog,
+		eventBus:      eventBus,
 		verbose:       verbose,
 	}, nil
 }
@@ -97,6 +107,11 @@ func (m *Manager) configureHealthChecker(cfg *config.Config) {
 		MaxIdleTime:      cfg.GetMaxIdleTime(),
 	})
 
+	// Reconnect event bus to new health checker
+	if m.eventBus != nil {
+		m.healthChecker.SetEventBus(m.eventBus)
+	}
+
 	// Configure TCP settings on port forwarder
 	tcpKeepalive := cfg.GetTCPKeepalive()
 	dialTimeout := cfg.GetDialTimeout()
@@ -122,6 +137,11 @@ func (m *Manager) SetStatusUI(ui StatusUpdater) {
 // SetMDNSPublisher sets the mDNS publisher for the manager
 func (m *Manager) SetMDNSPublisher(publisher *mdns.Publisher) {
 	m.mdnsPublisher = publisher
+}
+
+// GetEventBus returns the event bus for subscribing to manager events
+func (m *Manager) GetEventBus() *events.Bus {
+	return m.eventBus
 }
 
 // Start initializes and starts all port-forwards from the configuration.
@@ -192,6 +212,11 @@ func (m *Manager) Stop() {
 	// Stop health checker and watchdog first
 	m.healthChecker.Stop()
 	m.watchdog.Stop()
+
+	// Close event bus
+	if m.eventBus != nil {
+		m.eventBus.Close()
+	}
 
 	// Stop mDNS publisher
 	if m.mdnsPublisher != nil {
@@ -349,19 +374,24 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 		m.statusUI.AddForward(fwd.ID(), &fwd)
 	}
 
-	// Register with watchdog
-	m.watchdog.RegisterWorker(fwd.ID(), func(forwardID string) {
+	// Create worker first so we can pass it to watchdog
+	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI, m.healthChecker, m.watchdog)
+
+	// Register with watchdog using the new responder interface
+	// This allows the watchdog to poll the worker for heartbeats centrally
+	// instead of each worker spawning its own heartbeat goroutine
+	m.watchdog.RegisterWorkerWithResponder(fwd.ID(), worker, func(forwardID string) {
 		logger.Warn("Watchdog triggered reconnection for hung worker", map[string]interface{}{
 			"forward_id": forwardID,
 		})
 
 		// Find and trigger reconnect on hung worker
 		m.workersMu.RLock()
-		worker, exists := m.workers[forwardID]
+		w, exists := m.workers[forwardID]
 		m.workersMu.RUnlock()
 
 		if exists {
-			worker.TriggerReconnect("watchdog detected hung worker")
+			w.TriggerReconnect("watchdog detected hung worker")
 		}
 	})
 
@@ -396,8 +426,7 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 		}
 	})
 
-	// Create and start worker
-	worker := NewForwardWorker(fwd, m.portForwarder, m.verbose, m.statusUI, m.healthChecker, m.watchdog)
+	// Start the worker (already created above)
 	worker.Start()
 
 	// Store worker

@@ -149,11 +149,13 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	startTime := time.Now()
+	maxBodySize := t.proxy.logger.GetMaxBodyLen()
 
-	// Read request body
+	// Read request body with size limit to prevent memory exhaustion
 	var reqBody []byte
+	var reqBodySize int
 	if req.Body != nil {
-		reqBody, _ = io.ReadAll(req.Body)
+		reqBody, reqBodySize = t.readBodyLimited(req.Body, maxBodySize)
 		req.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 	}
 
@@ -163,7 +165,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		Direction: "request",
 		Method:    req.Method,
 		Path:      req.URL.Path,
-		BodySize:  len(reqBody),
+		BodySize:  reqBodySize,
 		Body:      string(reqBody),
 	}
 
@@ -179,10 +181,11 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return nil, err
 	}
 
-	// Read response body
+	// Read response body with size limit to prevent memory exhaustion
 	var respBody []byte
+	var respBodySize int
 	if resp.Body != nil {
-		respBody, _ = io.ReadAll(resp.Body)
+		respBody, respBodySize = t.readBodyLimited(resp.Body, maxBodySize)
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 	}
 
@@ -195,7 +198,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		Method:     req.Method,
 		Path:       req.URL.Path,
 		StatusCode: resp.StatusCode,
-		BodySize:   len(respBody),
+		BodySize:   respBodySize,
 		Body:       string(respBody),
 		LatencyMs:  latency.Milliseconds(),
 	}
@@ -207,6 +210,33 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	t.proxy.logger.Log(respEntry)
 
 	return resp, nil
+}
+
+// readBodyLimited reads a body with a size limit to prevent memory exhaustion.
+// Returns the body content (up to maxSize bytes) and the actual content length.
+// If the body exceeds maxSize, it reads only maxSize bytes for logging but
+// consumes the entire body to get the true size for BodySize reporting.
+func (t *loggingTransport) readBodyLimited(body io.ReadCloser, maxSize int) ([]byte, int) {
+	// Read up to maxSize+1 to detect if there's more
+	limitedReader := io.LimitReader(body, int64(maxSize+1))
+	data, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return nil, 0
+	}
+
+	actualSize := len(data)
+	wasTruncated := actualSize > maxSize
+
+	// If we read exactly maxSize+1, there might be more data
+	// Discard the rest but count the bytes for accurate BodySize
+	if wasTruncated {
+		data = data[:maxSize] // Keep only maxSize bytes for logging
+		// Count remaining bytes without storing them
+		remaining, _ := io.Copy(io.Discard, body)
+		actualSize = maxSize + int(remaining)
+	}
+
+	return data, actualSize
 }
 
 // shouldLog checks if the request path matches the filter

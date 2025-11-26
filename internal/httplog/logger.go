@@ -110,3 +110,8 @@ func (l *Logger) Close() error {
 	}
 	return nil
 }
+
+// GetMaxBodyLen returns the maximum body length for logging
+func (l *Logger) GetMaxBodyLen() int {
+	return l.maxBodyLen
+}

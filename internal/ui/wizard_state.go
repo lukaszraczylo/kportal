@@ -405,6 +405,7 @@ type BenchmarkState struct {
 	progress   int
 	total      int
 	progressCh chan BenchmarkProgressMsg // Channel for progress updates
+	cancelFunc func()                    // Function to cancel the running benchmark
 
 	// Results
 	results *BenchmarkResults
@@ -465,10 +466,16 @@ type HTTPLogState struct {
 	filterMode   HTTPLogFilterMode
 	filterText   string
 	filterActive bool // true when typing in filter input
+
+	// Detail view
+	showingDetail bool   // true when viewing full entry details
+	detailScroll  int    // scroll position in detail view
+	copyMessage   string // temporary message after copying (e.g., "Copied!")
 }
 
 // HTTPLogEntry represents a single HTTP log entry for display
 type HTTPLogEntry struct {
+	RequestID  string // Used to match request/response pairs
 	Timestamp  string
 	Direction  string
 	Method     string
@@ -476,6 +483,13 @@ type HTTPLogEntry struct {
 	StatusCode int
 	LatencyMs  int64
 	BodySize   int
+
+	// Detail fields - for viewing full request/response
+	RequestHeaders  map[string]string
+	ResponseHeaders map[string]string
+	RequestBody     string
+	ResponseBody    string
+	Error           string
 }
 
 // newHTTPLogState creates a new HTTP log viewing state
@@ -527,13 +541,6 @@ func (s *HTTPLogState) getFilteredEntries() []HTTPLogEntry {
 	}
 
 	return filtered
-}
-
-// cycleFilterMode cycles through filter modes
-func (s *HTTPLogState) cycleFilterMode() {
-	s.filterMode = (s.filterMode + 1) % 4
-	s.cursor = 0
-	s.scrollOffset = 0
 }
 
 // getFilterModeLabel returns a label for the current filter mode

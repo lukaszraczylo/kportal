@@ -258,6 +258,9 @@ type HTTPLogEntryMsg struct {
 	Entry HTTPLogEntry
 }
 
+// clearCopyMessageMsg is sent to clear the copy confirmation message
+type clearCopyMessageMsg struct{}
+
 // listenBenchmarkProgressCmd listens for progress updates from the benchmark
 func listenBenchmarkProgressCmd(progressCh <-chan BenchmarkProgressMsg) tea.Cmd {
 	return func() tea.Msg {
@@ -272,7 +275,8 @@ func listenBenchmarkProgressCmd(progressCh <-chan BenchmarkProgressMsg) tea.Cmd 
 
 // runBenchmarkCmd runs a benchmark against the given port forward
 // It sends progress updates via tea.Batch until completion
-func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, concurrency, requests int, progressCh chan<- BenchmarkProgressMsg) tea.Cmd {
+// The ctx parameter allows the benchmark to be cancelled from outside
+func runBenchmarkCmd(ctx context.Context, forwardID string, localPort int, urlPath, method string, concurrency, requests int, progressCh chan<- BenchmarkProgressMsg) tea.Cmd {
 	return func() tea.Msg {
 		runner := benchmark.NewRunner()
 
@@ -284,6 +288,12 @@ func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, co
 			Requests:    requests,
 			Timeout:     30 * time.Second,
 			ProgressCallback: func(completed, total int) {
+				// Recover from panics in the callback
+				defer func() {
+					if r := recover(); r != nil {
+						// Silently recover - progress callback failure shouldn't crash the benchmark
+					}
+				}()
 				// Non-blocking send to progress channel
 				select {
 				case progressCh <- BenchmarkProgressMsg{
@@ -297,13 +307,23 @@ func runBenchmarkCmd(forwardID string, localPort int, urlPath, method string, co
 			},
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Use the provided context with a timeout as a safety limit
+		benchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
-		results, err := runner.Run(ctx, forwardID, cfg)
+		results, err := runner.Run(benchCtx, forwardID, cfg)
 
 		// Close the progress channel when done
 		close(progressCh)
+
+		// Check if cancelled
+		if ctx.Err() != nil {
+			return BenchmarkCompleteMsg{
+				ForwardID: forwardID,
+				Results:   nil,
+				Error:     fmt.Errorf("benchmark cancelled"),
+			}
+		}
 
 		return BenchmarkCompleteMsg{
 			ForwardID: forwardID,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/nvm/kportal/internal/logger"
@@ -20,6 +21,7 @@ type Watcher struct {
 	watcher    *fsnotify.Watcher
 	done       chan struct{}
 	verbose    bool
+	wg         sync.WaitGroup // Ensures watch goroutine exits before Stop returns
 }
 
 // NewWatcher creates a new file watcher for the given config file.
@@ -54,17 +56,21 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 
 // Start begins watching the configuration file for changes.
 func (w *Watcher) Start() {
+	w.wg.Add(1)
 	go w.watch()
 }
 
-// Stop stops watching the configuration file.
+// Stop stops watching the configuration file and waits for the watch goroutine to exit.
 func (w *Watcher) Stop() {
 	close(w.done)
 	w.watcher.Close()
+	w.wg.Wait() // Wait for watch goroutine to exit
 }
 
 // watch runs the file watching loop.
 func (w *Watcher) watch() {
+	defer w.wg.Done()
+
 	if w.verbose {
 		log.Printf("Watching configuration file: %s", w.configPath)
 	}

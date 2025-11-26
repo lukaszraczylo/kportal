@@ -1,13 +1,16 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
+	"golang.design/x/clipboard"
 )
 
 // isFilterableStep returns true if the step supports search/filter
@@ -51,6 +54,11 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "n": // Enter add wizard
 		m.ui.mu.Lock()
+		// Don't create a new wizard if one is already active
+		if m.ui.addWizard != nil || m.ui.removeWizard != nil || m.ui.benchmarkState != nil || m.ui.httpLogState != nil {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
 		if m.ui.discovery == nil || m.ui.mutator == nil {
 			// Dependencies not set up
 			m.ui.mu.Unlock()
@@ -67,6 +75,11 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "e": // Edit selected forward
 		m.ui.mu.Lock()
+		// Don't create a new wizard if one is already active
+		if m.ui.addWizard != nil || m.ui.removeWizard != nil || m.ui.benchmarkState != nil || m.ui.httpLogState != nil {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
 
 		if len(m.ui.forwardOrder) == 0 {
 			// No forwards to edit
@@ -133,6 +146,12 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d": // Delete currently selected forward - show confirmation
 		m.ui.mu.Lock()
 
+		// Don't overwrite existing confirmation dialog
+		if m.ui.deleteConfirming {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
+
 		if len(m.ui.forwardOrder) == 0 {
 			// No forwards to delete
 			m.ui.mu.Unlock()
@@ -163,13 +182,18 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.deleteConfirming = true
 		m.ui.deleteConfirmID = selectedID
 		m.ui.deleteConfirmAlias = selectedForward.Alias
-		m.ui.deleteConfirmCursor = 0 // Default to "No" for safety
+		m.ui.deleteConfirmCursor = 1 // Default to "No" for safety
 
 		m.ui.mu.Unlock()
 		return m, nil
 
 	case "b": // Benchmark selected forward
 		m.ui.mu.Lock()
+		// Don't create benchmark view if another modal is active
+		if m.ui.addWizard != nil || m.ui.removeWizard != nil || m.ui.benchmarkState != nil || m.ui.httpLogState != nil {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
 
 		if len(m.ui.forwardOrder) == 0 {
 			m.ui.mu.Unlock()
@@ -200,6 +224,11 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "l": // View HTTP logs for selected forward
 		m.ui.mu.Lock()
+		// Don't create log view if another modal is active
+		if m.ui.addWizard != nil || m.ui.removeWizard != nil || m.ui.benchmarkState != nil || m.ui.httpLogState != nil {
+			m.ui.mu.Unlock()
+			return m, nil
+		}
 
 		if len(m.ui.forwardOrder) == 0 {
 			m.ui.mu.Unlock()
@@ -223,18 +252,33 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.viewMode = ViewModeHTTPLog
 		m.ui.httpLogState = newHTTPLogState(selectedID, selectedForward.Alias)
 
+		// Capture subscriber and UI reference for the callback
+		subscriber := m.ui.httpLogSubscriber
+		ui := m.ui
+		m.ui.mu.Unlock()
+
 		// Subscribe to HTTP logs if subscriber is available
-		if m.ui.httpLogSubscriber != nil {
-			cleanup := m.ui.httpLogSubscriber(selectedID, func(entry HTTPLogEntry) {
-				// Add entry to state (thread-safe via Send)
-				if m.ui.program != nil {
-					m.ui.program.Send(HTTPLogEntryMsg{Entry: entry})
+		// This is done outside the lock to prevent deadlocks in the callback
+		if subscriber != nil {
+			cleanup := subscriber(selectedID, func(entry HTTPLogEntry) {
+				// Recover from panics in the callback
+				defer safeRecover("HTTPLogSubscriber callback")
+
+				// Use RLock to safely access program
+				ui.mu.RLock()
+				program := ui.program
+				ui.mu.RUnlock()
+
+				// Send entry to program (thread-safe via Send)
+				if program != nil {
+					program.Send(HTTPLogEntryMsg{Entry: entry})
 				}
 			})
-			m.ui.httpLogCleanup = cleanup
+			ui.mu.Lock()
+			ui.httpLogCleanup = cleanup
+			ui.mu.Unlock()
 		}
 
-		m.ui.mu.Unlock()
 		return m, nil
 	}
 
@@ -744,17 +788,21 @@ func (m model) handleContextsLoaded(msg ContextsLoadedMsg) (tea.Model, tea.Cmd) 
 		m.ui.addWizard.loading = false
 		m.ui.addWizard.error = msg.err
 		if msg.err == nil {
-			// Get current context and move it to the top
-			currentCtx, err := m.ui.discovery.GetCurrentContext()
-			if err == nil && currentCtx != "" {
-				// Reorder contexts with current first
-				reordered := []string{currentCtx}
-				for _, ctx := range msg.contexts {
-					if ctx != currentCtx {
-						reordered = append(reordered, ctx)
+			// Get current context and move it to the top (if discovery is available)
+			if m.ui.discovery != nil {
+				currentCtx, err := m.ui.discovery.GetCurrentContext()
+				if err == nil && currentCtx != "" {
+					// Reorder contexts with current first
+					reordered := []string{currentCtx}
+					for _, ctx := range msg.contexts {
+						if ctx != currentCtx {
+							reordered = append(reordered, ctx)
+						}
 					}
+					m.ui.addWizard.contexts = reordered
+				} else {
+					m.ui.addWizard.contexts = msg.contexts
 				}
-				m.ui.addWizard.contexts = reordered
 			} else {
 				m.ui.addWizard.contexts = msg.contexts
 			}
@@ -926,7 +974,11 @@ func (m model) handleBenchmarkKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "ctrl+c", "esc":
-		// Cancel and return to main view
+		// Cancel the running benchmark if active
+		if state.cancelFunc != nil {
+			state.cancelFunc()
+		}
+		// Return to main view
 		m.ui.viewMode = ViewModeMain
 		m.ui.benchmarkState = nil
 		return m, tea.ClearScreen
@@ -962,9 +1014,12 @@ func (m model) handleBenchmarkKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			state.total = state.requests
 			// Create progress channel with buffer for non-blocking sends
 			state.progressCh = make(chan BenchmarkProgressMsg, 10)
+			// Create cancellable context for the benchmark
+			ctx, cancel := context.WithCancel(context.Background())
+			state.cancelFunc = cancel
 			// Return batch command to run benchmark and listen for progress
 			return m, tea.Batch(
-				runBenchmarkCmd(state.forwardID, state.localPort, state.urlPath, state.method, state.concurrency, state.requests, state.progressCh),
+				runBenchmarkCmd(ctx, state.forwardID, state.localPort, state.urlPath, state.method, state.concurrency, state.requests, state.progressCh),
 				listenBenchmarkProgressCmd(state.progressCh),
 			)
 		case BenchmarkStepResults:
@@ -1095,6 +1150,62 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	filteredEntries := state.getFilteredEntries()
 
+	// If viewing detail, handle detail view keys
+	if state.showingDetail {
+		switch msg.String() {
+		case "esc", "q", "enter":
+			// Return to list view
+			state.showingDetail = false
+			state.detailScroll = 0
+			state.copyMessage = ""
+			return m, nil
+		case "up", "k":
+			if state.detailScroll > 0 {
+				state.detailScroll--
+			}
+			return m, nil
+		case "down", "j":
+			state.detailScroll++
+			return m, nil
+		case "pgup", "ctrl+u":
+			state.detailScroll -= 20
+			if state.detailScroll < 0 {
+				state.detailScroll = 0
+			}
+			return m, nil
+		case "pgdown", "ctrl+d":
+			state.detailScroll += 20
+			return m, nil
+		case "g":
+			state.detailScroll = 0
+			return m, nil
+		case "c":
+			// Copy response body to clipboard
+			if state.cursor >= 0 && state.cursor < len(filteredEntries) {
+				entry := filteredEntries[state.cursor]
+				if entry.ResponseBody != "" {
+					// Decompress if needed before copying
+					body := decompressContent(entry.ResponseBody, entry.ResponseHeaders)
+					if err := clipboard.Init(); err == nil {
+						clipboard.Write(clipboard.FmtText, []byte(body))
+						state.copyMessage = "Copied!"
+						// Clear the message after 2 seconds
+						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+							return clearCopyMessageMsg{}
+						})
+					} else {
+						state.copyMessage = "Clipboard unavailable"
+						return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+							return clearCopyMessageMsg{}
+						})
+					}
+				}
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "esc", "q":
 		// Cleanup subscription before closing
@@ -1106,6 +1217,14 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.viewMode = ViewModeMain
 		m.ui.httpLogState = nil
 		return m, tea.ClearScreen
+
+	case "enter":
+		// Show detail view for selected entry
+		if len(filteredEntries) > 0 && state.cursor >= 0 && state.cursor < len(filteredEntries) {
+			state.showingDetail = true
+			state.detailScroll = 0
+		}
+		return m, nil
 
 	case "up", "k":
 		if state.cursor > 0 {
@@ -1162,8 +1281,14 @@ func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		state.autoScroll = !state.autoScroll
 
 	case "f":
-		// Cycle filter mode
-		state.cycleFilterMode()
+		// Cycle filter mode (skip Text mode when cycling - use '/' for text filter)
+		state.filterMode = (state.filterMode + 1) % 4
+		if state.filterMode == HTTPLogFilterText {
+			// Skip Text mode when using 'f' - it's only accessible via '/'
+			state.filterMode = HTTPLogFilterNon200
+		}
+		state.cursor = 0
+		state.scrollOffset = 0
 
 	case "/":
 		// Enter text filter mode
@@ -1191,7 +1316,28 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 	}
 
 	state := m.ui.httpLogState
-	state.entries = append(state.entries, msg.Entry)
+	entry := msg.Entry
+
+	// If this is a response, try to find and merge with the matching request
+	if entry.Direction == "response" && entry.RequestID != "" {
+		// Search backwards (responses follow requests closely)
+		for i := len(state.entries) - 1; i >= 0 && i >= len(state.entries)-100; i-- {
+			if state.entries[i].RequestID == entry.RequestID && state.entries[i].Direction == "request" {
+				// Merge response data into the existing request entry
+				state.entries[i].Direction = "response"
+				state.entries[i].StatusCode = entry.StatusCode
+				state.entries[i].LatencyMs = entry.LatencyMs
+				state.entries[i].BodySize = entry.BodySize
+				state.entries[i].ResponseHeaders = entry.ResponseHeaders
+				state.entries[i].ResponseBody = entry.ResponseBody
+				state.entries[i].Error = entry.Error
+				return m, nil
+			}
+		}
+	}
+
+	// For requests or unmatched responses, append as new entry
+	state.entries = append(state.entries, entry)
 
 	// Cap entries to prevent memory growth (keep last 10000 entries)
 	const maxEntries = 10000
@@ -1206,7 +1352,11 @@ func (m model) handleHTTPLogEntry(msg HTTPLogEntryMsg) (tea.Model, tea.Cmd) {
 
 	// Auto-scroll to bottom if enabled
 	if state.autoScroll && len(state.entries) > 0 {
-		state.cursor = len(state.entries) - 1
+		filteredEntries := state.getFilteredEntries()
+		state.cursor = len(filteredEntries) - 1
+		if state.cursor < 0 {
+			state.cursor = 0
+		}
 	}
 
 	return m, nil

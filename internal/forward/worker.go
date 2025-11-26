@@ -29,7 +29,8 @@ type ForwardWorker struct {
 	cancel          context.CancelFunc
 	stopChan        chan struct{}
 	doneChan        chan struct{}
-	reconnectChan   chan string // Channel to trigger reconnection
+	reconnectChan   chan string   // Channel to trigger reconnection
+	successChan     chan struct{} // Channel to signal successful connection (for backoff reset)
 	verbose         bool
 	lastPod         string // Track the last pod we connected to
 	statusUI        StatusUpdater
@@ -52,12 +53,23 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		cancel:        cancel,
 		stopChan:      make(chan struct{}),
 		doneChan:      make(chan struct{}),
-		reconnectChan: make(chan string, 1), // Buffered to avoid blocking
+		reconnectChan: make(chan string, 1),   // Buffered to avoid blocking
+		successChan:   make(chan struct{}, 1), // Buffered to avoid blocking
 		verbose:       verbose,
 		statusUI:      statusUI,
 		healthChecker: healthChecker,
 		watchdog:      watchdog,
 		startTime:     time.Now(),
+	}
+}
+
+// signalConnectionSuccess signals that a connection was successfully established.
+// This is used to reset the backoff timer after a successful connection.
+func (w *ForwardWorker) signalConnectionSuccess() {
+	select {
+	case w.successChan <- struct{}{}:
+	default:
+		// Channel already has pending signal
 	}
 }
 
@@ -100,16 +112,33 @@ func (w *ForwardWorker) Stop() {
 	}
 }
 
+// IsAlive implements HeartbeatResponder interface.
+// Returns true if the worker goroutine is still running and responsive.
+func (w *ForwardWorker) IsAlive() bool {
+	select {
+	case <-w.doneChan:
+		return false
+	case <-w.ctx.Done():
+		return false
+	default:
+		return true
+	}
+}
+
+// GetForwardID implements HeartbeatResponder interface.
+func (w *ForwardWorker) GetForwardID() string {
+	return w.forward.ID()
+}
+
 // run is the main worker loop that handles retries.
 func (w *ForwardWorker) run() {
 	defer close(w.doneChan)
 	defer w.stopHTTPProxy() // Ensure proxy is stopped on exit
 
-	// Start heartbeat goroutine to continuously send heartbeats to watchdog
-	// This prevents false "hung worker" detection when connections are long-lived
-	if w.watchdog != nil {
-		go w.heartbeatLoop()
-	}
+	// Note: Heartbeat management is now centralized in the Watchdog.
+	// The watchdog polls workers via the HeartbeatResponder interface (IsAlive method)
+	// instead of each worker spawning its own heartbeat goroutine.
+	// This reduces goroutine count from 2N to N for N workers.
 
 	// Start HTTP logging proxy if enabled
 	if err := w.startHTTPProxy(); err != nil {
@@ -123,13 +152,16 @@ func (w *ForwardWorker) run() {
 	backoff := retry.NewBackoff()
 
 	for {
-		// Check if we should stop
+		// Check if we should stop or reset backoff on successful connection
 		select {
 		case <-w.ctx.Done():
 			if w.verbose {
 				log.Printf("[%s] Worker stopped", w.forward.ID())
 			}
 			return
+		case <-w.successChan:
+			// Reset backoff after successful connection
+			backoff.Reset()
 		default:
 		}
 
@@ -225,26 +257,6 @@ func (w *ForwardWorker) run() {
 	}
 }
 
-// heartbeatLoop sends periodic heartbeats to the watchdog to prove the worker is alive
-// This runs in a separate goroutine and continues throughout the worker's lifetime
-func (w *ForwardWorker) heartbeatLoop() {
-	// Send heartbeats every 15 seconds (well within typical 60s watchdog timeout)
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
-
-	// Send immediate heartbeat
-	w.watchdog.Heartbeat(w.forward.ID())
-
-	for {
-		select {
-		case <-ticker.C:
-			w.watchdog.Heartbeat(w.forward.ID())
-		case <-w.ctx.Done():
-			return
-		}
-	}
-}
-
 // establishForward establishes a port-forward connection.
 // This blocks until the connection is closed or an error occurs.
 func (w *ForwardWorker) establishForward(podName string) error {
@@ -267,15 +279,26 @@ func (w *ForwardWorker) establishForward(podName string) error {
 		w.forwardCancelMu.Unlock()
 	}()
 
+	// Use sync.Once to ensure stopChan is closed exactly once
+	var closeOnce sync.Once
+	closeStopChan := func() {
+		closeOnce.Do(func() {
+			close(stopChan)
+		})
+	}
+
+	// Ensure stopChan is closed when this function exits (prevents goroutine leak)
+	defer closeStopChan()
+
 	// Start a goroutine to monitor for stop signal and reconnect triggers
 	go func() {
 		select {
 		case <-w.stopChan:
-			close(stopChan)
+			closeStopChan()
 		case <-w.reconnectChan:
-			close(stopChan)
+			closeStopChan()
 		case <-forwardCtx.Done():
-			close(stopChan)
+			closeStopChan()
 		}
 	}()
 
@@ -326,6 +349,8 @@ func (w *ForwardWorker) establishForward(podName string) error {
 		if w.healthChecker != nil {
 			w.healthChecker.MarkConnected(w.forward.ID())
 		}
+		// Signal success back to caller so backoff can be reset
+		w.signalConnectionSuccess()
 	case err := <-errChan:
 		return fmt.Errorf("failed to establish forward: %w", err)
 	case <-w.ctx.Done():
