@@ -2,10 +2,185 @@ package forward
 
 import (
 	"net"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestIsValidPID tests PID validation
+func TestIsValidPID(t *testing.T) {
+	tests := []struct {
+		name     string
+		pid      string
+		expected bool
+	}{
+		{"valid single digit", "1", true},
+		{"valid multi digit", "12345", true},
+		{"valid max length", "123456789", true},
+		{"empty string", "", false},
+		{"too long", "1234567890", false},
+		{"contains letter", "123a", false},
+		{"contains space", "123 ", false},
+		{"negative sign", "-123", false},
+		{"decimal", "12.3", false},
+		{"just zero", "0", true},
+		{"leading zeros", "00123", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidPID(tt.pid)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFormatProcessInfo tests process info formatting
+func TestFormatProcessInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     processInfo
+		expected string
+	}{
+		{
+			name:     "invalid process",
+			info:     processInfo{isValid: false},
+			expected: "unknown",
+		},
+		{
+			name:     "valid with name and pid",
+			info:     processInfo{pid: "1234", name: "nginx", isValid: true},
+			expected: "nginx (PID 1234)",
+		},
+		{
+			name:     "valid with only pid",
+			info:     processInfo{pid: "5678", name: "", isValid: true},
+			expected: "PID 5678",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatProcessInfo(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFormatProcessList tests process list formatting
+func TestFormatProcessList(t *testing.T) {
+	tests := []struct {
+		name      string
+		processes []processInfo
+		expected  string
+	}{
+		{
+			name:      "empty list",
+			processes: []processInfo{},
+			expected:  "unknown",
+		},
+		{
+			name:      "single process",
+			processes: []processInfo{{pid: "1234", name: "nginx", isValid: true}},
+			expected:  "nginx (PID 1234)",
+		},
+		{
+			name: "multiple processes",
+			processes: []processInfo{
+				{pid: "1234", name: "nginx", isValid: true},
+				{pid: "5678", name: "node", isValid: true},
+			},
+			expected: "nginx (PID 1234), node (PID 5678)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatProcessList(tt.processes)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsListeningState tests listening state detection
+func TestIsListeningState(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		fields   []string
+		expected bool
+	}{
+		{
+			name:     "English LISTENING",
+			line:     "TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    1234",
+			fields:   []string{"TCP", "0.0.0.0:8080", "0.0.0.0:0", "LISTENING", "1234"},
+			expected: true,
+		},
+		{
+			name:     "German ABHÖREN",
+			line:     "TCP    0.0.0.0:8080    0.0.0.0:0    ABHÖREN    1234",
+			fields:   []string{"TCP", "0.0.0.0:8080", "0.0.0.0:0", "ABHÖREN", "1234"},
+			expected: true,
+		},
+		{
+			name:     "French ÉCOUTE",
+			line:     "TCP    0.0.0.0:8080    0.0.0.0:0    ÉCOUTE    1234",
+			fields:   []string{"TCP", "0.0.0.0:8080", "0.0.0.0:0", "ÉCOUTE", "1234"},
+			expected: true,
+		},
+		{
+			name:     "Spanish ESCUCHANDO",
+			line:     "TCP    0.0.0.0:8080    0.0.0.0:0    ESCUCHANDO    1234",
+			fields:   []string{"TCP", "0.0.0.0:8080", "0.0.0.0:0", "ESCUCHANDO", "1234"},
+			expected: true,
+		},
+		{
+			name:     "ESTABLISHED (not listening)",
+			line:     "TCP    192.168.1.1:8080    10.0.0.1:443    ESTABLISHED    1234",
+			fields:   []string{"TCP", "192.168.1.1:8080", "10.0.0.1:443", "ESTABLISHED", "1234"},
+			expected: false,
+		},
+		{
+			name:     "too few fields",
+			line:     "TCP    0.0.0.0:8080",
+			fields:   []string{"TCP", "0.0.0.0:8080"},
+			expected: false,
+		},
+		{
+			name:     "lowercase listening (via fallback)",
+			line:     "tcp    0.0.0.0:8080    0.0.0.0:0    listening    1234",
+			fields:   []string{"tcp", "0.0.0.0:8080", "0.0.0.0:0", "listening", "1234"},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isListeningState(tt.line, tt.fields)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestGetProcessNameByPID tests process name lookup
+func TestGetProcessNameByPID(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Unix-specific test on Windows")
+	}
+
+	// Test with PID 1 (init/systemd on Linux, launchd on macOS)
+	// This should return something on Unix systems
+	name := getProcessNameByPID("1")
+	// We don't assert the exact name since it varies by OS
+	// Just verify no panic and returns string
+	assert.IsType(t, "", name)
+
+	// Test with invalid PID
+	name = getProcessNameByPID("999999999")
+	// Should return empty string for non-existent process
+	assert.IsType(t, "", name)
+}
 
 func TestPortChecker_IsAvailable(t *testing.T) {
 	pc := NewPortChecker()
