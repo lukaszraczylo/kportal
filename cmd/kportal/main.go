@@ -480,12 +480,21 @@ func main() {
 	} else {
 		// Interactive mode with bubbletea
 		// Setup config watcher in background
-		watcher, err := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
+		var watcher *config.Watcher
+		watcher, err = config.NewWatcher(*configFile, func(newCfg *config.Config) error {
 			return manager.Reload(newCfg)
 		}, *verbose)
 		if err == nil {
 			watcher.Start()
-			defer watcher.Stop()
+		}
+
+		// Cleanup function to ensure all resources are released
+		cleanup := func() {
+			bubbleTeaUI.Stop()
+			manager.Stop()
+			if watcher != nil {
+				watcher.Stop()
+			}
 		}
 
 		// Setup signal handler for clean shutdown
@@ -493,8 +502,7 @@ func main() {
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			<-sigChan
-			bubbleTeaUI.Stop()
-			manager.Stop()
+			cleanup()
 			os.Exit(0)
 		}()
 
@@ -504,12 +512,12 @@ func main() {
 		// Start the bubbletea app (blocks until quit)
 		if err := bubbleTeaUI.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to start UI: %v\n", err)
-			manager.Stop()
+			cleanup()
 			os.Exit(1)
 		}
 
-		// Clean shutdown
-		manager.Stop()
+		// Clean shutdown (normal exit via UI quit)
+		cleanup()
 	}
 }
 

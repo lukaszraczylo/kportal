@@ -11,6 +11,15 @@ import (
 	"github.com/nvm/kportal/internal/config"
 )
 
+// bufferPool is a sync.Pool for reusing buffers in data transfer health checks.
+// This reduces GC pressure by avoiding allocation of 1KB buffers on every health check.
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, dataTransferSize)
+		return &buf
+	},
+}
+
 const (
 	startupGracePeriod = 10 * time.Second
 	dataTransferSize   = 1024 // bytes to read in data transfer test
@@ -366,7 +375,9 @@ func (c *Checker) checkDataTransfer(port int) error {
 	// 1. Send a banner (SSH, FTP, etc) - we'll read it successfully
 	// 2. Wait for client to send first (HTTP, postgres) - we'll timeout (which is OK)
 	// 3. Hung/stale connection - will timeout with different error
-	buf := make([]byte, dataTransferSize)
+	bufPtr := bufferPool.Get().(*[]byte)
+	buf := *bufPtr
+	defer bufferPool.Put(bufPtr)
 	_, err = conn.Read(buf)
 
 	// We expect either:

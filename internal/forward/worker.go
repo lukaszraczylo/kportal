@@ -29,7 +29,8 @@ type ForwardWorker struct {
 	cancel          context.CancelFunc
 	stopChan        chan struct{}
 	doneChan        chan struct{}
-	reconnectChan   chan string // Channel to trigger reconnection
+	reconnectChan   chan string   // Channel to trigger reconnection
+	successChan     chan struct{} // Channel to signal successful connection (for backoff reset)
 	verbose         bool
 	lastPod         string // Track the last pod we connected to
 	statusUI        StatusUpdater
@@ -52,12 +53,23 @@ func NewForwardWorker(fwd config.Forward, portForwarder *k8s.PortForwarder, verb
 		cancel:        cancel,
 		stopChan:      make(chan struct{}),
 		doneChan:      make(chan struct{}),
-		reconnectChan: make(chan string, 1), // Buffered to avoid blocking
+		reconnectChan: make(chan string, 1),   // Buffered to avoid blocking
+		successChan:   make(chan struct{}, 1), // Buffered to avoid blocking
 		verbose:       verbose,
 		statusUI:      statusUI,
 		healthChecker: healthChecker,
 		watchdog:      watchdog,
 		startTime:     time.Now(),
+	}
+}
+
+// signalConnectionSuccess signals that a connection was successfully established.
+// This is used to reset the backoff timer after a successful connection.
+func (w *ForwardWorker) signalConnectionSuccess() {
+	select {
+	case w.successChan <- struct{}{}:
+	default:
+		// Channel already has pending signal
 	}
 }
 
@@ -123,13 +135,16 @@ func (w *ForwardWorker) run() {
 	backoff := retry.NewBackoff()
 
 	for {
-		// Check if we should stop
+		// Check if we should stop or reset backoff on successful connection
 		select {
 		case <-w.ctx.Done():
 			if w.verbose {
 				log.Printf("[%s] Worker stopped", w.forward.ID())
 			}
 			return
+		case <-w.successChan:
+			// Reset backoff after successful connection
+			backoff.Reset()
 		default:
 		}
 
@@ -267,15 +282,26 @@ func (w *ForwardWorker) establishForward(podName string) error {
 		w.forwardCancelMu.Unlock()
 	}()
 
+	// Use sync.Once to ensure stopChan is closed exactly once
+	var closeOnce sync.Once
+	closeStopChan := func() {
+		closeOnce.Do(func() {
+			close(stopChan)
+		})
+	}
+
+	// Ensure stopChan is closed when this function exits (prevents goroutine leak)
+	defer closeStopChan()
+
 	// Start a goroutine to monitor for stop signal and reconnect triggers
 	go func() {
 		select {
 		case <-w.stopChan:
-			close(stopChan)
+			closeStopChan()
 		case <-w.reconnectChan:
-			close(stopChan)
+			closeStopChan()
 		case <-forwardCtx.Done():
-			close(stopChan)
+			closeStopChan()
 		}
 	}()
 
@@ -326,6 +352,8 @@ func (w *ForwardWorker) establishForward(podName string) error {
 		if w.healthChecker != nil {
 			w.healthChecker.MarkConnected(w.forward.ID())
 		}
+		// Signal success back to caller so backoff can be reset
+		w.signalConnectionSuccess()
 	case err := <-errChan:
 		return fmt.Errorf("failed to establish forward: %w", err)
 	case <-w.ctx.Done():

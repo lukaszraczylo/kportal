@@ -173,21 +173,31 @@ func (r *ResourceResolver) resolvePodSelector(ctx context.Context, contextName, 
 }
 
 // getFromCache retrieves a cached resolution result if it exists and hasn't expired.
+// Expired entries are removed to prevent memory growth over time.
 func (r *ResourceResolver) getFromCache(key string) string {
 	r.cacheMu.RLock()
-	defer r.cacheMu.RUnlock()
-
 	entry, exists := r.cache[key]
 	if !exists {
+		r.cacheMu.RUnlock()
 		return ""
 	}
 
 	// Check if expired
 	if time.Now().After(entry.expiresAt) {
+		r.cacheMu.RUnlock()
+		// Upgrade to write lock and delete expired entry
+		r.cacheMu.Lock()
+		// Double-check entry still exists and is still expired (may have been updated)
+		if entry, exists := r.cache[key]; exists && time.Now().After(entry.expiresAt) {
+			delete(r.cache, key)
+		}
+		r.cacheMu.Unlock()
 		return ""
 	}
 
-	return entry.resource.Name
+	name := entry.resource.Name
+	r.cacheMu.RUnlock()
+	return name
 }
 
 // putInCache stores a resolution result in the cache with TTL.
