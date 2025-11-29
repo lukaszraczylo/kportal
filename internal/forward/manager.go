@@ -169,8 +169,10 @@ func (m *Manager) Start(cfg *config.Config) error {
 	// Get all forwards from config
 	forwards := cfg.GetAllForwards()
 
+	// Empty config is valid - user can add forwards later via TUI
 	if len(forwards) == 0 {
-		return fmt.Errorf("no forwards configured")
+		log.Printf("No forwards configured - use 'n' to add forwards")
+		return nil
 	}
 
 	// Check port availability before starting

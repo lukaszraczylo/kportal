@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -48,6 +49,23 @@ var (
 	convertOutput = flag.String("convert-output", ".kportal.yaml", "Output file for converted configuration")
 	appVersion    = "0.1.0" // Set via ldflags during build
 )
+
+// promptCreateConfig asks the user if they want to create a new config file.
+// Returns true if the user answers yes, false otherwise.
+func promptCreateConfig(path string) bool {
+	fmt.Printf("Configuration file not found: %s\n", path)
+	fmt.Print("Would you like to create an empty configuration? [Y/n] ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	// Empty response (just Enter) defaults to yes
+	return response == "" || response == "y" || response == "yes"
+}
 
 func main() {
 	flag.Parse()
@@ -173,14 +191,38 @@ func main() {
 
 	// Load configuration
 	cfg, err := config.LoadConfig(*configFile)
+	configIsNew := false
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		if err == config.ErrConfigNotFound {
+			// Config file doesn't exist - offer to create it
+			if !promptCreateConfig(*configFile) {
+				os.Exit(0)
+			}
+			// Create empty config file
+			if err := config.CreateEmptyConfigFile(*configFile); err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Created %s\n", *configFile)
+			fmt.Println("Use 'n' in the UI to add port forwards, or edit the file manually.")
+			fmt.Println()
+
+			// Load the newly created config
+			cfg, err = config.LoadConfig(*configFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+				os.Exit(1)
+			}
+			configIsNew = true
+		} else {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	// Validate configuration
+	// Validate configuration (allow empty configs for newly created files)
 	validator := config.NewValidator()
-	if errs := validator.ValidateConfig(cfg); len(errs) > 0 {
+	if errs := validator.ValidateConfigWithOptions(cfg, configIsNew || cfg.IsEmpty()); len(errs) > 0 {
 		fmt.Fprint(os.Stderr, config.FormatValidationErrors(errs))
 		os.Exit(1)
 	}

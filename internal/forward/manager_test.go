@@ -124,8 +124,8 @@ func TestManager_Start_EmptyForwards(t *testing.T) {
 
 	cfg := &config.Config{}
 	err = manager.Start(cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no forwards configured")
+	// Empty config is now valid - allows users to add forwards via TUI
+	assert.NoError(t, err)
 }
 
 // TestManager_Reload_NilConfig tests reloading with nil config

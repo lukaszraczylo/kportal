@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,6 +10,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// ErrConfigNotFound is returned when the configuration file does not exist
+var ErrConfigNotFound = fmt.Errorf("config file not found")
 
 const (
 	// maxConfigSize is the maximum allowed configuration file size (10MB)
@@ -282,6 +286,9 @@ func LoadConfig(path string) (*Config, error) {
 	// Validate file size before reading
 	fileInfo, err := os.Stat(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrConfigNotFound
+		}
 		return nil, fmt.Errorf("failed to stat config file: %w", err)
 	}
 
@@ -336,4 +343,59 @@ func (c *Config) GetAllForwards() []Forward {
 	}
 
 	return forwards
+}
+
+// NewEmptyConfig returns a minimal empty configuration with no forwards.
+// This is used when creating a new config file for the first time.
+func NewEmptyConfig() *Config {
+	return &Config{
+		Contexts: []Context{},
+	}
+}
+
+// IsEmpty returns true if the configuration has no forwards defined.
+func (c *Config) IsEmpty() bool {
+	return len(c.Contexts) == 0 || len(c.GetAllForwards()) == 0
+}
+
+// CreateEmptyConfigFile creates a new empty configuration file at the given path.
+// Returns an error if the file already exists or cannot be created.
+func CreateEmptyConfigFile(path string) error {
+	// Check if file already exists
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("config file already exists: %s", path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to check config file: %w", err)
+	}
+
+	cfg := NewEmptyConfig()
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal empty config: %w", err)
+	}
+
+	// Add a helpful comment header
+	header := `# kportal configuration file
+# Add port forwards using the 'n' key in the TUI, or manually add them below.
+#
+# Example forward:
+#   contexts:
+#     - name: my-cluster
+#       namespaces:
+#         - name: default
+#           forwards:
+#             - resource: service/my-service
+#               protocol: tcp
+#               port: 8080
+#               localPort: 8080
+#
+`
+	content := header + string(data)
+
+	// Write with restrictive permissions (0600)
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }

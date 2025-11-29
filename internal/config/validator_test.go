@@ -972,3 +972,141 @@ func TestIsAlphanumeric(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_ValidateConfigWithOptions(t *testing.T) {
+	validator := NewValidator()
+
+	tests := []struct {
+		name         string
+		config       *Config
+		allowEmpty   bool
+		expectErrors bool
+	}{
+		{
+			name:         "empty config - strict mode",
+			config:       &Config{Contexts: []Context{}},
+			allowEmpty:   false,
+			expectErrors: true,
+		},
+		{
+			name:         "empty config - allow empty",
+			config:       &Config{Contexts: []Context{}},
+			allowEmpty:   true,
+			expectErrors: false,
+		},
+		{
+			name:         "nil contexts - allow empty",
+			config:       &Config{},
+			allowEmpty:   true,
+			expectErrors: false,
+		},
+		{
+			name: "context with no forwards - allow empty",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "dev",
+						Namespaces: []Namespace{
+							{Name: "default", Forwards: []Forward{}},
+						},
+					},
+				},
+			},
+			allowEmpty:   true,
+			expectErrors: false,
+		},
+		{
+			name: "valid config - strict mode",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "dev-cluster",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{
+										Resource:      "pod/my-app",
+										Protocol:      "tcp",
+										Port:          8080,
+										LocalPort:     8080,
+										contextName:   "dev-cluster",
+										namespaceName: "default",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			allowEmpty:   false,
+			expectErrors: false,
+		},
+		{
+			name: "valid config - allow empty (should still validate)",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "dev-cluster",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{
+										Resource:      "pod/my-app",
+										Protocol:      "tcp",
+										Port:          8080,
+										LocalPort:     8080,
+										contextName:   "dev-cluster",
+										namespaceName: "default",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			allowEmpty:   true,
+			expectErrors: false,
+		},
+		{
+			name: "invalid forward in non-empty config - allow empty still validates",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "dev-cluster",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{
+										Resource:      "pod/my-app",
+										Protocol:      "tcp",
+										Port:          0, // Invalid port
+										LocalPort:     8080,
+										contextName:   "dev-cluster",
+										namespaceName: "default",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			allowEmpty:   true,
+			expectErrors: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validator.ValidateConfigWithOptions(tt.config, tt.allowEmpty)
+
+			if tt.expectErrors {
+				assert.NotEmpty(t, errs, "expected validation errors")
+			} else {
+				assert.Empty(t, errs, "expected no validation errors, got: %v", errs)
+			}
+		})
+	}
+}

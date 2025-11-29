@@ -97,7 +97,7 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 	cfg, err := LoadConfig("/non/existent/path/.kportal.yaml")
 	assert.Error(t, err, "LoadConfig should fail with non-existent file")
 	assert.Nil(t, cfg, "config should be nil on error")
-	assert.Contains(t, err.Error(), "failed to stat config file", "error should mention stat failure")
+	assert.Equal(t, ErrConfigNotFound, err, "should return ErrConfigNotFound")
 }
 
 func TestForward_ID(t *testing.T) {
@@ -396,4 +396,124 @@ func TestHTTPLogSpec_UnmarshalYAML(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewEmptyConfig(t *testing.T) {
+	cfg := NewEmptyConfig()
+	assert.NotNil(t, cfg, "NewEmptyConfig should return non-nil config")
+	assert.Empty(t, cfg.Contexts, "NewEmptyConfig should have empty contexts")
+	assert.True(t, cfg.IsEmpty(), "NewEmptyConfig should be considered empty")
+}
+
+func TestConfig_IsEmpty(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *Config
+		expected bool
+	}{
+		{
+			name:     "nil contexts",
+			config:   &Config{},
+			expected: true,
+		},
+		{
+			name:     "empty contexts slice",
+			config:   &Config{Contexts: []Context{}},
+			expected: true,
+		},
+		{
+			name: "context with empty namespaces",
+			config: &Config{
+				Contexts: []Context{
+					{Name: "test", Namespaces: []Namespace{}},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "context with namespace but no forwards",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "test",
+						Namespaces: []Namespace{
+							{Name: "default", Forwards: []Forward{}},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "config with forward",
+			config: &Config{
+				Contexts: []Context{
+					{
+						Name: "test",
+						Namespaces: []Namespace{
+							{
+								Name: "default",
+								Forwards: []Forward{
+									{Resource: "pod/app", Port: 8080, LocalPort: 8080},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.config.IsEmpty())
+		})
+	}
+}
+
+func TestCreateEmptyConfigFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	// Create empty config file
+	err := CreateEmptyConfigFile(configPath)
+	assert.NoError(t, err, "CreateEmptyConfigFile should succeed")
+
+	// Verify file exists
+	_, err = os.Stat(configPath)
+	assert.NoError(t, err, "config file should exist")
+
+	// Verify file is readable and parseable
+	cfg, err := LoadConfig(configPath)
+	assert.NoError(t, err, "should be able to load created config")
+	assert.NotNil(t, cfg, "config should not be nil")
+	assert.True(t, cfg.IsEmpty(), "created config should be empty")
+
+	// Verify file permissions (0600)
+	info, _ := os.Stat(configPath)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(), "file should have 0600 permissions")
+
+	// Verify file contains helpful header
+	content, _ := os.ReadFile(configPath)
+	assert.Contains(t, string(content), "# kportal configuration file", "should contain header comment")
+	assert.Contains(t, string(content), "Example forward", "should contain example")
+}
+
+func TestCreateEmptyConfigFile_AlreadyExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	// Create existing file
+	err := os.WriteFile(configPath, []byte("existing content"), 0644)
+	assert.NoError(t, err)
+
+	// Try to create config file - should fail
+	err = CreateEmptyConfigFile(configPath)
+	assert.Error(t, err, "CreateEmptyConfigFile should fail when file exists")
+	assert.Contains(t, err.Error(), "already exists")
+
+	// Verify original content is preserved
+	content, _ := os.ReadFile(configPath)
+	assert.Equal(t, "existing content", string(content))
 }

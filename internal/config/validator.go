@@ -37,6 +37,13 @@ func NewValidator() *Validator {
 
 // ValidateConfig validates the entire configuration and returns all errors found.
 func (v *Validator) ValidateConfig(cfg *Config) []ValidationError {
+	return v.ValidateConfigWithOptions(cfg, false)
+}
+
+// ValidateConfigWithOptions validates configuration with configurable strictness.
+// When allowEmpty is true, empty configurations (no contexts/forwards) are allowed.
+// This is useful for newly created config files where the user will add forwards via the TUI.
+func (v *Validator) ValidateConfigWithOptions(cfg *Config, allowEmpty bool) []ValidationError {
 	var errs []ValidationError
 
 	if cfg == nil {
@@ -44,6 +51,12 @@ func (v *Validator) ValidateConfig(cfg *Config) []ValidationError {
 			Field:   "config",
 			Message: "Configuration is nil",
 		}}
+	}
+
+	// If empty configs are allowed and this config is empty, skip structure validation
+	if allowEmpty && cfg.IsEmpty() {
+		// Still validate health check and reliability if present (they don't require forwards)
+		return errs
 	}
 
 	// Validate structure
