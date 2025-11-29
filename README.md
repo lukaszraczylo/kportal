@@ -57,7 +57,7 @@ kportal manages multiple Kubernetes port-forwards with an interactive terminal i
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install lukaszraczylo/brew-taps/kportal
+brew install lukaszraczylo/taps/kportal
 ```
 
 ### Quick Install
