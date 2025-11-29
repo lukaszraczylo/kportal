@@ -602,20 +602,82 @@ func (m model) renderMainView() string {
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 
-	footer := fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Bench  %s: Logs  %s: Quit  │  Total: %d",
-		keyStyle.Render("↑↓"),
-		keyStyle.Render("jk"),
-		keyStyle.Render("Space"),
-		keyStyle.Render("n"),
-		keyStyle.Render("e"),
-		keyStyle.Render("d"),
-		keyStyle.Render("b"),
-		keyStyle.Render("l"),
-		keyStyle.Render("q"),
-		len(m.ui.forwardOrder))
+	// Get terminal width for footer wrapping
+	termWidth := m.termWidth
+	if termWidth == 0 {
+		termWidth = 120
+	}
 
-	// Fill space to push footer to bottom (reserve 2 lines: 1 for spacing, 1 for footer)
-	footerHeight := 2
+	// Define key bindings as structured data for flexible rendering
+	type keyBinding struct {
+		key  string
+		desc string
+	}
+	bindings := []keyBinding{
+		{"↑↓/jk", "Navigate"},
+		{"Space", "Toggle"},
+		{"n", "New"},
+		{"e", "Edit"},
+		{"d", "Delete"},
+		{"b", "Bench"},
+		{"l", "Logs"},
+		{"q", "Quit"},
+	}
+
+	// Build footer lines that fit within terminal width
+	var footerLines []string
+	var currentLine strings.Builder
+	currentLineVisualLen := 0
+
+	// Calculate how much space we need for the total count suffix
+	totalSuffix := fmt.Sprintf("  │  Total: %d", len(m.ui.forwardOrder))
+	totalSuffixLen := len(totalSuffix)
+
+	// Available width (account for some margin)
+	availableWidth := termWidth - 4
+
+	for i, binding := range bindings {
+		// Build this binding's text
+		keyRendered := keyStyle.Render(binding.key)
+		bindingText := keyRendered + ": " + binding.desc
+		// Visual length without ANSI codes
+		bindingVisualLen := len(binding.key) + 2 + len(binding.desc)
+
+		// Add separator if not first item on line
+		separator := ""
+		separatorLen := 0
+		if currentLine.Len() > 0 {
+			separator = "  "
+			separatorLen = 2
+		}
+
+		// Check if this binding fits on current line
+		// For the last binding, also need to fit the total suffix
+		neededWidth := currentLineVisualLen + separatorLen + bindingVisualLen
+		if i == len(bindings)-1 {
+			neededWidth += totalSuffixLen
+		}
+
+		if neededWidth > availableWidth && currentLine.Len() > 0 {
+			// Start a new line
+			footerLines = append(footerLines, currentLine.String())
+			currentLine.Reset()
+			currentLineVisualLen = 0
+			separator = ""
+			separatorLen = 0
+		}
+
+		currentLine.WriteString(separator)
+		currentLine.WriteString(bindingText)
+		currentLineVisualLen += separatorLen + bindingVisualLen
+	}
+
+	// Add total count to the last line
+	currentLine.WriteString(totalSuffix)
+	footerLines = append(footerLines, currentLine.String())
+
+	// Calculate footer height
+	footerHeight := len(footerLines) + 1 // +1 for the blank line before footer
 	remainingLines := termHeight - currentLines - footerHeight
 	if remainingLines > 0 {
 		b.WriteString(strings.Repeat("\n", remainingLines))
@@ -623,7 +685,12 @@ func (m model) renderMainView() string {
 
 	// Add footer at bottom
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render(footer))
+	for i, line := range footerLines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(footerStyle.Render(line))
+	}
 
 	return b.String()
 }
@@ -736,7 +803,7 @@ func (m model) renderDeleteConfirmation() string {
 	}
 
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("←/→: Navigate  Enter: Confirm  Esc: Cancel"))
+	b.WriteString(wrapHelpText("←/→: Navigate  Enter: Confirm  Esc: Cancel", wizardHelpWidth(m.termWidth)))
 
 	// Wrap in a box using wizard style
 	boxStyle := lipgloss.NewStyle().

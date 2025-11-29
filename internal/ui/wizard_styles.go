@@ -194,6 +194,96 @@ func renderTextInput(label, value string, valid bool) string {
 	return b.String()
 }
 
+// wizardHelpWidth returns an appropriate width for wizard help text
+// based on terminal width. For modals, we use a sensible maximum.
+func wizardHelpWidth(termWidth int) int {
+	if termWidth == 0 {
+		termWidth = 80
+	}
+	// Wizard modals shouldn't be wider than 70 chars typically
+	// but on narrow terminals, use available space minus padding
+	maxWidth := 70
+	available := termWidth - 10 // account for modal borders and padding
+	if available < maxWidth {
+		return available
+	}
+	return maxWidth
+}
+
+// wrapHelpText wraps help text to fit within the given width.
+// Help text is expected to be in the format "key: action  key: action  ..."
+// separated by double spaces. On smaller screens, it wraps to multiple lines.
+func wrapHelpText(text string, width int) string {
+	if width <= 0 {
+		width = 80 // Default width
+	}
+
+	// Account for some padding/margin
+	availableWidth := width - 4
+	if availableWidth < 20 {
+		availableWidth = 20
+	}
+
+	// If text fits, return as-is
+	if len(text) <= availableWidth {
+		return helpStyle.Render(text)
+	}
+
+	// Split by double-space separator (common in help text)
+	parts := strings.Split(text, "  ")
+	if len(parts) <= 1 {
+		// No double-space separators, just truncate
+		if len(text) > availableWidth-3 {
+			return helpStyle.Render(text[:availableWidth-3] + "...")
+		}
+		return helpStyle.Render(text)
+	}
+
+	var lines []string
+	var currentLine strings.Builder
+
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Check if adding this part would exceed width
+		addition := part
+		if currentLine.Len() > 0 {
+			addition = "  " + part
+		}
+
+		if currentLine.Len()+len(addition) > availableWidth && currentLine.Len() > 0 {
+			// Start new line
+			lines = append(lines, currentLine.String())
+			currentLine.Reset()
+			currentLine.WriteString(part)
+		} else {
+			if currentLine.Len() > 0 {
+				currentLine.WriteString("  ")
+			}
+			currentLine.WriteString(part)
+		}
+
+		// Handle last part
+		if i == len(parts)-1 && currentLine.Len() > 0 {
+			lines = append(lines, currentLine.String())
+		}
+	}
+
+	// Join with newlines and apply style to each line
+	var result strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			result.WriteString("\n")
+		}
+		result.WriteString(helpStyle.Render(line))
+	}
+
+	return result.String()
+}
+
 // overlayContent overlays modal content centered on the base view
 // Note: base parameter is kept for API compatibility but not used since
 // lipgloss.Place provides cleaner centering without background artifacts

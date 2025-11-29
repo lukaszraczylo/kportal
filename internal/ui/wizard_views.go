@@ -109,10 +109,11 @@ func (m model) renderSelectContext() string {
 	}
 
 	b.WriteString("\n")
+	helpWidth := wizardHelpWidth(m.termWidth)
 	if wizard.searchFilter != "" {
-		b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Cancel", len(wizard.getFilteredContexts()), len(wizard.contexts))))
+		b.WriteString(wrapHelpText(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Cancel", len(wizard.getFilteredContexts()), len(wizard.contexts)), helpWidth))
 	} else {
-		b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc/Ctrl+C: Cancel"))
+		b.WriteString(wrapHelpText("Type to filter  ↑/↓: Navigate  Enter: Select  Esc/Ctrl+C: Cancel", helpWidth))
 	}
 
 	return b.String()
@@ -150,10 +151,11 @@ func (m model) renderSelectNamespace() string {
 	}
 
 	b.WriteString("\n")
+	helpWidth := wizardHelpWidth(m.termWidth)
 	if wizard.searchFilter != "" {
-		b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredNamespaces()), len(wizard.namespaces))))
+		b.WriteString(wrapHelpText(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredNamespaces()), len(wizard.namespaces)), helpWidth))
 	} else {
-		b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+		b.WriteString(wrapHelpText("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel", helpWidth))
 	}
 
 	return b.String()
@@ -192,7 +194,7 @@ func (m model) renderSelectResourceType() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+	b.WriteString(wrapHelpText("↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -305,14 +307,15 @@ func (m model) renderEnterResource() string {
 
 	b.WriteString("\n")
 	// Show appropriate help text based on resource type and filter state
+	helpWidth := wizardHelpWidth(m.termWidth)
 	if wizard.selectedResourceType == ResourceTypeService {
 		if wizard.searchFilter != "" {
-			b.WriteString(helpStyle.Render(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredServices()), len(wizard.services))))
+			b.WriteString(wrapHelpText(fmt.Sprintf("↑/↓: Navigate  Enter: Select  Backspace: Clear filter (%d/%d)  Esc: Back", len(wizard.getFilteredServices()), len(wizard.services)), helpWidth))
 		} else {
-			b.WriteString(helpStyle.Render("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+			b.WriteString(wrapHelpText("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel", helpWidth))
 		}
 	} else {
-		b.WriteString(helpStyle.Render("Enter: Continue  Esc: Back  Ctrl+C: Cancel"))
+		b.WriteString(wrapHelpText("Enter: Continue  Esc: Back  Ctrl+C: Cancel", helpWidth))
 	}
 
 	return b.String()
@@ -403,7 +406,7 @@ func (m model) renderEnterRemotePort() string {
 		}
 
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel"))
+		b.WriteString(wrapHelpText("↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel", wizardHelpWidth(m.termWidth)))
 	} else {
 		// Text input mode (no detected ports or user chose manual entry)
 		if len(wizard.detectedPorts) > 0 {
@@ -436,7 +439,7 @@ func (m model) renderEnterRemotePort() string {
 		}
 
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("Enter: Continue  Esc: Back  Ctrl+C: Cancel"))
+		b.WriteString(wrapHelpText("Enter: Continue  Esc: Back  Ctrl+C: Cancel", wizardHelpWidth(m.termWidth)))
 	}
 
 	return b.String()
@@ -477,7 +480,7 @@ func (m model) renderEnterLocalPort() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Enter: Continue  Esc: Back  Ctrl+C: Cancel"))
+	b.WriteString(wrapHelpText("Enter: Continue  Esc: Back  Ctrl+C: Cancel", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -535,7 +538,7 @@ func (m model) renderConfirmation() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓/Tab: Navigate  Enter: Confirm  Esc: Back"))
+	b.WriteString(wrapHelpText("↑/↓/Tab: Navigate  Enter: Confirm  Esc: Back", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -578,7 +581,7 @@ func (m model) renderSuccess() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Select"))
+	b.WriteString(wrapHelpText("↑/↓: Navigate  Enter: Select", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -641,7 +644,7 @@ func (m model) renderRemoveSelection() string {
 	selectedCount := wizard.getSelectedCount()
 	b.WriteString(fmt.Sprintf("%d of %d selected\n\n", selectedCount, len(wizard.forwards)))
 
-	b.WriteString(helpStyle.Render("Space: Toggle  a: All  n: None  Enter: Remove  Esc: Cancel"))
+	b.WriteString(wrapHelpText("Space: Toggle  a: All  n: None  Enter: Remove  Esc: Cancel", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -676,7 +679,7 @@ func (m model) renderRemoveConfirmation() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: Navigate  Enter: Confirm  Esc: Cancel"))
+	b.WriteString(wrapHelpText("↑/↓: Navigate  Enter: Confirm  Esc: Cancel", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -740,7 +743,7 @@ func (m model) renderBenchmarkConfig() string {
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render(fmt.Sprintf("Will send %d requests with %d concurrent workers", state.requests, state.concurrency)))
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("↑/↓/Tab: Navigate  Type to edit  Enter: Run  Esc: Cancel"))
+	b.WriteString(wrapHelpText("↑/↓/Tab: Navigate  Type to edit  Enter: Run  Esc: Cancel", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -780,7 +783,7 @@ func (m model) renderBenchmarkRunning() string {
 	b.WriteString(mutedStyle.Render(fmt.Sprintf("Method: %s  Concurrency: %d", state.method, state.concurrency)))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpStyle.Render("Please wait..."))
+	b.WriteString(wrapHelpText("Please wait...", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -796,14 +799,14 @@ func (m model) renderBenchmarkResults() string {
 	if state.error != nil {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("✗ Error: %v", state.error)))
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+		b.WriteString(wrapHelpText("Press Enter or Esc to return", wizardHelpWidth(m.termWidth)))
 		return b.String()
 	}
 
 	if state.results == nil {
 		b.WriteString(mutedStyle.Render("No results available"))
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+		b.WriteString(wrapHelpText("Press Enter or Esc to return", wizardHelpWidth(m.termWidth)))
 		return b.String()
 	}
 
@@ -872,7 +875,7 @@ func (m model) renderBenchmarkResults() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press Enter or Esc to return"))
+	b.WriteString(wrapHelpText("Press Enter or Esc to return", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
@@ -1076,8 +1079,10 @@ func (m model) renderHTTPLog() string {
 	}
 	b.WriteString("\n")
 
-	// Help line at bottom
-	b.WriteString(helpStyle.Render("  ↑/↓: Navigate  Enter: Details  a: Auto-scroll  f: Filter  /: Search  c: Clear  q: Close"))
+	// Help line at bottom (wrap for smaller screens)
+	helpText := "↑/↓: Navigate  Enter: Details  a: Auto-scroll  f: Filter  /: Search  c: Clear  q: Close"
+	b.WriteString("  ")
+	b.WriteString(wrapHelpText(helpText, termWidth-4))
 
 	return b.String()
 }
@@ -1273,9 +1278,9 @@ func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int
 	if state.copyMessage != "" {
 		b.WriteString(successStyle.Render(state.copyMessage))
 		b.WriteString("  ")
-		b.WriteString(helpStyle.Render("↑/↓: Scroll  c: Copy  Esc: Back"))
+		b.WriteString(wrapHelpText("↑/↓: Scroll  c: Copy  Esc: Back", termWidth-10))
 	} else {
-		b.WriteString(helpStyle.Render("↑/↓/PgUp/PgDn: Scroll  g: Top  c: Copy response  Esc: Back"))
+		b.WriteString(wrapHelpText("↑/↓/PgUp/PgDn: Scroll  g: Top  c: Copy response  Esc: Back", termWidth-10))
 	}
 
 	return b.String()
