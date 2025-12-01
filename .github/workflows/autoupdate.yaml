@@ -8,6 +8,9 @@ on:
 env:
   GO_VERSION: ">=1.21"
 
+permissions:
+  contents: write
+
 jobs:
   # This job is responsible for preparation of the build
   # environment variables.
