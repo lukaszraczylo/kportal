@@ -10,6 +10,7 @@ env:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   # This job is responsible for preparation of the build
@@ -68,8 +69,15 @@ jobs:
           git config --global --add safe.directory /__w/kportal/kportal
 
       - name: Commit changes
+        id: auto-commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update go.mod and go.sum"
           commit_options: "--no-verify --signoff"
           file_pattern: "go.mod go.sum"
+
+      - name: Trigger release workflow
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        run: gh workflow run release.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
