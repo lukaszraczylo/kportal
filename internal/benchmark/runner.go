@@ -221,10 +221,3 @@ func (r *Runner) makeRequest(ctx context.Context, cfg Config) (statusCode int, b
 
 	return resp.StatusCode, int64(len(respBody)), bytesWritten, nil
 }
-
-// Progress represents the current progress of a benchmark run
-type Progress struct {
-	Completed int
-	Total     int
-	Elapsed   time.Duration
-}
