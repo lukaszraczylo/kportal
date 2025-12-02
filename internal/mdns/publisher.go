@@ -89,6 +89,11 @@ func (p *Publisher) Register(forwardID, alias string, localPort int) error {
 	p.servers[forwardID] = server
 	p.aliases[forwardID] = alias
 
+	// Allow zeroconf's internal goroutines (recv4, recv6) to fully initialize.
+	// This prevents a race condition where shutdown() could set connections to nil
+	// while recv goroutines are still starting up.
+	time.Sleep(startupSettleTime)
+
 	logger.Info("mDNS hostname registered", map[string]interface{}{
 		"forward_id": forwardID,
 		"hostname":   GetHostname(alias),
@@ -150,6 +155,13 @@ func (p *Publisher) Stop() {
 
 	logger.Info("mDNS publisher stopped", nil)
 }
+
+// startupSettleTime is a small delay after zeroconf registration to allow internal
+// goroutines (recv4, recv6) to fully initialize before any shutdown can occur.
+// This works around a race condition in grandcat/zeroconf where shutdown() sets
+// connections to nil while recv goroutines may still be initializing.
+// See: https://github.com/grandcat/zeroconf/issues/95
+const startupSettleTime = 50 * time.Millisecond
 
 // shutdownSettleTime is a small delay after zeroconf shutdown to allow internal
 // goroutines to exit cleanly. This works around a race condition in the
