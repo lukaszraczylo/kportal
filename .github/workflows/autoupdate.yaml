@@ -78,6 +78,13 @@ jobs:
 
       - name: Trigger release workflow
         if: steps.auto-commit.outputs.changes_detected == 'true'
-        run: gh workflow run release.yml
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'lukaszraczylo',
+              repo: 'kportal',
+              workflow_id: 'release.yml',
+              ref: 'main'
+            })
