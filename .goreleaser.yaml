@@ -62,7 +62,10 @@ homebrew_casks:
     homepage: https://lukaszraczylo.github.io/kportal
     description: "Modern Kubernetes port-forward manager with interactive TUI"
     license: MIT
-    postflight: |
-      system_command "/usr/bin/xattr",
-                     args: ["-dr", "com.apple.quarantine", "#{staged_path}/kportal"],
-                     sudo: false
+    hooks:
+      post.install: |
+        if OS.mac?
+          system_command "/usr/bin/xattr",
+                         args: ["-dr", "com.apple.quarantine", "#{staged_path}/kportal"],
+                         sudo: false
+        end
