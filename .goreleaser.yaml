@@ -62,6 +62,8 @@ homebrew_casks:
     homepage: https://lukaszraczylo.github.io/kportal
     description: "Modern Kubernetes port-forward manager with interactive TUI"
     license: MIT
+    url:
+      verified: github.com/lukaszraczylo/kportal
     hooks:
       post:
         install: |
