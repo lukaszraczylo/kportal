@@ -63,9 +63,7 @@ homebrew_casks:
     description: "Modern Kubernetes port-forward manager with interactive TUI"
     license: MIT
     hooks:
-      post.install: |
-        if OS.mac?
+      post:
+        install: |
           system_command "/usr/bin/xattr",
-                         args: ["-dr", "com.apple.quarantine", "#{staged_path}/kportal"],
-                         sudo: false
-        end
+                         args: ["-dr", "com.apple.quarantine", "#{staged_path}/kportal"]
