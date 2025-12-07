@@ -5,56 +5,13 @@ on:
   schedule:
     - cron: "0 3 * * *"
 
-env:
-  GO_VERSION: ">=1.21"
-
 permissions:
   contents: write
   actions: write
 
 jobs:
   autoupdate:
-    name: Update dependencies and test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{env.GO_VERSION}}
-          cache-dependency-path: "**/*.sum"
-
-      - name: Update dependencies
-        run: |
-          go get -u ./...
-          go mod tidy
-
-      - name: Run unit tests
-        run: |
-          go test -race -cover ./...
-
-      - name: Commit changes
-        id: auto-commit
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update go.mod and go.sum"
-          commit_options: "--no-verify --signoff"
-          file_pattern: "go.mod go.sum"
-
-      - name: Trigger release workflow
-        if: steps.auto-commit.outputs.changes_detected == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: 'lukaszraczylo',
-              repo: 'kportal',
-              workflow_id: 'release.yml',
-              ref: 'main'
-            })
+    uses: lukaszraczylo/shared-actions/.github/workflows/go-autoupdate.yaml@main
+    with:
+      go-version: ">=1.21"
+      release-workflow: "release.yml"
