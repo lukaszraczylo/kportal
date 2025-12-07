@@ -13,40 +13,15 @@ permissions:
   actions: write
 
 jobs:
-  # This job is responsible for preparation of the build
-  # environment variables.
-  prepare:
-    name: Preparing build context
+  autoupdate:
+    name: Update dependencies and test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
-      - name: Install Go
-        uses: actions/setup-go@v5
-        id: cache
         with:
-          go-version: ${{env.GO_VERSION}}
-          cache-dependency-path: "**/*.sum"
-
-      - name: Go get dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          go get ./...
-
-  # This job is responsible for running tests and linting the codebase
-  test:
-    name: "Unit testing"
-    runs-on: ubuntu-latest
-    container: golang:1
-    needs: [prepare]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Ensure full history is checked out
+          fetch-depth: 0
 
       - name: Install Go
         uses: actions/setup-go@v5
@@ -54,19 +29,14 @@ jobs:
           go-version: ${{env.GO_VERSION}}
           cache-dependency-path: "**/*.sum"
 
-      - name: Install dependencies
+      - name: Update dependencies
         run: |
-          apt-get update
-          apt-get install ca-certificates make -y
-          update-ca-certificates
+          go get -u ./...
           go mod tidy
-          go get -u -v ./...
-          go mod tidy -v
 
       - name: Run unit tests
         run: |
-          CI_RUN=${CI} make test
-          git config --global --add safe.directory /__w/kportal/kportal
+          go test -race -cover ./...
 
       - name: Commit changes
         id: auto-commit
