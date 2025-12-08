@@ -14,7 +14,7 @@ jobs:
   autoupdate:
     uses: lukaszraczylo/shared-actions/.github/workflows/go-autoupdate.yaml@main
     with:
-      go-version: ">=1.21"
+      go-version: ">=1.24"
       release-workflow: "release.yml"
     secrets:
       pat-token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
