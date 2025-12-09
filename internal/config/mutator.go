@@ -264,8 +264,8 @@ func (m *Mutator) writeAtomic(cfg *Config) error {
 
 	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
-		// Clean up temp file on failure
-		os.Remove(tmpFile)
+		// Clean up temp file on failure - error ignored as we're already handling the rename error
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

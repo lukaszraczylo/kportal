@@ -144,7 +144,7 @@ func parseVersion(v string) []int {
 
 	for _, p := range parts {
 		var num int
-		fmt.Sscanf(p, "%d", &num)
+		_, _ = fmt.Sscanf(p, "%d", &num)
 		result = append(result, num)
 	}
 

@@ -85,12 +85,13 @@ func (p *Proxy) Start() error {
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			p.logError(r, err)
 			w.WriteHeader(http.StatusBadGateway)
-			w.Write([]byte("Proxy error: " + err.Error()))
+			_, _ = w.Write([]byte("Proxy error: " + err.Error()))
 		},
 	}
 
 	p.server = &http.Server{
-		Handler: proxy,
+		Handler:           proxy,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	p.running = true
@@ -122,8 +123,8 @@ func (p *Proxy) Stop() error {
 	defer cancel()
 
 	if err := p.server.Shutdown(ctx); err != nil {
-		// Force close
-		p.server.Close()
+		// Force close - error ignored as we're already shutting down
+		_ = p.server.Close()
 	}
 
 	if err := p.logger.Close(); err != nil {
@@ -173,7 +174,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		reqEntry.Headers = flattenHeaders(req.Header)
 	}
 
-	t.proxy.logger.Log(reqEntry)
+	_ = t.proxy.logger.Log(reqEntry)
 
 	// Make the request
 	resp, err := t.transport.RoundTrip(req)
@@ -207,7 +208,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		respEntry.Headers = flattenHeaders(resp.Header)
 	}
 
-	t.proxy.logger.Log(respEntry)
+	_ = t.proxy.logger.Log(respEntry)
 
 	return resp, nil
 }
@@ -269,7 +270,7 @@ func (p *Proxy) logError(req *http.Request, err error) {
 		Path:      req.URL.Path,
 		Error:     err.Error(),
 	}
-	p.logger.Log(entry)
+	_ = p.logger.Log(entry)
 }
 
 // flattenHeaders converts http.Header to map[string]string

@@ -77,6 +77,7 @@ func getProcessNameByPID(pid string) string {
 
 // getProcessNameByPIDWindows retrieves the process name for a given PID on Windows
 func getProcessNameByPIDWindows(pid string) string {
+	// #nosec G204 -- pid is validated by isValidPID() to contain only digits
 	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %s", pid), "/FO", "CSV", "/NH")
 	output, err := cmd.Output()
 	if err != nil {
@@ -145,7 +146,7 @@ func (pc *PortChecker) isPortAvailable(port int) bool {
 	if err != nil {
 		return false
 	}
-	listener.Close()
+	_ = listener.Close()
 	return true
 }
 
@@ -166,6 +167,7 @@ func (pc *PortChecker) getProcessUsingPort(port int) string {
 func (pc *PortChecker) getProcessUsingPortUnix(port int) string {
 	// Use lsof to find the process
 	// lsof -i :PORT -sTCP:LISTEN -t returns PIDs
+	// #nosec G204 -- port is an integer from config validation, not user input
 	cmd := exec.Command("lsof", "-i", fmt.Sprintf(":%d", port), "-sTCP:LISTEN", "-t")
 	output, err := cmd.Output()
 	if err != nil {

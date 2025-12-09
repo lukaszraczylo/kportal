@@ -296,6 +296,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("config file too large: %d bytes (max %d)", fileInfo.Size(), maxConfigSize)
 	}
 
+	// #nosec G304 -- path is validated in main.go (no system dirs, absolute path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)

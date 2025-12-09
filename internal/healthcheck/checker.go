@@ -409,7 +409,7 @@ func (c *Checker) checkTCPDial(port int) error {
 	if err != nil {
 		return err
 	}
-	conn.Close()
+	_ = conn.Close()
 	return nil
 }
 
@@ -427,7 +427,7 @@ func (c *Checker) checkDataTransfer(port int) error {
 
 	// Set a short read deadline to detect hung connections
 	// We don't expect to receive data, but we want to verify the connection isn't hung
-	conn.SetReadDeadline(time.Now().Add(c.timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(c.timeout))
 
 	// Try to read a small amount of data
 	// Most servers will either:

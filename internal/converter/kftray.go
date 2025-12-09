@@ -25,6 +25,7 @@ type KFTrayConfig struct {
 // ConvertKFTrayToKPortal converts kftray JSON configuration to kportal YAML format
 func ConvertKFTrayToKPortal(inputFile, outputFile string) error {
 	// Read kftray JSON config
+	// #nosec G304 -- inputFile is from command line argument for explicit conversion
 	data, err := os.ReadFile(inputFile)
 	if err != nil {
 		return fmt.Errorf("failed to read input file: %w", err)
@@ -57,6 +58,7 @@ func ConvertKFTrayToKPortal(inputFile, outputFile string) error {
 
 // GetConversionSummary returns statistics about the kftray configuration
 func GetConversionSummary(inputFile string) (map[string]map[string]int, int, error) {
+	// #nosec G304 -- inputFile is from command line argument for explicit conversion
 	data, err := os.ReadFile(inputFile)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read input file: %w", err)

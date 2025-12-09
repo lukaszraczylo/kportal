@@ -51,6 +51,7 @@ func NewLogger(forwardID, logFile string, maxBodyLen int) (*Logger, error) {
 		// Log entries are delivered via callbacks to the UI
 		l.output = io.Discard
 	} else {
+		// #nosec G304 -- logFile is from config validation, not arbitrary user input
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return nil, err

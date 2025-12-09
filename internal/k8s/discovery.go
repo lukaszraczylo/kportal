@@ -356,6 +356,6 @@ func CheckPortAvailability(port int) (bool, string, error) {
 	}
 
 	// Port is available, close the listener
-	listener.Close()
+	_ = listener.Close()
 	return true, "", nil
 }
