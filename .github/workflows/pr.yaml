@@ -10,9 +10,10 @@ on:
       - "!main"
 
 permissions:
-  contents: read
-  security-events: read
+  contents: write
+  actions: write
   pull-requests: write
+  security-events: write
 
 jobs:
   pr-checks:
