@@ -9,6 +9,11 @@ on:
       - "**"
       - "!main"
 
+permissions:
+  contents: read
+  security-events: read
+  pull-requests: write
+
 jobs:
   pr-checks:
     uses: lukaszraczylo/shared-actions/.github/workflows/go-pr.yaml@main
