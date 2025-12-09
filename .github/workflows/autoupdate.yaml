@@ -9,6 +9,7 @@ permissions:
   contents: write
   actions: write
   pull-requests: write
+  security-events: write
 
 jobs:
   autoupdate:
