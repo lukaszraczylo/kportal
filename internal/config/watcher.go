@@ -33,7 +33,7 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 
 	absPath, err := filepath.Abs(configPath)
 	if err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
 
@@ -41,7 +41,7 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 	// (many editors delete and recreate files on save)
 	dir := filepath.Dir(absPath)
 	if err := watcher.Add(dir); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return nil, fmt.Errorf("failed to watch directory %s: %w", dir, err)
 	}
 
@@ -63,7 +63,7 @@ func (w *Watcher) Start() {
 // Stop stops watching the configuration file and waits for the watch goroutine to exit.
 func (w *Watcher) Stop() {
 	close(w.done)
-	w.watcher.Close()
+	_ = w.watcher.Close()
 	w.wg.Wait() // Wait for watch goroutine to exit
 }
 

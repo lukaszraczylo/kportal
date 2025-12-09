@@ -24,7 +24,8 @@ type Backoff struct {
 func NewBackoff() *Backoff {
 	return &Backoff{
 		attempt: 0,
-		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		// #nosec G404 -- math/rand is appropriate for backoff jitter; cryptographic randomness not needed
+		rng: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

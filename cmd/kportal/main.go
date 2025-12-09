@@ -295,9 +295,9 @@ func main() {
 		// Interactive mode with bubbletea
 		bubbleTeaUI = ui.NewBubbleTeaUI(func(id string, enable bool) {
 			if enable {
-				manager.EnableForward(id)
+				_ = manager.EnableForward(id)
 			} else {
-				manager.DisableForward(id)
+				_ = manager.DisableForward(id)
 			}
 		}, appVersion)
 
