@@ -83,6 +83,19 @@ cd kportal
 make build && make install
 ```
 
+### Verifying Release Signatures
+
+All release checksums are signed with [cosign](https://github.com/sigstore/cosign). To verify:
+
+```bash
+# Download the checksum file and its signature
+# Then verify with:
+cosign verify-blob \
+  --key https://raw.githubusercontent.com/lukaszraczylo/lukaszraczylo/main/cosign.pub \
+  --signature kportal-<version>-checksums.txt.sig \
+  kportal-<version>-checksums.txt
+```
+
 ## 🚀 Quick Start
 
 Create `.kportal.yaml`:

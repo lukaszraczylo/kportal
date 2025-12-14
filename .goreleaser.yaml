@@ -80,7 +80,7 @@ signs:
     args:
       - sign-blob
       - "--key"
-      - "env://COSIGN_KEY"
+      - "/tmp/cosign.key"
       - "--output-signature"
       - "${signature}"
       - "--output-certificate"
