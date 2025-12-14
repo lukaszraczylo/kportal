@@ -336,6 +336,11 @@ func (w *ForwardWorker) establishForward(podName string) error {
 	// Start port forwarding in a goroutine
 	errChan := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errChan <- fmt.Errorf("port forward panicked: %v", r)
+			}
+		}()
 		errChan <- w.portForwarder.Forward(forwardCtx, req)
 	}()
 
@@ -408,6 +413,14 @@ func (w *ForwardWorker) startHTTPProxy() error {
 
 	// Calculate internal port for k8s tunnel
 	targetPort := w.forward.LocalPort + httpLogPortOffset
+
+	// Validate that the target port is available before attempting to bind
+	portChecker := NewPortChecker()
+	if !portChecker.isPortAvailable(targetPort) {
+		usedBy := portChecker.getProcessUsingPort(targetPort)
+		return fmt.Errorf("HTTP proxy target port %d is already in use by %s (forward port %d + offset %d)",
+			targetPort, usedBy, w.forward.LocalPort, httpLogPortOffset)
+	}
 
 	proxy, err := httplog.NewProxy(&w.forward, targetPort)
 	if err != nil {

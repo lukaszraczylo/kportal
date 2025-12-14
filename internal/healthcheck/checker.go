@@ -365,7 +365,8 @@ func (c *Checker) checkPort(forwardID string) {
 		}
 	}
 
-	// Update health status
+	// Update health status and capture eventBus while holding lock
+	var bus *events.Bus
 	c.mu.Lock()
 	if health, exists := c.ports[forwardID]; exists {
 		health.Status = newStatus
@@ -378,17 +379,15 @@ func (c *Checker) checkPort(forwardID string) {
 			health.LastActivity = now
 		}
 	}
+	// Capture eventBus while we have the lock to avoid race condition
+	bus = c.eventBus
 	c.mu.Unlock()
 
 	// Notify if status changed
 	if oldStatus != newStatus {
 		c.notifyStatusChange(forwardID, newStatus, errorMsg)
 
-		// Publish to event bus if available
-		c.mu.RLock()
-		bus := c.eventBus
-		c.mu.RUnlock()
-
+		// Publish to event bus if available (captured while holding lock above)
 		if bus != nil {
 			if newStatus == StatusStale {
 				bus.Publish(events.NewStaleEvent(forwardID, errorMsg))

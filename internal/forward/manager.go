@@ -139,11 +139,6 @@ func (m *Manager) SetMDNSPublisher(publisher *mdns.Publisher) {
 	m.mdnsPublisher = publisher
 }
 
-// GetEventBus returns the event bus for subscribing to manager events
-func (m *Manager) GetEventBus() *events.Bus {
-	return m.eventBus
-}
-
 // Start initializes and starts all port-forwards from the configuration.
 func (m *Manager) Start(cfg *config.Config) error {
 	if cfg == nil {
@@ -491,27 +486,6 @@ func (m *Manager) stopWorkerInternal(id string, removeFromUI bool) error {
 	worker.Stop()
 
 	return nil
-}
-
-// GetActiveForwards returns a list of all active forward IDs.
-func (m *Manager) GetActiveForwards() []string {
-	m.workersMu.RLock()
-	defer m.workersMu.RUnlock()
-
-	ids := make([]string, 0, len(m.workers))
-	for id := range m.workers {
-		ids = append(ids, id)
-	}
-
-	return ids
-}
-
-// GetWorkerCount returns the number of active workers.
-func (m *Manager) GetWorkerCount() int {
-	m.workersMu.RLock()
-	defer m.workersMu.RUnlock()
-
-	return len(m.workers)
 }
 
 // GetWorker returns a worker by ID, or nil if not found.

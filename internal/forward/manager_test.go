@@ -7,7 +7,6 @@ import (
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/events"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestNewManager tests manager creation
@@ -51,41 +50,6 @@ func TestManager_SetStatusUI(t *testing.T) {
 	manager.SetStatusUI(mockUI)
 
 	assert.Equal(t, mockUI, manager.statusUI)
-}
-
-// TestManager_GetEventBus tests getting the event bus
-func TestManager_GetEventBus(t *testing.T) {
-	manager, err := NewManager(false)
-	if err != nil {
-		t.Skip("Skipping test - no kubeconfig available")
-	}
-	defer manager.Stop()
-
-	bus := manager.GetEventBus()
-	assert.NotNil(t, bus)
-}
-
-// TestManager_GetWorkerCount tests worker count tracking
-func TestManager_GetWorkerCount(t *testing.T) {
-	manager, err := NewManager(false)
-	if err != nil {
-		t.Skip("Skipping test - no kubeconfig available")
-	}
-	defer manager.Stop()
-
-	assert.Equal(t, 0, manager.GetWorkerCount())
-}
-
-// TestManager_GetActiveForwards tests getting active forwards
-func TestManager_GetActiveForwards(t *testing.T) {
-	manager, err := NewManager(false)
-	if err != nil {
-		t.Skip("Skipping test - no kubeconfig available")
-	}
-	defer manager.Stop()
-
-	forwards := manager.GetActiveForwards()
-	assert.Empty(t, forwards)
 }
 
 // TestManager_GetWorker tests getting a worker by ID
@@ -362,12 +326,8 @@ func TestManager_EventBusIntegration(t *testing.T) {
 	// Event bus should be wired to health checker and watchdog
 	assert.NotNil(t, manager.eventBus)
 
-	// Get event bus
-	bus := manager.GetEventBus()
-	require.NotNil(t, bus)
-
 	// SubscribeAll should work (no return value in this API)
-	bus.SubscribeAll(func(event events.Event) {
+	manager.eventBus.SubscribeAll(func(event events.Event) {
 		// Handler
 	})
 }

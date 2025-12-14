@@ -149,16 +149,6 @@ func TestBus_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, int64(100), atomic.LoadInt64(&count))
 }
 
-func TestNewForwardEvent(t *testing.T) {
-	event := NewForwardEvent(EventForwardStarting, "test-id", map[string]interface{}{
-		"pod": "my-pod",
-	})
-
-	assert.Equal(t, EventForwardStarting, event.Type)
-	assert.Equal(t, "test-id", event.ForwardID)
-	assert.Equal(t, "my-pod", event.Data["pod"])
-}
-
 func TestNewHealthEvent(t *testing.T) {
 	event := NewHealthEvent("test-id", "Active", "")
 

@@ -22,11 +22,6 @@ type ValidationError struct {
 	Context map[string]string // Additional context information
 }
 
-// Error implements the error interface.
-func (e ValidationError) Error() string {
-	return e.Message
-}
-
 // Validator validates configuration files.
 type Validator struct{}
 

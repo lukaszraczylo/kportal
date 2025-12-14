@@ -195,27 +195,10 @@ func shutdownWithTimeout(server *zeroconf.Server, forwardID string) {
 	}
 }
 
-// IsEnabled returns whether mDNS publishing is enabled.
-func (p *Publisher) IsEnabled() bool {
-	return p.enabled
-}
-
-// GetDomain returns the mDNS domain being used (always "local" per RFC 6762).
-func (p *Publisher) GetDomain() string {
-	return mdnsDomain
-}
-
 // GetHostname returns the full mDNS hostname for an alias.
 // Example: GetHostname("myapp") returns "myapp.local"
 func GetHostname(alias string) string {
 	return alias + "." + mdnsDomain
-}
-
-// GetRegisteredCount returns the number of currently registered hostnames.
-func (p *Publisher) GetRegisteredCount() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return len(p.servers)
 }
 
 // getLocalIPs returns the local IP addresses for logging purposes.

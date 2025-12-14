@@ -150,9 +150,3 @@ func parseVersion(v string) []int {
 
 	return result
 }
-
-// FormatUpdateMessage formats a user-friendly update notification
-func (u *UpdateInfo) FormatUpdateMessage() string {
-	return fmt.Sprintf("New version available: %s (current: %s) - %s",
-		u.LatestVersion, u.CurrentVersion, u.ReleaseURL)
-}

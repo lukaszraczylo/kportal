@@ -75,16 +75,3 @@ func TestIsNewerVersion(t *testing.T) {
 		})
 	}
 }
-
-func TestUpdateInfo_FormatUpdateMessage(t *testing.T) {
-	info := &UpdateInfo{
-		CurrentVersion: "0.1.0",
-		LatestVersion:  "0.2.0",
-		ReleaseURL:     "https://github.com/nvm/kportal/releases/tag/v0.2.0",
-	}
-
-	msg := info.FormatUpdateMessage()
-	assert.Contains(t, msg, "0.2.0")
-	assert.Contains(t, msg, "0.1.0")
-	assert.Contains(t, msg, "https://github.com/nvm/kportal/releases/tag/v0.2.0")
-}

@@ -206,15 +206,6 @@ func TestRunnerWithBody(t *testing.T) {
 	assert.Equal(t, int64(15), results.BytesWritten)
 }
 
-func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-
-	assert.Equal(t, "GET", cfg.Method)
-	assert.Equal(t, 10, cfg.Concurrency)
-	assert.Equal(t, 100, cfg.Requests)
-	assert.Equal(t, 30*time.Second, cfg.Timeout)
-}
-
 func TestRunnerWithProgressCallback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(10 * time.Millisecond) // Add small delay so progress ticker can fire

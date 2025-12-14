@@ -22,6 +22,7 @@ type Watcher struct {
 	done       chan struct{}
 	verbose    bool
 	wg         sync.WaitGroup // Ensures watch goroutine exits before Stop returns
+	stopOnce   sync.Once      // Ensures Stop is safe to call multiple times
 }
 
 // NewWatcher creates a new file watcher for the given config file.
@@ -61,9 +62,12 @@ func (w *Watcher) Start() {
 }
 
 // Stop stops watching the configuration file and waits for the watch goroutine to exit.
+// Safe to call multiple times.
 func (w *Watcher) Stop() {
-	close(w.done)
-	_ = w.watcher.Close()
+	w.stopOnce.Do(func() {
+		close(w.done)
+		_ = w.watcher.Close()
+	})
 	w.wg.Wait() // Wait for watch goroutine to exit
 }
 

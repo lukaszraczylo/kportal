@@ -13,15 +13,17 @@ import (
 func TestNewPublisher_Disabled(t *testing.T) {
 	p := NewPublisher(false)
 
-	assert.False(t, p.IsEnabled())
-	assert.Equal(t, 0, p.GetRegisteredCount())
+	// When disabled, Register should succeed but be a no-op
+	err := p.Register("forward-1", "test-alias", 8080)
+	assert.NoError(t, err)
 }
 
 func TestNewPublisher_Enabled(t *testing.T) {
 	p := NewPublisher(true)
+	defer p.Stop()
 
-	assert.True(t, p.IsEnabled())
-	assert.Equal(t, 0, p.GetRegisteredCount())
+	// Enabled publisher should be created successfully
+	assert.NotNil(t, p)
 }
 
 func TestRegister_WhenDisabled_NoOp(t *testing.T) {
@@ -30,16 +32,17 @@ func TestRegister_WhenDisabled_NoOp(t *testing.T) {
 	err := p.Register("forward-1", "test-alias", 8080)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, p.GetRegisteredCount())
+	// Unregister should also be safe when disabled
+	p.Unregister("forward-1")
 }
 
 func TestRegister_EmptyAlias_NoOp(t *testing.T) {
 	p := NewPublisher(true)
+	defer p.Stop()
 
 	err := p.Register("forward-1", "", 8080)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, p.GetRegisteredCount())
 }
 
 func TestUnregister_WhenDisabled_NoOp(t *testing.T) {
@@ -51,10 +54,10 @@ func TestUnregister_WhenDisabled_NoOp(t *testing.T) {
 
 func TestUnregister_NotRegistered_NoOp(t *testing.T) {
 	p := NewPublisher(true)
+	defer p.Stop()
 
 	// Should not panic
 	p.Unregister("non-existent")
-	assert.Equal(t, 0, p.GetRegisteredCount())
 }
 
 func TestStop_WhenDisabled_NoOp(t *testing.T) {
@@ -69,7 +72,6 @@ func TestStop_WhenNoRegistrations(t *testing.T) {
 
 	// Should not panic
 	p.Stop()
-	assert.Equal(t, 0, p.GetRegisteredCount())
 }
 
 func TestGetLocalIPs(t *testing.T) {
@@ -84,6 +86,11 @@ func TestGetLocalIPs(t *testing.T) {
 	}
 }
 
+func TestGetHostname(t *testing.T) {
+	hostname := GetHostname("myapp")
+	assert.Equal(t, "myapp.local", hostname)
+}
+
 // Integration tests - only run when explicitly requested
 // These tests actually register mDNS services and require network access
 
@@ -96,9 +103,10 @@ func TestRegister_Integration(t *testing.T) {
 	defer p.Stop()
 
 	err := p.Register("forward-1", "test-service", 8080)
-
 	assert.NoError(t, err)
-	assert.Equal(t, 1, p.GetRegisteredCount())
+
+	// Verify by checking that unregister doesn't panic
+	p.Unregister("forward-1")
 }
 
 func TestRegister_Duplicate_Idempotent_Integration(t *testing.T) {
@@ -112,12 +120,10 @@ func TestRegister_Duplicate_Idempotent_Integration(t *testing.T) {
 	// First registration
 	err := p.Register("forward-1", "test-service", 8080)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, p.GetRegisteredCount())
 
 	// Second registration with same ID should be idempotent
 	err = p.Register("forward-1", "test-service", 8080)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, p.GetRegisteredCount())
 }
 
 func TestRegister_MultipleForwards_Integration(t *testing.T) {
@@ -135,7 +141,6 @@ func TestRegister_MultipleForwards_Integration(t *testing.T) {
 	assert.NoError(t, err1)
 	assert.NoError(t, err2)
 	assert.NoError(t, err3)
-	assert.Equal(t, 3, p.GetRegisteredCount())
 }
 
 func TestUnregister_Success_Integration(t *testing.T) {
@@ -146,9 +151,13 @@ func TestUnregister_Success_Integration(t *testing.T) {
 	p := NewPublisher(true)
 	defer p.Stop()
 
-	p.Register("forward-1", "test-service", 8080)
-	assert.Equal(t, 1, p.GetRegisteredCount())
+	err := p.Register("forward-1", "test-service", 8080)
+	assert.NoError(t, err)
 
+	// Unregister should not panic and should handle it gracefully
 	p.Unregister("forward-1")
-	assert.Equal(t, 0, p.GetRegisteredCount())
+
+	// Re-registering should work after unregister
+	err = p.Register("forward-1", "test-service-2", 8080)
+	assert.NoError(t, err)
 }

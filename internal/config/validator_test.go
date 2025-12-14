@@ -621,15 +621,6 @@ func TestFormatValidationErrors(t *testing.T) {
 	}
 }
 
-func TestValidationError_Error(t *testing.T) {
-	err := ValidationError{
-		Field:   "port",
-		Message: "Invalid port 0",
-	}
-
-	assert.Equal(t, "Invalid port 0", err.Error(), "Error() should return the message")
-}
-
 func TestValidator_ValidateStructure(t *testing.T) {
 	validator := NewValidator()
 

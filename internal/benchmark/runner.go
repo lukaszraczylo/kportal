@@ -27,16 +27,6 @@ type Config struct {
 	ProgressCallback ProgressCallback  // Optional callback for progress updates
 }
 
-// DefaultConfig returns a default benchmark configuration
-func DefaultConfig() Config {
-	return Config{
-		Method:      "GET",
-		Concurrency: 10,
-		Requests:    100,
-		Timeout:     30 * time.Second,
-	}
-}
-
 // Runner executes HTTP benchmarks
 type Runner struct {
 	client *http.Client

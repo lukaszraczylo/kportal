@@ -11,6 +11,9 @@ const (
 	initialDelay = 1 * time.Second
 	maxDelay     = 10 * time.Second
 	jitterPct    = 0.1 // 10% jitter
+	// maxAttempt caps the exponent to prevent math.Pow overflow
+	// 2^30 seconds is ~34 years, well above maxDelay, so this is safe
+	maxAttempt = 30
 )
 
 // Backoff implements exponential backoff with jitter for retry logic.
@@ -33,8 +36,14 @@ func NewBackoff() *Backoff {
 // The duration follows exponential backoff: 1s → 2s → 4s → 8s → 10s (max).
 // A 10% jitter is added to prevent thundering herd effects.
 func (b *Backoff) Next() time.Duration {
+	// Cap attempt to prevent overflow in math.Pow
+	attempt := b.attempt
+	if attempt > maxAttempt {
+		attempt = maxAttempt
+	}
+
 	// Calculate base delay: 2^attempt seconds
-	exp := math.Pow(2, float64(b.attempt))
+	exp := math.Pow(2, float64(attempt))
 	delay := time.Duration(exp) * time.Second
 
 	// Cap at max delay

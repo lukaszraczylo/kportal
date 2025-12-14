@@ -135,15 +135,6 @@ func (b *Bus) Close() {
 
 // Helper functions for creating common events
 
-// NewForwardEvent creates a forward-related event
-func NewForwardEvent(eventType EventType, forwardID string, data map[string]interface{}) Event {
-	return Event{
-		Type:      eventType,
-		ForwardID: forwardID,
-		Data:      data,
-	}
-}
-
 // NewHealthEvent creates a health status change event
 func NewHealthEvent(forwardID string, status string, errorMsg string) Event {
 	return Event{

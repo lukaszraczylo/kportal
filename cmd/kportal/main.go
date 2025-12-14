@@ -309,16 +309,26 @@ func main() {
 		bubbleTeaUI.SetHTTPLogSubscriber(func(forwardID string, callback func(entry ui.HTTPLogEntry)) func() {
 			worker := manager.GetWorker(forwardID)
 			if worker == nil {
+				logger.Debug("HTTP log subscription failed: worker not found", map[string]interface{}{
+					"forward_id": forwardID,
+				})
 				return func() {} // No-op cleanup
 			}
 
 			proxy := worker.GetHTTPProxy()
 			if proxy == nil {
+				// This is expected for forwards without httpLog enabled - not an error
+				logger.Debug("HTTP log subscription skipped: proxy not enabled", map[string]interface{}{
+					"forward_id": forwardID,
+				})
 				return func() {} // HTTP logging not enabled for this forward
 			}
 
 			proxyLogger := proxy.GetLogger()
 			if proxyLogger == nil {
+				logger.Debug("HTTP log subscription failed: logger not available", map[string]interface{}{
+					"forward_id": forwardID,
+				})
 				return func() {}
 			}
 
