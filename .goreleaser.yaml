@@ -71,3 +71,21 @@ homebrew_casks:
             system_command "/usr/bin/xattr",
                            args: ["-dr", "com.apple.quarantine", "#{staged_path}/kportal"]
           end
+
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_PASSWORD={{ .Env.COSIGN_PASSWORD }}
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--key"
+      - "env://COSIGN_KEY"
+      - "--output-signature"
+      - "${signature}"
+      - "--output-certificate"
+      - "${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
