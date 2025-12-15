@@ -85,14 +85,14 @@ make build && make install
 
 ### Verifying Release Signatures
 
-All release checksums are signed with [cosign](https://github.com/sigstore/cosign). To verify:
+All release checksums are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing. To verify:
 
 ```bash
-# Download the checksum file and its signature
-# Then verify with:
+# Download the checksum file and its sigstore bundle from the release
 cosign verify-blob \
-  --key https://raw.githubusercontent.com/lukaszraczylo/lukaszraczylo/main/cosign.pub \
-  --signature kportal-<version>-checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/lukaszraczylo/kportal/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  --bundle "kportal-<version>-checksums.txt.sigstore.json" \
   kportal-<version>-checksums.txt
 ```
 

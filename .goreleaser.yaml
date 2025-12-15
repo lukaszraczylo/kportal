@@ -74,17 +74,10 @@ homebrew_casks:
 
 signs:
   - cmd: cosign
-    env:
-      - COSIGN_PASSWORD={{ .Env.COSIGN_PASSWORD }}
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
-      - "--key"
-      - "/tmp/cosign.key"
-      - "--output-signature"
-      - "${signature}"
-      - "--output-certificate"
-      - "${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: checksum
