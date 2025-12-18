@@ -228,7 +228,7 @@ func TestResolveTargetPort(t *testing.T) {
 			for i := range tt.pods {
 				objects = append(objects, &tt.pods[i])
 			}
-			fakeClient := fake.NewSimpleClientset(objects...)
+			fakeClient := fake.NewClientset(objects...)
 
 			// Create discovery instance (we only need it to call resolveTargetPort)
 			d := &Discovery{}
