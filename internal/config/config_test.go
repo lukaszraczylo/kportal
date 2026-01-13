@@ -39,7 +39,7 @@ func TestLoadConfig_ValidYAML(t *testing.T) {
             localPort: 8081
 `
 
-	err := os.WriteFile(configPath, []byte(validYAML), 0644)
+	err := os.WriteFile(configPath, []byte(validYAML), 0600)
 	assert.NoError(t, err, "should write temp config file")
 
 	// Load the config
@@ -82,7 +82,7 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
         forwards: [this is invalid yaml syntax
 `
 
-	err := os.WriteFile(configPath, []byte(invalidYAML), 0644)
+	err := os.WriteFile(configPath, []byte(invalidYAML), 0600)
 	assert.NoError(t, err, "should write temp config file")
 
 	// Load the config
@@ -103,8 +103,8 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 func TestForward_ID(t *testing.T) {
 	tests := []struct {
 		name       string
-		forward    Forward
 		expectedID string
+		forward    Forward
 	}{
 		{
 			name: "pod with explicit name",
@@ -165,8 +165,8 @@ func TestForward_ID(t *testing.T) {
 func TestForward_String(t *testing.T) {
 	tests := []struct {
 		name           string
-		forward        Forward
 		expectedString string
+		forward        Forward
 	}{
 		{
 			name: "pod without selector",
@@ -389,10 +389,8 @@ func TestHTTPLogSpec_UnmarshalYAML(t *testing.T) {
 			if tt.expected {
 				assert.NotNil(t, fwd.HTTPLog, "HTTPLog should not be nil")
 				assert.True(t, fwd.HTTPLog.Enabled, "HTTPLog.Enabled should be true")
-			} else {
-				if fwd.HTTPLog != nil {
-					assert.False(t, fwd.HTTPLog.Enabled, "HTTPLog.Enabled should be false")
-				}
+			} else if fwd.HTTPLog != nil {
+				assert.False(t, fwd.HTTPLog.Enabled, "HTTPLog.Enabled should be false")
 			}
 		})
 	}
@@ -407,8 +405,8 @@ func TestNewEmptyConfig(t *testing.T) {
 
 func TestConfig_IsEmpty(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected bool
 	}{
 		{
@@ -505,7 +503,7 @@ func TestCreateEmptyConfigFile_AlreadyExists(t *testing.T) {
 	configPath := filepath.Join(tmpDir, ".kportal.yaml")
 
 	// Create existing file
-	err := os.WriteFile(configPath, []byte("existing content"), 0644)
+	err := os.WriteFile(configPath, []byte("existing content"), 0600)
 	assert.NoError(t, err)
 
 	// Try to create config file - should fail

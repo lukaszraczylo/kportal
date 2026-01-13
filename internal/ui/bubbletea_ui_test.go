@@ -243,9 +243,9 @@ func TestBubbleTeaUI_Remove_ClearsErrors(t *testing.T) {
 func TestBubbleTeaUI_Remove_AdjustsSelectedIndex(t *testing.T) {
 	tests := []struct {
 		name              string
+		removeID          string
 		forwards          []string
 		selectedIndex     int
-		removeID          string
 		expectedIndex     int
 		expectedRemaining int
 	}{
@@ -526,4 +526,257 @@ func TestBubbleTeaUI_ResetDeleteConfirmation(t *testing.T) {
 	assert.Empty(t, ui.deleteConfirmID)
 	assert.Empty(t, ui.deleteConfirmAlias)
 	assert.Equal(t, 0, ui.deleteConfirmCursor)
+}
+
+// TestBubbleTeaUI_IsForwardDisabled tests the disabled state helper
+func TestBubbleTeaUI_IsForwardDisabled(t *testing.T) {
+	tests := []struct {
+		name           string
+		forwardStatus  string
+		disabledMap    bool
+		expectedResult bool
+	}{
+		{
+			name:           "not disabled in map, Active status",
+			disabledMap:    false,
+			forwardStatus:  "Active",
+			expectedResult: false,
+		},
+		{
+			name:           "disabled in map, Active status",
+			disabledMap:    true,
+			forwardStatus:  "Active",
+			expectedResult: true,
+		},
+		{
+			name:           "not disabled in map, Disabled status",
+			disabledMap:    false,
+			forwardStatus:  "Disabled",
+			expectedResult: true,
+		},
+		{
+			name:           "both disabled in map and Disabled status",
+			disabledMap:    true,
+			forwardStatus:  "Disabled",
+			expectedResult: true,
+		},
+		{
+			name:           "not disabled in map, Error status",
+			disabledMap:    false,
+			forwardStatus:  "Error",
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ui := NewBubbleTeaUI(nil, "1.0.0")
+
+			fwd := &config.Forward{
+				Resource:  "pod/my-app",
+				Port:      8080,
+				LocalPort: 8080,
+			}
+			ui.AddForward("test-id", fwd)
+
+			ui.mu.Lock()
+			ui.disabledMap["test-id"] = tt.disabledMap
+			ui.forwards["test-id"].Status = tt.forwardStatus
+			ui.mu.Unlock()
+
+			ui.mu.RLock()
+			result := ui.isForwardDisabled("test-id")
+			ui.mu.RUnlock()
+
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestBubbleTeaUI_IsForwardDisabled_NonExistent tests disabled check for non-existent forward
+func TestBubbleTeaUI_IsForwardDisabled_NonExistent(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+
+	ui.mu.RLock()
+	result := ui.isForwardDisabled("non-existent")
+	ui.mu.RUnlock()
+
+	assert.False(t, result, "Non-existent forward should not be disabled")
+}
+
+// TestBubbleTeaUI_AddForward_ReEnableClearsError tests that re-enabling clears previous errors
+func TestBubbleTeaUI_AddForward_ReEnableClearsError(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+
+	fwd := &config.Forward{
+		Resource:  "pod/my-app",
+		Port:      8080,
+		LocalPort: 8080,
+	}
+
+	// Add forward
+	ui.AddForward("test-id", fwd)
+
+	// Set error and disable
+	ui.SetError("test-id", "connection refused")
+	ui.mu.Lock()
+	ui.disabledMap["test-id"] = true
+	ui.forwards["test-id"].Status = "Disabled"
+	ui.mu.Unlock()
+
+	// Verify error exists
+	ui.mu.RLock()
+	_, hasError := ui.errors["test-id"]
+	ui.mu.RUnlock()
+	assert.True(t, hasError, "Error should exist before re-enable")
+
+	// Re-enable (re-add)
+	ui.AddForward("test-id", fwd)
+
+	// Verify error is cleared
+	ui.mu.RLock()
+	_, hasError = ui.errors["test-id"]
+	ui.mu.RUnlock()
+	assert.False(t, hasError, "Error should be cleared after re-enable")
+}
+
+// TestWrapText tests the text wrapping function
+func TestWrapText(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		expected string
+		width    int
+	}{
+		{
+			name:     "short text fits",
+			text:     "hello world",
+			width:    20,
+			expected: "hello world",
+		},
+		{
+			name:     "single long word",
+			text:     "superlongwordthatexceedswidth",
+			width:    10,
+			expected: "superlongwordthatexceedswidth",
+		},
+		{
+			name:     "wraps at word boundary",
+			text:     "hello world this is a test",
+			width:    15,
+			expected: "hello world\nthis is a test",
+		},
+		{
+			name:     "multiple wraps",
+			text:     "one two three four five six",
+			width:    10,
+			expected: "one two\nthree four\nfive six",
+		},
+		{
+			name:     "empty string",
+			text:     "",
+			width:    10,
+			expected: "",
+		},
+		{
+			name:     "single word",
+			text:     "hello",
+			width:    10,
+			expected: "hello",
+		},
+		{
+			name:     "exact width",
+			text:     "hello wor",
+			width:    9,
+			expected: "hello wor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := wrapText(tt.text, tt.width)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBubbleTeaUI_AddForward_ResourceParsing tests various resource format parsing
+func TestBubbleTeaUI_AddForward_ResourceParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		resource     string
+		expectedType string
+		expectedName string
+	}{
+		{
+			name:         "pod with prefix",
+			resource:     "pod/my-app",
+			expectedType: "pod",
+			expectedName: "my-app",
+		},
+		{
+			name:         "service resource",
+			resource:     "service/postgres",
+			expectedType: "service",
+			expectedName: "postgres",
+		},
+		{
+			name:         "deployment resource",
+			resource:     "deployment/api-server",
+			expectedType: "deployment",
+			expectedName: "api-server",
+		},
+		{
+			name:         "no type prefix (pod default)",
+			resource:     "my-pod",
+			expectedType: "pod",
+			expectedName: "my-pod",
+		},
+		{
+			name:         "resource with multiple slashes",
+			resource:     "custom/type/resource",
+			expectedType: "custom",
+			expectedName: "type/resource",
+		},
+		{
+			name:         "empty resource",
+			resource:     "",
+			expectedType: "pod",
+			expectedName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ui := NewBubbleTeaUI(nil, "1.0.0")
+
+			fwd := &config.Forward{
+				Resource:  tt.resource,
+				Port:      8080,
+				LocalPort: 8080,
+			}
+			ui.AddForward("test-id", fwd)
+
+			ui.mu.RLock()
+			status := ui.forwards["test-id"]
+			ui.mu.RUnlock()
+
+			assert.Equal(t, tt.expectedType, status.Type)
+			assert.Equal(t, tt.expectedName, status.Resource)
+		})
+	}
+}
+
+// TestConstants tests that UI constants are properly defined
+func TestConstants(t *testing.T) {
+	assert.Equal(t, 120, DefaultTermWidth)
+	assert.Equal(t, 40, DefaultTermHeight)
+	assert.Equal(t, 7, ColumnStatus)
+	assert.Equal(t, 14, ColumnWidthContext)
+	assert.Equal(t, 16, ColumnWidthNamespace)
+	assert.Equal(t, 18, ColumnWidthAlias)
+	assert.Equal(t, 8, ColumnWidthType)
+	assert.Equal(t, 20, ColumnWidthResource)
+	assert.Equal(t, 118, ErrorDisplayWidth)
+	assert.Equal(t, 20, ViewportHeight)
 }

@@ -19,15 +19,15 @@ const (
 
 // ResolvedResource represents a resolved Kubernetes resource.
 type ResolvedResource struct {
-	Name      string    // The resolved pod or service name
-	Namespace string    // The namespace
-	Timestamp time.Time // When this was resolved
+	Timestamp time.Time
+	Name      string
+	Namespace string
 }
 
 // cacheEntry stores a cached resolution result with expiry.
 type cacheEntry struct {
-	resource  ResolvedResource
 	expiresAt time.Time
+	resource  ResolvedResource
 }
 
 // ResourceResolver resolves Kubernetes resources with caching.
@@ -188,7 +188,7 @@ func (r *ResourceResolver) getFromCache(key string) string {
 		// Upgrade to write lock and delete expired entry
 		r.cacheMu.Lock()
 		// Double-check entry still exists and is still expired (may have been updated)
-		if entry, exists := r.cache[key]; exists && time.Now().After(entry.expiresAt) {
+		if expiredEntry, ok := r.cache[key]; ok && time.Now().After(expiredEntry.expiresAt) {
 			delete(r.cache, key)
 		}
 		r.cacheMu.Unlock()

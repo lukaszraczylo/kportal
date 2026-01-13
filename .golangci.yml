@@ -1,0 +1,29 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - gocritic
+    - gofmt
+
+linters-settings:
+  govet:
+    enable:
+      - fieldalignment
+  gosec:
+    excludes:
+      - G304 # File path provided as taint input - handled with #nosec comments where needed
+  gocritic:
+    disabled-checks:
+      - ifElseChain # Complex conditionals are clearer as if-else than switch true

@@ -10,36 +10,28 @@ import (
 
 // MockDiscovery is a mock implementation of DiscoveryInterface for testing
 type MockDiscovery struct {
-	mu sync.Mutex
-
-	// Return values
-	Contexts         []string
-	CurrentContext   string
-	Namespaces       []string
-	Pods             []k8s.PodInfo
-	PodsWithSelector []k8s.PodInfo
-	Services         []k8s.ServiceInfo
-
-	// Errors to return
-	ListContextsErr         error
-	GetCurrentContextErr    error
-	ListNamespacesErr       error
-	ListPodsErr             error
-	ListPodsWithSelectorErr error
-	ListServicesErr         error
-
-	// Call tracking
+	ListPodsErr               error
+	ListServicesErr           error
+	ListPodsWithSelectorErr   error
+	ListContextsErr           error
+	GetCurrentContextErr      error
+	ListNamespacesErr         error
+	LastSelector              string
+	CurrentContext            string
+	LastNamespace             string
+	LastContextName           string
+	PodsWithSelector          []k8s.PodInfo
+	Services                  []k8s.ServiceInfo
+	Pods                      []k8s.PodInfo
+	Namespaces                []string
+	Contexts                  []string
 	ListContextsCalls         int
 	GetCurrentContextCalls    int
 	ListNamespacesCalls       int
 	ListPodsCalls             int
 	ListPodsWithSelectorCalls int
 	ListServicesCalls         int
-
-	// Captured arguments
-	LastContextName string
-	LastNamespace   string
-	LastSelector    string
+	mu                        sync.Mutex
 }
 
 func NewMockDiscovery() *MockDiscovery {
@@ -104,34 +96,26 @@ func (m *MockDiscovery) ListServices(ctx context.Context, contextName, namespace
 
 // MockMutator is a mock implementation of MutatorInterface for testing
 type MockMutator struct {
-	mu sync.Mutex
-
-	// Errors to return
-	AddForwardErr        error
-	RemoveForwardsErr    error
 	RemoveForwardByIDErr error
 	UpdateForwardErr     error
-
-	// Call tracking
-	AddForwardCalls        int
-	RemoveForwardsCalls    int
-	RemoveForwardByIDCalls int
-	UpdateForwardCalls     int
-
-	// Captured arguments
-	LastContextName   string
-	LastNamespaceName string
-	LastForward       config.Forward
-	LastOldID         string
-	LastRemovedID     string
-	LastPredicate     func(ctx, ns string, fwd config.Forward) bool
-
-	// Storage for testing
-	Forwards []struct {
+	AddForwardErr        error
+	RemoveForwardsErr    error
+	LastPredicate        func(ctx, ns string, fwd config.Forward) bool
+	LastContextName      string
+	LastOldID            string
+	LastNamespaceName    string
+	LastRemovedID        string
+	Forwards             []struct {
 		Context   string
 		Namespace string
 		Forward   config.Forward
 	}
+	LastForward            config.Forward
+	RemoveForwardByIDCalls int
+	UpdateForwardCalls     int
+	RemoveForwardsCalls    int
+	AddForwardCalls        int
+	mu                     sync.Mutex
 }
 
 func NewMockMutator() *MockMutator {
@@ -186,14 +170,10 @@ func (m *MockMutator) UpdateForward(oldID, newContextName, newNamespaceName stri
 
 // MockHTTPLogSubscriber is a mock for HTTP log subscription
 type MockHTTPLogSubscriber struct {
-	mu sync.Mutex
-
-	// Subscription tracking
 	Subscriptions map[string]func(HTTPLogEntry)
 	CleanupCalls  int
-
-	// Control
-	ShouldFail bool
+	mu            sync.Mutex
+	ShouldFail    bool
 }
 
 func NewMockHTTPLogSubscriber() *MockHTTPLogSubscriber {
@@ -237,11 +217,11 @@ func (m *MockHTTPLogSubscriber) GetSubscriberFunc() HTTPLogSubscriber {
 
 // MockToggleCallback tracks toggle callback invocations
 type MockToggleCallback struct {
-	mu    sync.Mutex
 	Calls []struct {
 		ID     string
 		Enable bool
 	}
+	mu sync.Mutex
 }
 
 func NewMockToggleCallback() *MockToggleCallback {

@@ -199,8 +199,8 @@ func main() {
 				os.Exit(0)
 			}
 			// Create empty config file
-			if err := config.CreateEmptyConfigFile(*configFile); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
+			if createErr := config.CreateEmptyConfigFile(*configFile); createErr != nil {
+				fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", createErr)
 				os.Exit(1)
 			}
 			fmt.Printf("Created %s\n", *configFile)
@@ -309,7 +309,7 @@ func main() {
 		bubbleTeaUI.SetHTTPLogSubscriber(func(forwardID string, callback func(entry ui.HTTPLogEntry)) func() {
 			worker := manager.GetWorker(forwardID)
 			if worker == nil {
-				logger.Debug("HTTP log subscription failed: worker not found", map[string]interface{}{
+				logger.Debug("HTTP log subscription failed: worker not found", map[string]any{
 					"forward_id": forwardID,
 				})
 				return func() {} // No-op cleanup
@@ -318,7 +318,7 @@ func main() {
 			proxy := worker.GetHTTPProxy()
 			if proxy == nil {
 				// This is expected for forwards without httpLog enabled - not an error
-				logger.Debug("HTTP log subscription skipped: proxy not enabled", map[string]interface{}{
+				logger.Debug("HTTP log subscription skipped: proxy not enabled", map[string]any{
 					"forward_id": forwardID,
 				})
 				return func() {} // HTTP logging not enabled for this forward
@@ -326,7 +326,7 @@ func main() {
 
 			proxyLogger := proxy.GetLogger()
 			if proxyLogger == nil {
-				logger.Debug("HTTP log subscription failed: logger not available", map[string]interface{}{
+				logger.Debug("HTTP log subscription failed: logger not available", map[string]any{
 					"forward_id": forwardID,
 				})
 				return func() {}
@@ -379,8 +379,8 @@ func main() {
 	}
 
 	// Start forwards
-	if err := manager.Start(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting forwards: %v\n", err)
+	if startErr := manager.Start(cfg); startErr != nil {
+		fmt.Fprintf(os.Stderr, "Error starting forwards: %v\n", startErr)
 		os.Exit(1)
 	}
 
@@ -391,17 +391,18 @@ func main() {
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 		// Setup config watcher for hot-reload
-		watcher, err := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
+		watcher, watcherErr := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
 			return manager.Reload(newCfg)
 		}, *verbose)
-		if err != nil {
+		watcherStarted := false
+		if watcherErr != nil {
 			if *verbose {
-				log.Printf("Warning: Failed to setup config watcher: %v", err)
+				log.Printf("Warning: Failed to setup config watcher: %v", watcherErr)
 				log.Printf("Hot-reload will not be available")
 			}
 		} else {
 			watcher.Start()
-			defer watcher.Stop()
+			watcherStarted = true
 		}
 
 		if *verbose {
@@ -416,10 +417,10 @@ func main() {
 				if *verbose {
 					log.Printf("Received SIGHUP, reloading configuration...")
 				}
-				newCfg, err := config.LoadConfig(*configFile)
-				if err != nil {
+				newCfg, loadErr := config.LoadConfig(*configFile)
+				if loadErr != nil {
 					if *verbose {
-						log.Printf("Failed to reload config: %v", err)
+						log.Printf("Failed to reload config: %v", loadErr)
 					}
 					continue
 				}
@@ -432,9 +433,9 @@ func main() {
 					continue
 				}
 
-				if err := manager.Reload(newCfg); err != nil {
+				if reloadErr := manager.Reload(newCfg); reloadErr != nil {
 					if *verbose {
-						log.Printf("Failed to reload: %v", err)
+						log.Printf("Failed to reload: %v", reloadErr)
 					}
 				}
 
@@ -464,6 +465,10 @@ func main() {
 						log.Printf("Received second signal (%v), forcing exit...", sig)
 					}
 				}
+				// Stop the watcher before exiting (defers won't run after os.Exit)
+				if watcherStarted {
+					watcher.Stop()
+				}
 				os.Exit(0)
 			}
 		}
@@ -485,15 +490,16 @@ func main() {
 		}()
 
 		// Setup config watcher for hot-reload
-		watcher, err := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
+		watcher, watchErr := config.NewWatcher(*configFile, func(newCfg *config.Config) error {
 			return manager.Reload(newCfg)
 		}, *verbose)
-		if err != nil {
-			log.Printf("Warning: Failed to setup config watcher: %v", err)
+		watcherActive := false
+		if watchErr != nil {
+			log.Printf("Warning: Failed to setup config watcher: %v", watchErr)
 			log.Printf("Hot-reload will not be available")
 		} else {
 			watcher.Start()
-			defer watcher.Stop()
+			watcherActive = true
 		}
 
 		log.Printf("Press Ctrl+C to stop")
@@ -504,9 +510,9 @@ func main() {
 			switch sig {
 			case syscall.SIGHUP:
 				log.Printf("Received SIGHUP, reloading configuration...")
-				newCfg, err := config.LoadConfig(*configFile)
-				if err != nil {
-					log.Printf("Failed to reload config: %v", err)
+				newCfg, loadErr := config.LoadConfig(*configFile)
+				if loadErr != nil {
+					log.Printf("Failed to reload config: %v", loadErr)
 					continue
 				}
 
@@ -516,8 +522,8 @@ func main() {
 					continue
 				}
 
-				if err := manager.Reload(newCfg); err != nil {
-					log.Printf("Failed to reload: %v", err)
+				if reloadErr := manager.Reload(newCfg); reloadErr != nil {
+					log.Printf("Failed to reload: %v", reloadErr)
 				}
 
 			case os.Interrupt, syscall.SIGTERM:
@@ -538,6 +544,10 @@ func main() {
 				case sig := <-sigChan:
 					// Second signal received - force exit immediately
 					log.Printf("Received second signal (%v), forcing exit...", sig)
+				}
+				// Stop the watcher before exiting (defers won't run after os.Exit)
+				if watcherActive {
+					watcher.Stop()
 				}
 				os.Exit(0)
 			}

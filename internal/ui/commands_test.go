@@ -82,13 +82,16 @@ func TestMessageTypes(t *testing.T) {
 		}
 		assert.Equal(t, 8080, availableMsg.port)
 		assert.True(t, availableMsg.available)
+		assert.Equal(t, "Port 8080 available", availableMsg.message)
 
 		unavailableMsg := PortCheckedMsg{
 			port:      8080,
 			available: false,
 			message:   "Port 8080 in use by process",
 		}
+		assert.Equal(t, 8080, unavailableMsg.port)
 		assert.False(t, unavailableMsg.available)
+		assert.Equal(t, "Port 8080 in use by process", unavailableMsg.message)
 	})
 
 	t.Run("ForwardSavedMsg", func(t *testing.T) {
@@ -117,10 +120,10 @@ func TestMessageTypes(t *testing.T) {
 	t.Run("BenchmarkCompleteMsg", func(t *testing.T) {
 		msg := BenchmarkCompleteMsg{
 			ForwardID: "fwd-123",
-			Results:   nil,
-			Error:     nil,
 		}
 		assert.Equal(t, "fwd-123", msg.ForwardID)
+		assert.Nil(t, msg.Results)
+		assert.Nil(t, msg.Error)
 	})
 
 	t.Run("BenchmarkProgressMsg", func(t *testing.T) {
@@ -256,7 +259,7 @@ func TestRunBenchmarkCmd_Cancellation(t *testing.T) {
 
 	// Run with timeout to prevent hanging
 	done := make(chan bool, 1)
-	var msg interface{}
+	var msg any
 	go func() {
 		msg = cmd()
 		done <- true

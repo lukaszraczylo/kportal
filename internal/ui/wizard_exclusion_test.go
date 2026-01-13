@@ -86,10 +86,10 @@ func TestWizardMutualExclusion_HTTPLogBlocksOthers(t *testing.T) {
 // TestWizardMutualExclusion_CheckActiveModal tests the modal activity check logic
 func TestWizardMutualExclusion_CheckActiveModal(t *testing.T) {
 	tests := []struct {
-		name           string
 		setupFunc      func(*BubbleTeaUI)
-		expectActive   bool
+		name           string
 		activeModalStr string
+		expectActive   bool
 	}{
 		{
 			name:           "no modal active",

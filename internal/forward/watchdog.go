@@ -19,25 +19,25 @@ const (
 // the watchdog polls workers periodically. This reduces goroutine count and
 // simplifies worker implementation.
 type Watchdog struct {
-	mu                sync.RWMutex
-	workers           map[string]*workerState // key: forward ID
-	checkInterval     time.Duration
-	hangThreshold     time.Duration // How long without heartbeat before considered hung
-	heartbeatInterval time.Duration // How often to poll workers for heartbeat
 	ctx               context.Context
+	workers           map[string]*workerState
 	cancel            context.CancelFunc
+	eventBus          *events.Bus
 	wg                sync.WaitGroup
-	eventBus          *events.Bus // Optional event bus for decoupled communication
+	checkInterval     time.Duration
+	hangThreshold     time.Duration
+	heartbeatInterval time.Duration
+	mu                sync.RWMutex
 }
 
 // workerState tracks the health of a single worker
 type workerState struct {
-	forwardID      string
 	lastHeartbeat  time.Time
+	worker         HeartbeatResponder
+	onHungCallback func(forwardID string)
+	forwardID      string
 	heartbeatCount uint64
 	isHung         bool
-	onHungCallback func(forwardID string)
-	worker         HeartbeatResponder // Reference to worker for heartbeat polling
 }
 
 // HeartbeatResponder is an interface for workers that can respond to heartbeat checks
@@ -204,8 +204,8 @@ func (w *Watchdog) pollHeartbeats() {
 
 // hungWorkerInfo stores information about a hung worker for deferred callback execution
 type hungWorkerInfo struct {
-	forwardID string
 	callback  func(string)
+	forwardID string
 }
 
 // checkWorkers checks all registered workers for hung state

@@ -331,7 +331,7 @@ func TestProxy_Start_PortInUse(t *testing.T) {
 	}
 	err := proxy1.Start()
 	require.NoError(t, err)
-	defer proxy1.Stop()
+	defer func() { _ = proxy1.Stop() }()
 
 	// Get the actual port
 	addr := proxy1.listener.Addr().(*net.TCPAddr)
@@ -353,9 +353,9 @@ func TestProxy_Start_PortInUse(t *testing.T) {
 // TestFlattenHeaders_EdgeCases tests header flattening edge cases
 func TestFlattenHeaders_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name     string
 		headers  http.Header
 		expected map[string]string
+		name     string
 	}{
 		{
 			name:     "empty headers",

@@ -1,3 +1,15 @@
+// Package version provides version checking against GitHub releases.
+// It queries the GitHub API to check for newer versions of kportal
+// and provides update notifications.
+//
+// Basic usage:
+//
+//	info, err := version.CheckForUpdate(ctx, "owner", "repo", "v1.0.0")
+//	if err != nil {
+//	    log.Printf("Version check failed: %v", err)
+//	} else if info.UpdateAvailable {
+//	    fmt.Printf("Update available: %s -> %s\n", info.CurrentVersion, info.LatestVersion)
+//	}
 package version
 
 import (
@@ -33,10 +45,10 @@ type UpdateInfo struct {
 
 // Checker checks for new versions on GitHub
 type Checker struct {
+	client  *http.Client
 	owner   string
 	repo    string
 	current string
-	client  *http.Client
 }
 
 // NewChecker creates a new version checker

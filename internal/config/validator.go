@@ -17,9 +17,9 @@ func IsValidPort(port int) bool {
 
 // ValidationError represents a configuration validation error with context.
 type ValidationError struct {
-	Field   string            // The field that failed validation
-	Message string            // Error message
-	Context map[string]string // Additional context information
+	Context map[string]string
+	Field   string
+	Message string
 }
 
 // Validator validates configuration files.
@@ -199,14 +199,12 @@ func (v *Validator) validateResource(fwd *Forward) []ValidationError {
 					Message: fmt.Sprintf("Pod name cannot be empty for forward %s", fwd.ID()),
 				})
 			}
-		} else {
+		} else if fwd.Selector == "" {
 			// pod (no name) - must have selector
-			if fwd.Selector == "" {
-				errs = append(errs, ValidationError{
-					Field:   "selector",
-					Message: fmt.Sprintf("Forward %s uses generic 'pod' resource and must have a selector", fwd.ID()),
-				})
-			}
+			errs = append(errs, ValidationError{
+				Field:   "selector",
+				Message: fmt.Sprintf("Forward %s uses generic 'pod' resource and must have a selector", fwd.ID()),
+			})
 		}
 	}
 

@@ -1,3 +1,16 @@
+// Package mdns provides multicast DNS (mDNS/Bonjour) hostname publishing
+// for port forwards. When enabled, forwards with aliases can be accessed
+// via <alias>.local hostnames on the local network.
+//
+// The Publisher manages mDNS service registrations using zeroconf:
+//   - Registers hostnames when forwards become active
+//   - Unregisters hostnames when forwards are stopped
+//   - Provides service discovery via the _kportal._tcp service type
+//
+// mDNS discovery commands:
+//
+//	dns-sd -B _kportal._tcp local    # macOS
+//	avahi-browse -t _kportal._tcp    # Linux
 package mdns
 
 import (
@@ -23,11 +36,11 @@ const (
 // Publisher manages mDNS hostname registrations for port forwards.
 // It allows forwards with aliases to be accessible via <alias>.local hostnames.
 type Publisher struct {
-	mu       sync.RWMutex
-	servers  map[string]*zeroconf.Server // forwardID -> server
-	aliases  map[string]string           // forwardID -> alias (for logging)
-	enabled  bool
+	servers  map[string]*zeroconf.Server
+	aliases  map[string]string
 	localIPs []string
+	mu       sync.RWMutex
+	enabled  bool
 }
 
 // NewPublisher creates a new mDNS Publisher.

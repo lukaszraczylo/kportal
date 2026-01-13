@@ -16,13 +16,13 @@ type ReloadCallback func(*Config) error
 
 // Watcher watches a configuration file for changes and triggers hot-reload.
 type Watcher struct {
-	configPath string
 	callback   ReloadCallback
 	watcher    *fsnotify.Watcher
 	done       chan struct{}
+	configPath string
+	wg         sync.WaitGroup
+	stopOnce   sync.Once
 	verbose    bool
-	wg         sync.WaitGroup // Ensures watch goroutine exits before Stop returns
-	stopOnce   sync.Once      // Ensures Stop is safe to call multiple times
 }
 
 // NewWatcher creates a new file watcher for the given config file.
@@ -34,7 +34,7 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 
 	absPath, err := filepath.Abs(configPath)
 	if err != nil {
-		_ = watcher.Close()
+		_ = watcher.Close() // Cleanup on error path; already returning error
 		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
 
@@ -42,7 +42,7 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 	// (many editors delete and recreate files on save)
 	dir := filepath.Dir(absPath)
 	if err := watcher.Add(dir); err != nil {
-		_ = watcher.Close()
+		_ = watcher.Close() // Cleanup on error path; already returning error
 		return nil, fmt.Errorf("failed to watch directory %s: %w", dir, err)
 	}
 
@@ -66,7 +66,7 @@ func (w *Watcher) Start() {
 func (w *Watcher) Stop() {
 	w.stopOnce.Do(func() {
 		close(w.done)
-		_ = w.watcher.Close()
+		_ = w.watcher.Close() // Best-effort cleanup during shutdown
 	})
 	w.wg.Wait() // Wait for watch goroutine to exit
 }

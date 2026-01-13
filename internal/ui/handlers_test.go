@@ -695,12 +695,12 @@ func TestHandleSelectorValidated(t *testing.T) {
 func TestHandlePortChecked(t *testing.T) {
 	tests := []struct {
 		name        string
-		available   bool
 		expectStep  AddWizardStep
+		available   bool
 		expectError bool
 	}{
-		{"port available", true, StepConfirmation, false},
-		{"port in use", false, StepEnterLocalPort, true},
+		{name: "port available", available: true, expectStep: StepConfirmation, expectError: false},
+		{name: "port in use", available: false, expectStep: StepEnterLocalPort, expectError: true},
 	}
 
 	for _, tt := range tests {

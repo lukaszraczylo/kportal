@@ -23,23 +23,23 @@ const (
 
 // ForwardWorker manages a single port-forward connection with automatic retry.
 type ForwardWorker struct {
-	forward         config.Forward
-	portForwarder   *k8s.PortForwarder
-	ctx             context.Context
-	cancel          context.CancelFunc
-	stopChan        chan struct{}
-	doneChan        chan struct{}
-	reconnectChan   chan string   // Channel to trigger reconnection
-	successChan     chan struct{} // Channel to signal successful connection (for backoff reset)
-	verbose         bool
-	lastPod         string // Track the last pod we connected to
+	startTime       time.Time
 	statusUI        StatusUpdater
-	healthChecker   *healthcheck.Checker
+	ctx             context.Context
+	reconnectChan   chan string
+	httpProxy       *httplog.Proxy
 	watchdog        *Watchdog
-	startTime       time.Time          // Track when the worker started
-	forwardCancel   context.CancelFunc // Cancel function for current forward attempt
-	forwardCancelMu sync.Mutex         // Protects forwardCancel
-	httpProxy       *httplog.Proxy     // HTTP logging proxy (nil if not enabled)
+	cancel          context.CancelFunc
+	doneChan        chan struct{}
+	portForwarder   *k8s.PortForwarder
+	successChan     chan struct{}
+	healthChecker   *healthcheck.Checker
+	forwardCancel   context.CancelFunc
+	stopChan        chan struct{}
+	lastPod         string
+	forward         config.Forward
+	forwardCancelMu sync.Mutex
+	verbose         bool
 }
 
 // NewForwardWorker creates a new ForwardWorker for a single forward configuration.
@@ -142,7 +142,7 @@ func (w *ForwardWorker) run() {
 
 	// Start HTTP logging proxy if enabled
 	if err := w.startHTTPProxy(); err != nil {
-		logger.Error("Failed to start HTTP logging proxy", map[string]interface{}{
+		logger.Error("Failed to start HTTP logging proxy", map[string]any{
 			"forward_id": w.forward.ID(),
 			"error":      err.Error(),
 		})
@@ -175,7 +175,7 @@ func (w *ForwardWorker) run() {
 		)
 
 		if err != nil {
-			logger.Error("Failed to resolve resource", map[string]interface{}{
+			logger.Error("Failed to resolve resource", map[string]any{
 				"forward_id": w.forward.ID(),
 				"context":    w.forward.GetContext(),
 				"namespace":  w.forward.GetNamespace(),
@@ -191,7 +191,7 @@ func (w *ForwardWorker) run() {
 			if w.healthChecker != nil {
 				w.healthChecker.MarkReconnecting(w.forward.ID())
 			}
-			logger.Info("Pod restart detected, switching to new pod", map[string]interface{}{
+			logger.Info("Pod restart detected, switching to new pod", map[string]any{
 				"forward_id": w.forward.ID(),
 				"old_pod":    w.lastPod,
 				"new_pod":    podName,
@@ -199,7 +199,7 @@ func (w *ForwardWorker) run() {
 				"namespace":  w.forward.GetNamespace(),
 			})
 		} else if w.lastPod == "" {
-			logger.Info("Starting port forward", map[string]interface{}{
+			logger.Info("Starting port forward", map[string]any{
 				"forward_id": w.forward.ID(),
 				"target":     w.forward.String(),
 				"local_port": w.forward.LocalPort,
@@ -228,7 +228,7 @@ func (w *ForwardWorker) run() {
 			}
 
 			// Log the error
-			logger.Warn("Port-forward connection failed, will retry", map[string]interface{}{
+			logger.Warn("Port-forward connection failed, will retry", map[string]any{
 				"forward_id": w.forward.ID(),
 				"context":    w.forward.GetContext(),
 				"namespace":  w.forward.GetNamespace(),
@@ -433,7 +433,7 @@ func (w *ForwardWorker) startHTTPProxy() error {
 
 	w.httpProxy = proxy
 
-	logger.Info("HTTP logging proxy started", map[string]interface{}{
+	logger.Info("HTTP logging proxy started", map[string]any{
 		"forward_id":  w.forward.ID(),
 		"local_port":  w.forward.LocalPort,
 		"target_port": targetPort,
@@ -446,7 +446,7 @@ func (w *ForwardWorker) startHTTPProxy() error {
 func (w *ForwardWorker) stopHTTPProxy() {
 	if w.httpProxy != nil {
 		if err := w.httpProxy.Stop(); err != nil {
-			logger.Warn("Failed to stop HTTP proxy", map[string]interface{}{
+			logger.Warn("Failed to stop HTTP proxy", map[string]any{
 				"forward_id": w.forward.ID(),
 				"error":      err.Error(),
 			})

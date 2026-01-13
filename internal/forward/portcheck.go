@@ -99,9 +99,9 @@ func getProcessNameByPIDWindows(pid string) string {
 
 // PortConflict represents a local port that is already in use.
 type PortConflict struct {
-	Port     int    // The conflicting port number
-	Resource string // The forward resource that needs this port
-	UsedBy   string // Process information (PID, command) using the port
+	Resource string
+	UsedBy   string
+	Port     int
 }
 
 // PortChecker checks port availability on the local system.
@@ -146,7 +146,7 @@ func (pc *PortChecker) isPortAvailable(port int) bool {
 	if err != nil {
 		return false
 	}
-	_ = listener.Close()
+	_ = listener.Close() // Best-effort cleanup; port check succeeded, Close error is non-critical
 	return true
 }
 

@@ -1,3 +1,24 @@
+// Package config provides configuration loading, validation, watching, and
+// mutation for kportal. It handles parsing the .kportal.yaml configuration
+// file and provides hot-reload support via file watching.
+//
+// The configuration structure supports multiple Kubernetes contexts, each
+// with namespaces containing port-forward definitions. Additional settings
+// for health checks, reliability, and mDNS hostname publishing are also
+// supported.
+//
+// Basic usage:
+//
+//	cfg, err := config.Load("~/.kportal.yaml")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+// For hot-reload support, use the ConfigWatcher:
+//
+//	watcher, err := config.NewConfigWatcher(path, func(cfg *config.Config) {
+//	    // Handle configuration changes
+//	})
 package config
 
 import (
@@ -36,10 +57,10 @@ const (
 
 // Config represents the root configuration structure from .kportal.yaml
 type Config struct {
-	Contexts    []Context        `yaml:"contexts"`
 	HealthCheck *HealthCheckSpec `yaml:"healthCheck,omitempty"`
 	Reliability *ReliabilitySpec `yaml:"reliability,omitempty"`
 	MDNS        *MDNSSpec        `yaml:"mdns,omitempty"`
+	Contexts    []Context        `yaml:"contexts"`
 }
 
 // MDNSSpec configures mDNS (multicast DNS) hostname publishing
@@ -59,10 +80,10 @@ type HealthCheckSpec struct {
 
 // ReliabilitySpec configures connection reliability features
 type ReliabilitySpec struct {
-	TCPKeepalive   string `yaml:"tcpKeepalive,omitempty"`   // e.g., "30s" - OS-level keepalive
-	DialTimeout    string `yaml:"dialTimeout,omitempty"`    // e.g., "30s" - connection dial timeout
-	RetryOnStale   bool   `yaml:"retryOnStale,omitempty"`   // Auto-reconnect on stale detection
-	WatchdogPeriod string `yaml:"watchdogPeriod,omitempty"` // e.g., "30s" - goroutine watchdog interval
+	TCPKeepalive   string `yaml:"tcpKeepalive,omitempty"`
+	DialTimeout    string `yaml:"dialTimeout,omitempty"`
+	WatchdogPeriod string `yaml:"watchdogPeriod,omitempty"`
+	RetryOnStale   bool   `yaml:"retryOnStale,omitempty"`
 }
 
 // parseDurationOrDefault parses a duration string and returns the default if empty or invalid.
@@ -167,11 +188,11 @@ type Namespace struct {
 
 // HTTPLogSpec configures HTTP traffic logging for a forward
 type HTTPLogSpec struct {
-	Enabled        bool   `yaml:"enabled"`                  // Enable HTTP logging
-	LogFile        string `yaml:"logFile,omitempty"`        // Output file (empty = stdout)
-	MaxBodySize    int    `yaml:"maxBodySize,omitempty"`    // Max body size to log (default 1MB)
-	IncludeHeaders bool   `yaml:"includeHeaders,omitempty"` // Include headers in log
-	FilterPath     string `yaml:"filterPath,omitempty"`     // Optional glob filter for paths
+	LogFile        string `yaml:"logFile,omitempty"`
+	FilterPath     string `yaml:"filterPath,omitempty"`
+	MaxBodySize    int    `yaml:"maxBodySize,omitempty"`
+	Enabled        bool   `yaml:"enabled"`
+	IncludeHeaders bool   `yaml:"includeHeaders,omitempty"`
 }
 
 // UnmarshalYAML implements custom unmarshaling to support both bool and struct formats
@@ -196,17 +217,15 @@ func (h *HTTPLogSpec) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // Forward represents a single port-forward configuration
 type Forward struct {
-	Resource  string       `yaml:"resource"`          // e.g., "pod/my-app", "service/postgres", "pod"
-	Selector  string       `yaml:"selector"`          // Label selector for pod resolution (e.g., "app=nginx,env=prod")
-	Protocol  string       `yaml:"protocol"`          // tcp or udp
-	Port      int          `yaml:"port"`              // Remote port
-	LocalPort int          `yaml:"localPort"`         // Local port
-	Alias     string       `yaml:"alias,omitempty"`   // Optional human-readable alias for this forward
-	HTTPLog   *HTTPLogSpec `yaml:"httpLog,omitempty"` // Optional HTTP traffic logging
-
-	// Runtime fields (not in YAML)
+	HTTPLog       *HTTPLogSpec `yaml:"httpLog,omitempty"`
+	Resource      string       `yaml:"resource"`
+	Selector      string       `yaml:"selector"`
+	Protocol      string       `yaml:"protocol"`
+	Alias         string       `yaml:"alias,omitempty"`
 	contextName   string
 	namespaceName string
+	Port          int `yaml:"port"`
+	LocalPort     int `yaml:"localPort"`
 }
 
 // ID returns a unique identifier for this forward configuration.

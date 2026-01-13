@@ -1,3 +1,15 @@
+// Package httplog provides HTTP request/response logging for port forwards.
+// It captures HTTP traffic passing through the forward proxy and stores
+// entries for viewing in the UI.
+//
+// The logger supports:
+//   - Request and response capture with headers and bodies
+//   - Configurable body size limits to prevent memory issues
+//   - Callback-based notifications for real-time log viewing
+//   - Thread-safe operation for concurrent forwards
+//
+// Bodies are truncated if they exceed the configured maximum size
+// (default: 1MB) and marked as truncated in the log entry.
 package httplog
 
 import (
@@ -11,17 +23,17 @@ import (
 // Entry represents a single HTTP log entry
 type Entry struct {
 	Timestamp  time.Time         `json:"timestamp"`
+	Headers    map[string]string `json:"headers,omitempty"`
 	ForwardID  string            `json:"forward_id"`
 	RequestID  string            `json:"request_id"`
-	Direction  string            `json:"direction"` // "request" or "response"
+	Direction  string            `json:"direction"`
 	Method     string            `json:"method,omitempty"`
 	Path       string            `json:"path,omitempty"`
-	StatusCode int               `json:"status_code,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	BodySize   int               `json:"body_size"`
 	Body       string            `json:"body,omitempty"`
-	LatencyMs  int64             `json:"latency_ms,omitempty"`
 	Error      string            `json:"error,omitempty"`
+	StatusCode int               `json:"status_code,omitempty"`
+	BodySize   int               `json:"body_size"`
+	LatencyMs  int64             `json:"latency_ms,omitempty"`
 }
 
 // LogCallback is a function that receives log entries
@@ -29,12 +41,12 @@ type LogCallback func(entry Entry)
 
 // Logger writes HTTP log entries to an output stream
 type Logger struct {
-	mu         sync.Mutex
 	output     io.Writer
-	file       *os.File // Only set if we opened the file ourselves
+	file       *os.File
 	forwardID  string
-	maxBodyLen int
 	callbacks  []LogCallback
+	maxBodyLen int
+	mu         sync.Mutex
 }
 
 // NewLogger creates a new HTTP logger

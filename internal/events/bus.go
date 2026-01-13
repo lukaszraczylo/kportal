@@ -1,3 +1,21 @@
+// Package events provides a publish-subscribe event bus for decoupled
+// communication between kportal components. Events are typed and carry
+// contextual data about forward lifecycle, health status, and configuration
+// changes.
+//
+// Event types include:
+//   - Forward lifecycle: starting, connected, disconnected, reconnecting, stopped, error
+//   - Health: status_changed, stale
+//   - Watchdog: worker_hung
+//   - Config: reloaded
+//
+// Basic usage:
+//
+//	bus := events.NewBus()
+//	bus.Subscribe(events.EventForwardConnected, func(e events.Event) {
+//	    fmt.Printf("Forward %s connected\n", e.ForwardID)
+//	})
+//	bus.Publish(events.Event{Type: events.EventForwardConnected, ForwardID: "..."})
 package events
 
 import (
@@ -29,9 +47,9 @@ const (
 
 // Event represents a system event
 type Event struct {
+	Data      map[string]interface{}
 	Type      EventType
 	ForwardID string
-	Data      map[string]interface{}
 }
 
 // Handler is a function that handles events
@@ -39,8 +57,8 @@ type Handler func(event Event)
 
 // Bus is a simple event bus for decoupled communication between components
 type Bus struct {
-	mu       sync.RWMutex
 	handlers map[EventType][]Handler
+	mu       sync.RWMutex
 	closed   bool
 }
 

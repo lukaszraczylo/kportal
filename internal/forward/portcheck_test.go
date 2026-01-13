@@ -40,8 +40,8 @@ func TestIsValidPID(t *testing.T) {
 func TestFormatProcessInfo(t *testing.T) {
 	tests := []struct {
 		name     string
-		info     processInfo
 		expected string
+		info     processInfo
 	}{
 		{
 			name:     "invalid process",
@@ -72,8 +72,8 @@ func TestFormatProcessInfo(t *testing.T) {
 func TestFormatProcessList(t *testing.T) {
 	tests := []struct {
 		name      string
-		processes []processInfo
 		expected  string
+		processes []processInfo
 	}{
 		{
 			name:      "empty list",
@@ -206,7 +206,8 @@ func TestPortChecker_CheckAvailability_EmptyPorts(t *testing.T) {
 func TestPortChecker_CheckAvailability_ExcludeMap(t *testing.T) {
 	pc := NewPortChecker()
 
-	// Create a listener to occupy a port
+	// Create a listener to occupy a port on all interfaces (matching production behavior)
+	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err, "should create listener")
 	defer listener.Close()
@@ -231,11 +232,13 @@ func TestPortChecker_CheckAvailability_ExcludeMap(t *testing.T) {
 func TestPortChecker_CheckAvailability_MultipleSkipPorts(t *testing.T) {
 	pc := NewPortChecker()
 
-	// Create multiple listeners
+	// Create multiple listeners on all interfaces (matching production behavior)
+	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener1, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err)
 	defer listener1.Close()
 
+	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener2, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err)
 	defer listener2.Close()
@@ -353,7 +356,8 @@ func TestNewPortChecker(t *testing.T) {
 func TestPortChecker_PortAvailability_Integration(t *testing.T) {
 	pc := NewPortChecker()
 
-	// Create a listener to occupy a port
+	// Create a listener to occupy a port on all interfaces (matching production behavior)
+	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err, "should create listener")
 	defer listener.Close()

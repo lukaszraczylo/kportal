@@ -1,3 +1,14 @@
+// Package k8s provides Kubernetes client management, resource resolution,
+// and port-forwarding capabilities for kportal.
+//
+// Key components:
+//   - ClientPool: Thread-safe management of Kubernetes clients per context
+//   - ResourceResolver: Resolves pod/service/selector targets to actual pods
+//   - PortForwarder: Establishes and manages port-forward connections
+//   - Discovery: Provides resource discovery for the UI wizards
+//
+// The package handles automatic pod restart detection through re-resolution,
+// caching with 30-second TTL, and graceful connection management.
 package k8s
 
 import (
@@ -12,10 +23,10 @@ import (
 
 // ClientPool manages Kubernetes clients per context with thread-safe access.
 type ClientPool struct {
-	mu      sync.RWMutex
+	loader  clientcmd.ClientConfig
 	clients map[string]*kubernetes.Clientset
 	configs map[string]*rest.Config
-	loader  clientcmd.ClientConfig
+	mu      sync.RWMutex
 }
 
 // NewClientPool creates a new ClientPool instance.
@@ -51,8 +62,8 @@ func (p *ClientPool) GetClient(contextName string) (*kubernetes.Clientset, error
 	defer p.mu.Unlock()
 
 	// Double-check in case another goroutine created it while we waited
-	if client, exists := p.clients[contextName]; exists {
-		return client, nil
+	if cachedClient, ok := p.clients[contextName]; ok {
+		return cachedClient, nil
 	}
 
 	// Create new client
@@ -91,8 +102,8 @@ func (p *ClientPool) GetRestConfig(contextName string) (*rest.Config, error) {
 	defer p.mu.Unlock()
 
 	// Double-check in case another goroutine created it while we waited
-	if config, exists := p.configs[contextName]; exists {
-		return config, nil
+	if cachedConfig, ok := p.configs[contextName]; ok {
+		return cachedConfig, nil
 	}
 
 	// Create new config

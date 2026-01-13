@@ -143,7 +143,6 @@ func renderBreadcrumb(parts ...string) string {
 func renderList(items []string, cursor int, prefix string, scrollOffset int) string {
 	var b strings.Builder
 
-	const viewportHeight = 20
 	totalItems := len(items)
 
 	// Show scroll up indicator if there are items above the viewport
@@ -153,7 +152,7 @@ func renderList(items []string, cursor int, prefix string, scrollOffset int) str
 
 	// Calculate visible range
 	start := scrollOffset
-	end := scrollOffset + viewportHeight
+	end := scrollOffset + ViewportHeight
 	if end > totalItems {
 		end = totalItems
 	}

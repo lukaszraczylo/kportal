@@ -14,12 +14,12 @@ import (
 
 func TestResolveTargetPort(t *testing.T) {
 	tests := []struct {
-		name         string
-		servicePort  corev1.ServicePort
 		service      *corev1.Service
+		name         string
+		description  string
+		servicePort  corev1.ServicePort
 		pods         []corev1.Pod
 		expectedPort int32
-		description  string
 	}{
 		{
 			name: "numeric targetPort",

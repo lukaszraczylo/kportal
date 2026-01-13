@@ -14,17 +14,17 @@ type ForwardStatus struct {
 	Context    string
 	Namespace  string
 	Alias      string
-	Type       string // "service", "pod", etc.
-	Resource   string // name without type prefix
+	Type       string
+	Resource   string
+	Status     string
 	RemotePort int
 	LocalPort  int
-	Status     string // "Starting", "Active", "Reconnecting", "Error"
 }
 
 // TableUI manages the terminal table display
 type TableUI struct {
+	forwards map[string]*ForwardStatus
 	mu       sync.RWMutex
-	forwards map[string]*ForwardStatus // key is forward ID
 	verbose  bool
 }
 
@@ -101,12 +101,12 @@ func (t *TableUI) Render() {
 
 	// Sort forwards by local port for consistent display
 	type sortEntry struct {
-		id  string
 		fwd *ForwardStatus
+		id  string
 	}
 	var entries []sortEntry
 	for id, fwd := range t.forwards {
-		entries = append(entries, sortEntry{id, fwd})
+		entries = append(entries, sortEntry{fwd: fwd, id: id})
 	}
 
 	// Simple sort by local port

@@ -16,15 +16,15 @@ type ProgressCallback func(completed, total int)
 
 // Config holds the benchmark configuration
 type Config struct {
-	URL              string            // Target URL
-	Method           string            // HTTP method
-	Headers          map[string]string // Custom headers
-	Body             []byte            // Request body
-	Concurrency      int               // Number of concurrent workers
-	Requests         int               // Total number of requests (0 = use duration)
-	Duration         time.Duration     // Duration to run (0 = use requests)
-	Timeout          time.Duration     // Request timeout
-	ProgressCallback ProgressCallback  // Optional callback for progress updates
+	Headers          map[string]string
+	ProgressCallback ProgressCallback
+	URL              string
+	Method           string
+	Body             []byte
+	Concurrency      int
+	Requests         int
+	Duration         time.Duration
+	Timeout          time.Duration
 }
 
 // Runner executes HTTP benchmarks

@@ -40,8 +40,8 @@ func TestParseDurationOrDefault(t *testing.T) {
 // TestConfig_GetHealthCheckIntervalOrDefault tests health check interval getter
 func TestConfig_GetHealthCheckIntervalOrDefault(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -83,8 +83,8 @@ func TestConfig_GetHealthCheckIntervalOrDefault(t *testing.T) {
 // TestConfig_GetHealthCheckTimeoutOrDefault tests health check timeout getter
 func TestConfig_GetHealthCheckTimeoutOrDefault(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -162,8 +162,8 @@ func TestConfig_GetHealthCheckMethod(t *testing.T) {
 // TestConfig_GetMaxConnectionAge tests max connection age getter
 func TestConfig_GetMaxConnectionAge(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -198,8 +198,8 @@ func TestConfig_GetMaxConnectionAge(t *testing.T) {
 // TestConfig_GetMaxIdleTime tests max idle time getter
 func TestConfig_GetMaxIdleTime(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -234,8 +234,8 @@ func TestConfig_GetMaxIdleTime(t *testing.T) {
 // TestConfig_GetTCPKeepalive tests TCP keepalive getter
 func TestConfig_GetTCPKeepalive(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -270,8 +270,8 @@ func TestConfig_GetTCPKeepalive(t *testing.T) {
 // TestConfig_GetRetryOnStale tests retry on stale getter
 func TestConfig_GetRetryOnStale(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected bool
 	}{
 		{
@@ -306,8 +306,8 @@ func TestConfig_GetRetryOnStale(t *testing.T) {
 // TestConfig_GetWatchdogPeriod tests watchdog period getter
 func TestConfig_GetWatchdogPeriod(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -342,8 +342,8 @@ func TestConfig_GetWatchdogPeriod(t *testing.T) {
 // TestConfig_GetDialTimeout tests dial timeout getter
 func TestConfig_GetDialTimeout(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected time.Duration
 	}{
 		{
@@ -378,8 +378,8 @@ func TestConfig_GetDialTimeout(t *testing.T) {
 // TestConfig_IsMDNSEnabled tests mDNS enabled getter
 func TestConfig_IsMDNSEnabled(t *testing.T) {
 	tests := []struct {
-		name     string
 		config   *Config
+		name     string
 		expected bool
 	}{
 		{
@@ -509,8 +509,8 @@ func TestForward_GetHTTPLogMaxBodySize(t *testing.T) {
 func TestForward_GetMDNSAlias(t *testing.T) {
 	tests := []struct {
 		name     string
-		forward  Forward
 		expected string
+		forward  Forward
 	}{
 		{
 			name: "explicit alias",
@@ -591,7 +591,7 @@ func TestLoadConfig_FileTooLarge(t *testing.T) {
 		largeData[i] = 'a'
 	}
 
-	err := os.WriteFile(configPath, largeData, 0644)
+	err := os.WriteFile(configPath, largeData, 0600)
 	require.NoError(t, err)
 
 	cfg, err := LoadConfig(configPath)
@@ -628,7 +628,7 @@ mdns:
   enabled: true
 `
 
-	err := os.WriteFile(configPath, []byte(yaml), 0644)
+	err := os.WriteFile(configPath, []byte(yaml), 0600)
 	require.NoError(t, err)
 
 	cfg, err := LoadConfig(configPath)
