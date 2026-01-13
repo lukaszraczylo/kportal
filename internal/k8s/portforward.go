@@ -49,16 +49,16 @@ func (pf *PortForwarder) SetDialTimeout(timeout time.Duration) {
 
 // ForwardRequest contains the parameters for a port-forward request.
 type ForwardRequest struct {
-	ContextName string // Kubernetes context name
-	Namespace   string // Namespace
-	Resource    string // Resource (pod/name or service/name)
-	Selector    string // Label selector (for pod resolution)
-	LocalPort   int    // Local port
-	RemotePort  int    // Remote port
+	Out         io.Writer
+	ErrOut      io.Writer
 	StopChan    chan struct{}
 	ReadyChan   chan struct{}
-	Out         io.Writer // Output writer for logs
-	ErrOut      io.Writer // Error output writer
+	ContextName string
+	Namespace   string
+	Resource    string
+	Selector    string
+	LocalPort   int
+	RemotePort  int
 }
 
 // Forward establishes a port-forward connection to a Kubernetes resource.

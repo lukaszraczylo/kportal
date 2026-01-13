@@ -9,6 +9,7 @@ import (
 	"github.com/nvm/kportal/internal/benchmark"
 	"github.com/nvm/kportal/internal/config"
 	"github.com/nvm/kportal/internal/k8s"
+	"github.com/nvm/kportal/internal/logger"
 )
 
 const (
@@ -19,53 +20,53 @@ const (
 
 // ContextsLoadedMsg is sent when contexts have been loaded
 type ContextsLoadedMsg struct {
-	contexts []string
 	err      error
+	contexts []string
 }
 
 // NamespacesLoadedMsg is sent when namespaces have been loaded
 type NamespacesLoadedMsg struct {
-	namespaces []string
 	err        error
+	namespaces []string
 }
 
 // PodsLoadedMsg is sent when pods have been loaded
 type PodsLoadedMsg struct {
-	pods []k8s.PodInfo
 	err  error
+	pods []k8s.PodInfo
 }
 
 // ServicesLoadedMsg is sent when services have been loaded
 type ServicesLoadedMsg struct {
-	services []k8s.ServiceInfo
 	err      error
+	services []k8s.ServiceInfo
 }
 
 // SelectorValidatedMsg is sent when a selector has been validated
 type SelectorValidatedMsg struct {
-	valid bool
-	pods  []k8s.PodInfo
 	err   error
+	pods  []k8s.PodInfo
+	valid bool
 }
 
 // PortCheckedMsg is sent when a port's availability has been checked
 type PortCheckedMsg struct {
+	message   string
 	port      int
 	available bool
-	message   string
 }
 
 // ForwardSavedMsg is sent when a forward has been saved to config
 type ForwardSavedMsg struct {
-	success bool
 	err     error
+	success bool
 }
 
 // ForwardsRemovedMsg is sent when forwards have been removed from config
 type ForwardsRemovedMsg struct {
-	success bool
-	count   int
 	err     error
+	count   int
+	success bool
 }
 
 // WizardCompleteMsg signals that the wizard has completed
@@ -241,9 +242,9 @@ func removeForwardByIDCmd(mutator *config.Mutator, id string) tea.Cmd {
 
 // BenchmarkCompleteMsg is sent when a benchmark run completes
 type BenchmarkCompleteMsg struct {
-	ForwardID string
-	Results   *benchmark.Results
 	Error     error
+	Results   *benchmark.Results
+	ForwardID string
 }
 
 // BenchmarkProgressMsg is sent periodically during benchmark execution
@@ -291,7 +292,7 @@ func runBenchmarkCmd(ctx context.Context, forwardID string, localPort int, urlPa
 				// Recover from panics in the callback
 				defer func() {
 					if r := recover(); r != nil {
-						// Silently recover - progress callback failure shouldn't crash the benchmark
+						logger.Debug("recovered from panic in progress callback", map[string]any{"panic": r})
 					}
 				}()
 				// Non-blocking send to progress channel

@@ -15,20 +15,21 @@ import (
 	"time"
 
 	"github.com/nvm/kportal/internal/config"
+	"github.com/nvm/kportal/internal/logger"
 )
 
 // Proxy is an HTTP reverse proxy with logging capabilities
 type Proxy struct {
-	localPort    int // Port to listen on (user-facing)
-	targetPort   int // Port to forward to (k8s tunnel)
+	listener     net.Listener
 	logger       *Logger
 	server       *http.Server
 	forwardID    string
-	filterPath   string // Glob pattern for path filtering
-	includeHdrs  bool
-	listener     net.Listener
+	filterPath   string
+	localPort    int
+	targetPort   int
 	requestCount uint64
 	mu           sync.Mutex
+	includeHdrs  bool
 	running      bool
 }
 
@@ -100,7 +101,7 @@ func (p *Proxy) Start() error {
 	// Start serving (blocking)
 	go func() {
 		if err := p.server.Serve(ln); err != nil && err != http.ErrServerClosed {
-			// Log error but don't crash - proxy will be replaced on reconnect
+			logger.Debug("HTTP proxy serve error (will be replaced on reconnect)", map[string]any{"error": err.Error()})
 		}
 	}()
 

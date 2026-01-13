@@ -1,3 +1,12 @@
+// Package converter provides configuration migration from other port-forwarding
+// tools to kportal's YAML format. Currently supports kftray JSON format.
+//
+// Basic usage:
+//
+//	err := converter.ConvertKFTrayToKPortal("kftray.json", ".kportal.yaml")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 package converter
 
 import (
@@ -14,12 +23,12 @@ import (
 type KFTrayConfig struct {
 	Service      string `json:"service"`
 	Namespace    string `json:"namespace"`
-	LocalPort    int    `json:"local_port"`
-	RemotePort   int    `json:"remote_port"`
 	Context      string `json:"context"`
 	WorkloadType string `json:"workload_type"`
 	Protocol     string `json:"protocol"`
 	Alias        string `json:"alias"`
+	LocalPort    int    `json:"local_port"`
+	RemotePort   int    `json:"remote_port"`
 }
 
 // ConvertKFTrayToKPortal converts kftray JSON configuration to kportal YAML format
@@ -32,8 +41,8 @@ func ConvertKFTrayToKPortal(inputFile, outputFile string) error {
 	}
 
 	var kftrayConfigs []KFTrayConfig
-	if err := json.Unmarshal(data, &kftrayConfigs); err != nil {
-		return fmt.Errorf("failed to parse JSON: %w", err)
+	if unmarshalErr := json.Unmarshal(data, &kftrayConfigs); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse JSON: %w", unmarshalErr)
 	}
 
 	// Convert to kportal format
@@ -169,9 +178,9 @@ type namespaceEntry struct {
 type forwardEntry struct {
 	Resource  string `yaml:"resource"`
 	Protocol  string `yaml:"protocol"`
+	Alias     string `yaml:"alias,omitempty"`
 	Port      int    `yaml:"port"`
 	LocalPort int    `yaml:"localPort"`
-	Alias     string `yaml:"alias,omitempty"`
 }
 
 // Convert internal types to config package types

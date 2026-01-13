@@ -1,3 +1,19 @@
+// Package retry provides exponential backoff with jitter for retry logic.
+// It implements a backoff sequence of 1s → 2s → 4s → 8s → 10s (max),
+// with 10% random jitter to prevent thundering herd problems.
+//
+// Basic usage:
+//
+//	backoff := retry.NewBackoff()
+//	for {
+//	    err := doSomething()
+//	    if err == nil {
+//	        backoff.Reset()
+//	        break
+//	    }
+//	    delay := backoff.Next()
+//	    time.Sleep(delay)
+//	}
 package retry
 
 import (
@@ -19,8 +35,8 @@ const (
 // Backoff implements exponential backoff with jitter for retry logic.
 // The backoff sequence is: 1s → 2s → 4s → 8s → 10s (max, then stays at 10s).
 type Backoff struct {
-	attempt int
 	rng     *rand.Rand
+	attempt int
 }
 
 // NewBackoff creates a new Backoff instance with a seeded random number generator.
@@ -53,7 +69,7 @@ func (b *Backoff) Next() time.Duration {
 
 	// Add jitter (±10%)
 	jitter := b.calculateJitter(delay)
-	delay = delay + jitter
+	delay += jitter
 
 	b.attempt++
 	return delay

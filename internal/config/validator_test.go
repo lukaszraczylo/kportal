@@ -11,10 +11,10 @@ func TestValidator_ValidateConfig(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name          string
 		config        *Config
-		expectErrors  bool
+		name          string
 		errorContains []string
+		expectErrors  bool
 	}{
 		{
 			name: "valid config",
@@ -227,9 +227,9 @@ func TestValidator_ValidateResourceFormat(t *testing.T) {
 
 	tests := []struct {
 		name          string
+		errorContains []string
 		forward       Forward
 		expectErrors  bool
-		errorContains []string
 	}{
 		{
 			name: "valid pod with name",
@@ -370,10 +370,10 @@ func TestValidator_CheckDuplicatePorts(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name          string
 		config        *Config
-		expectErrors  bool
+		name          string
 		errorContains []string
+		expectErrors  bool
 	}{
 		{
 			name: "no duplicate ports",
@@ -552,8 +552,8 @@ func TestFormatValidationErrors(t *testing.T) {
 	tests := []struct {
 		name           string
 		errors         []ValidationError
-		expectEmpty    bool
 		expectContains []string
+		expectEmpty    bool
 	}{
 		{
 			name:        "no errors",
@@ -625,10 +625,10 @@ func TestValidator_ValidateStructure(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name          string
 		config        *Config
-		expectErrors  bool
+		name          string
 		errorContains []string
+		expectErrors  bool
 	}{
 		{
 			name: "empty context name",
@@ -697,10 +697,10 @@ func TestValidator_ValidateMDNS(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name          string
 		config        *Config
-		expectErrors  bool
+		name          string
 		errorContains []string
+		expectErrors  bool
 	}{
 		{
 			name: "mDNS disabled - no validation",
@@ -968,8 +968,8 @@ func TestValidator_ValidateConfigWithOptions(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name         string
 		config       *Config
+		name         string
 		allowEmpty   bool
 		expectErrors bool
 	}{

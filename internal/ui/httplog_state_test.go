@@ -180,13 +180,13 @@ func TestHTTPLogState_GetFilterModeLabel(t *testing.T) {
 	state := newHTTPLogState("fwd", "alias")
 
 	tests := []struct {
-		mode     HTTPLogFilterMode
 		expected string
+		mode     HTTPLogFilterMode
 	}{
-		{HTTPLogFilterNone, "All"},
-		{HTTPLogFilterText, "Text"},
-		{HTTPLogFilterNon200, "Non-2xx"},
-		{HTTPLogFilterErrors, "Errors (4xx/5xx)"},
+		{mode: HTTPLogFilterNone, expected: "All"},
+		{mode: HTTPLogFilterText, expected: "Text"},
+		{mode: HTTPLogFilterNon200, expected: "Non-2xx"},
+		{mode: HTTPLogFilterErrors, expected: "Errors (4xx/5xx)"},
 	}
 
 	for _, tt := range tests {

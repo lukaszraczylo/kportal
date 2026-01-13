@@ -285,10 +285,10 @@ func TestClearSearchFilter(t *testing.T) {
 func TestMoveCursorWithFilteredLists(t *testing.T) {
 	tests := []struct {
 		name           string
-		step           AddWizardStep
+		searchFilter   string
 		contexts       []string
 		namespaces     []string
-		searchFilter   string
+		step           AddWizardStep
 		initialCursor  int
 		delta          int
 		expectedCursor int

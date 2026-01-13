@@ -146,8 +146,8 @@ func TestClientPool_ThreadSafety(t *testing.T) {
 		go func() {
 			pool.ClearCache()
 			pool.RemoveContext("test-context")
-			pool.GetCurrentContext()
-			pool.ListContexts()
+			_, _ = pool.GetCurrentContext()
+			_, _ = pool.ListContexts()
 			done <- true
 		}()
 	}

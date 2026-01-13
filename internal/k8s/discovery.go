@@ -28,11 +28,11 @@ func NewDiscovery(pool *ClientPool) *Discovery {
 
 // PodInfo contains information about a pod relevant for port forwarding.
 type PodInfo struct {
+	Created    metav1.Time
 	Name       string
 	Namespace  string
-	Containers []ContainerInfo
 	Status     string
-	Created    metav1.Time
+	Containers []ContainerInfo
 }
 
 // ContainerInfo contains information about a container within a pod.
@@ -44,17 +44,17 @@ type ContainerInfo struct {
 // PortInfo describes a port exposed by a container or service.
 type PortInfo struct {
 	Name       string
-	Port       int32
-	TargetPort int32 // For services: the actual pod port to forward to
 	Protocol   string
+	Port       int32
+	TargetPort int32
 }
 
 // ServiceInfo contains information about a service.
 type ServiceInfo struct {
 	Name      string
 	Namespace string
-	Ports     []PortInfo
 	Type      string
+	Ports     []PortInfo
 }
 
 // ListContexts returns all available Kubernetes contexts from kubeconfig.

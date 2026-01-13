@@ -1,3 +1,19 @@
+// Package logger provides structured logging with support for text and JSON
+// output formats. It intercepts Kubernetes client-go logs and routes them
+// through the structured logger.
+//
+// The package provides both instance-based and global logging:
+//
+//	// Instance-based logging
+//	log := logger.New(logger.LevelInfo, logger.FormatJSON, os.Stderr)
+//	log.Info("message", "key", "value")
+//
+//	// Global logging (after Init)
+//	logger.Init(logger.LevelInfo, logger.FormatText, os.Stderr)
+//	logger.Info("message", "key", "value")
+//
+// Log levels: DEBUG < INFO < WARN < ERROR
+// Output formats: FormatText (human-readable), FormatJSON (structured)
 package logger
 
 import (
@@ -9,36 +25,50 @@ import (
 	"time"
 )
 
+// Level represents the logging level.
+// Higher levels include all lower levels (e.g., LevelInfo includes WARN and ERROR).
 type Level int
 
 const (
+	// LevelDebug is for detailed troubleshooting information.
 	LevelDebug Level = iota
+	// LevelInfo is for general operational information.
 	LevelInfo
+	// LevelWarn is for unexpected but handled situations.
 	LevelWarn
+	// LevelError is for failures that require attention.
 	LevelError
 )
 
+// Format represents the output format for log entries.
 type Format int
 
 const (
+	// FormatText outputs human-readable log lines.
 	FormatText Format = iota
+	// FormatJSON outputs structured JSON log entries.
 	FormatJSON
 )
 
+// Logger is a structured logger with configurable level and format.
+// It is safe for concurrent use.
 type Logger struct {
+	output io.Writer
 	level  Level
 	format Format
-	output io.Writer
-	mu     sync.Mutex // Protects concurrent writes to output
+	mu     sync.Mutex
 }
 
+// logEntry represents a single log entry for JSON output.
 type logEntry struct {
-	Time    string                 `json:"time"`
-	Level   string                 `json:"level"`
-	Message string                 `json:"message"`
-	Fields  map[string]interface{} `json:"fields,omitempty"`
+	Fields  map[string]any `json:"fields,omitempty"`
+	Time    string         `json:"time"`
+	Level   string         `json:"level"`
+	Message string         `json:"message"`
 }
 
+// New creates a new Logger with the specified level, format, and output writer.
+// If output is nil, os.Stderr is used.
 func New(level Level, format Format, output io.Writer) *Logger {
 	if output == nil {
 		output = os.Stderr

@@ -14,12 +14,12 @@ import (
 func TestLogrAdapter_Info(t *testing.T) {
 	tests := []struct {
 		name           string
-		loggerLevel    Level
-		logrLevel      int
 		message        string
 		keysAndValues  []interface{}
-		expectOutput   bool
 		expectContains []string
+		loggerLevel    Level
+		logrLevel      int
+		expectOutput   bool
 	}{
 		{
 			name:           "info log v0 with debug logger",
@@ -109,13 +109,13 @@ func TestLogrAdapter_Info(t *testing.T) {
 
 func TestLogrAdapter_Error(t *testing.T) {
 	tests := []struct {
-		name           string
-		loggerLevel    Level
 		err            error
+		name           string
 		message        string
 		keysAndValues  []interface{}
-		expectOutput   bool
 		expectContains []string
+		loggerLevel    Level
+		expectOutput   bool
 	}{
 		{
 			name:           "error with error object",
@@ -179,9 +179,9 @@ func TestLogrAdapter_Error(t *testing.T) {
 func TestLogrAdapter_WithName(t *testing.T) {
 	tests := []struct {
 		name           string
-		loggerNames    []string
 		message        string
 		expectContains string
+		loggerNames    []string
 	}{
 		{
 			name:           "single logger name",

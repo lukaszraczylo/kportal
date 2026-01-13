@@ -17,10 +17,10 @@ func TestKlogWriter(t *testing.T) {
 		input         string
 		expectedLevel string
 		expectedMsg   string
+		description   string
 		loggerLevel   Level
 		loggerFormat  Format
 		shouldLog     bool
-		description   string
 	}{
 		{
 			name:          "info level log",
@@ -162,9 +162,9 @@ func TestKlogWriter(t *testing.T) {
 func TestKlogWriterBuffering(t *testing.T) {
 	tests := []struct {
 		name        string
+		description string
 		writes      []string
 		expectCount int
-		description string
 	}{
 		{
 			name: "single complete line",
@@ -264,7 +264,7 @@ func TestKlogWriterConcurrency(t *testing.T) {
 		go func(id int) {
 			for j := 0; j < numWrites; j++ {
 				msg := fmt.Sprintf("I1124 12:34:56.789012   12345 test.go:123] Message from goroutine %d iteration %d\n", id, j)
-				klogWriter.Write([]byte(msg))
+				_, _ = klogWriter.Write([]byte(msg))
 			}
 			done <- true
 		}(i)

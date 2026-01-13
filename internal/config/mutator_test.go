@@ -648,7 +648,7 @@ func TestMutator_Concurrent(t *testing.T) {
 			}
 			// Some will succeed, some will fail due to validation
 			// The important thing is no race condition
-			mutator.AddForward("dev", "default", fwd)
+			_ = mutator.AddForward("dev", "default", fwd)
 		}(i)
 	}
 

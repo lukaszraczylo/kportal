@@ -55,8 +55,8 @@ func TestLogWriter_Write(t *testing.T) {
 func TestForwardWorker_GetForward(t *testing.T) {
 	tests := []struct {
 		name        string
-		forward     config.Forward
 		description string
+		forward     config.Forward
 	}{
 		{
 			name: "get pod forward",
@@ -141,9 +141,9 @@ func TestForwardWorker_IsRunning(t *testing.T) {
 func TestForwardID(t *testing.T) {
 	tests := []struct {
 		name         string
+		description  string
 		forward      config.Forward
 		expectUnique bool
-		description  string
 	}{
 		{
 			name: "unique IDs for different forwards",
@@ -183,9 +183,9 @@ func TestForwardID(t *testing.T) {
 func TestForwardString(t *testing.T) {
 	tests := []struct {
 		name             string
-		forward          config.Forward
-		expectedContains []string
 		description      string
+		expectedContains []string
+		forward          config.Forward
 	}{
 		{
 			name: "pod forward string",
@@ -259,8 +259,8 @@ func TestSleepWithBackoffConcept(t *testing.T) {
 func TestWorkerVerboseMode(t *testing.T) {
 	tests := []struct {
 		name        string
-		verbose     bool
 		description string
+		verbose     bool
 	}{
 		{
 			name:        "verbose mode enabled",

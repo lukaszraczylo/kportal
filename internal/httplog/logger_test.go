@@ -166,15 +166,15 @@ func TestLogger_Log_Error(t *testing.T) {
 func TestLogger_BodyTruncation(t *testing.T) {
 	tests := []struct {
 		name        string
-		maxBodyLen  int
 		body        string
+		maxBodyLen  int
 		expectTrunc bool
 	}{
-		{"body under limit", 100, "short", false},
-		{"body at limit", 5, "exact", false},
-		{"body over limit", 5, "this is too long", true},
-		{"empty body", 100, "", false},
-		{"zero max", 0, "any", true},
+		{name: "body under limit", maxBodyLen: 100, body: "short", expectTrunc: false},
+		{name: "body at limit", maxBodyLen: 5, body: "exact", expectTrunc: false},
+		{name: "body over limit", maxBodyLen: 5, body: "this is too long", expectTrunc: true},
+		{name: "empty body", maxBodyLen: 100, body: "", expectTrunc: false},
+		{name: "zero max", maxBodyLen: 0, body: "any", expectTrunc: true},
 	}
 
 	for _, tt := range tests {
@@ -186,10 +186,10 @@ func TestLogger_BodyTruncation(t *testing.T) {
 				output:     &buf,
 			}
 
-			l.Log(Entry{Body: tt.body})
+			_ = l.Log(Entry{Body: tt.body})
 
 			var entry Entry
-			json.Unmarshal(buf.Bytes(), &entry)
+			_ = json.Unmarshal(buf.Bytes(), &entry)
 
 			if tt.expectTrunc {
 				assert.Contains(t, entry.Body, "...(truncated)")
@@ -219,9 +219,9 @@ func TestLogger_Callbacks(t *testing.T) {
 	})
 
 	// Log entries
-	l.Log(Entry{Direction: "request", Path: "/api/1"})
-	l.Log(Entry{Direction: "response", Path: "/api/1"})
-	l.Log(Entry{Direction: "request", Path: "/api/2"})
+	_ = l.Log(Entry{Direction: "request", Path: "/api/1"})
+	_ = l.Log(Entry{Direction: "response", Path: "/api/1"})
+	_ = l.Log(Entry{Direction: "request", Path: "/api/2"})
 
 	mu.Lock()
 	assert.Len(t, received, 3)
@@ -244,7 +244,7 @@ func TestLogger_MultipleCallbacks(t *testing.T) {
 	l.AddCallback(func(entry Entry) { count1++ })
 	l.AddCallback(func(entry Entry) { count2++ })
 
-	l.Log(Entry{})
+	_ = l.Log(Entry{})
 
 	assert.Equal(t, 1, count1)
 	assert.Equal(t, 1, count2)
@@ -261,12 +261,12 @@ func TestLogger_ClearCallbacks(t *testing.T) {
 	count := 0
 	l.AddCallback(func(entry Entry) { count++ })
 
-	l.Log(Entry{})
+	_ = l.Log(Entry{})
 	assert.Equal(t, 1, count)
 
 	l.ClearCallbacks()
 
-	l.Log(Entry{})
+	_ = l.Log(Entry{})
 	assert.Equal(t, 1, count) // Still 1 - callback was cleared
 }
 
@@ -321,7 +321,7 @@ func TestLogger_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			l.Log(Entry{
+			_ = l.Log(Entry{
 				Direction: "request",
 				Path:      "/api/" + string(rune('a'+n%26)),
 			})

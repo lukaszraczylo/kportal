@@ -1,3 +1,22 @@
+// Package ui provides the terminal user interface for kportal using bubbletea.
+// It displays port-forward status in an interactive table and provides wizards
+// for adding, editing, and removing forwards.
+//
+// The main components are:
+//   - BubbleTeaUI: The interactive TUI with table display and modal dialogs
+//   - TableUI: A simpler non-interactive status display for verbose mode
+//   - Wizards: Step-by-step interfaces for configuration changes
+//   - Controller: Coordinates UI with the forward manager
+//
+// Key bindings in the main view:
+//   - ↑↓/jk: Navigate forwards
+//   - Space: Toggle forward enabled/disabled
+//   - n: New forward wizard
+//   - e: Edit forward wizard
+//   - d: Delete forward
+//   - b: Benchmark forward
+//   - l: View HTTP logs
+//   - q: Quit
 package ui
 
 import (
@@ -35,8 +54,8 @@ type ForwardErrorMsg struct {
 
 // ForwardAddMsg is sent when a new forward is added
 type ForwardAddMsg struct {
-	ID      string
 	Forward *ForwardStatus
+	ID      string
 }
 
 // ForwardRemoveMsg is sent when a forward is removed
@@ -50,48 +69,32 @@ type HTTPLogSubscriber func(forwardID string, callback func(entry HTTPLogEntry))
 
 // BubbleTeaUI is a bubbletea-based terminal UI
 type BubbleTeaUI struct {
-	mu             sync.RWMutex
-	program        *tea.Program
-	forwards       map[string]*ForwardStatus
-	forwardOrder   []string
-	selectedIndex  int
-	disabledMap    map[string]bool
-	toggleCallback func(id string, enable bool)
-	version        string
-	errors         map[string]string // Track error messages by forward ID
-
-	// Update notification
-	updateAvailable bool
-	updateVersion   string
-	updateURL       string
-
-	// Modal wizard state
-	viewMode     ViewMode
-	addWizard    *AddWizardState
-	removeWizard *RemoveWizardState
-
-	// Delete confirmation state
-	deleteConfirming    bool
+	discovery           *k8s.Discovery
+	program             *tea.Program
+	forwards            map[string]*ForwardStatus
+	benchmarkState      *BenchmarkState
+	httpLogSubscriber   HTTPLogSubscriber
+	disabledMap         map[string]bool
+	toggleCallback      func(id string, enable bool)
+	httpLogCleanup      func()
+	httpLogState        *HTTPLogState
+	errors              map[string]string
+	mutator             *config.Mutator
+	removeWizard        *RemoveWizardState
+	addWizard           *AddWizardState
+	updateVersion       string
+	updateURL           string
+	configPath          string
 	deleteConfirmID     string
 	deleteConfirmAlias  string
-	deleteConfirmCursor int // 0 = Yes, 1 = No
-
-	// Benchmark state
-	benchmarkState *BenchmarkState
-
-	// HTTP log viewing state
-	httpLogState *HTTPLogState
-
-	// Log callback cleanup function
-	httpLogCleanup func()
-
-	// Dependencies for wizards
-	discovery  *k8s.Discovery
-	mutator    *config.Mutator
-	configPath string
-
-	// Manager for accessing workers
-	httpLogSubscriber HTTPLogSubscriber
+	version             string
+	forwardOrder        []string
+	viewMode            ViewMode
+	deleteConfirmCursor int
+	selectedIndex       int
+	mu                  sync.RWMutex
+	deleteConfirming    bool
+	updateAvailable     bool
 }
 
 // bubbletea model
@@ -168,6 +171,8 @@ func (ui *BubbleTeaUI) AddForward(id string, fwd *config.Forward) {
 	if existing, ok := ui.forwards[id]; ok {
 		existing.Status = "Starting"
 		ui.disabledMap[id] = false
+		// Clear any previous error when re-enabling
+		delete(ui.errors, id)
 		ui.mu.Unlock()
 
 		if ui.program != nil {
@@ -176,15 +181,12 @@ func (ui *BubbleTeaUI) AddForward(id string, fwd *config.Forward) {
 		return
 	}
 
-	// Parse resource
+	// Parse resource (e.g., "pod/my-app" -> type="pod", name="my-app")
 	resourceType := "pod"
 	resourceName := fwd.Resource
-	for idx := 0; idx < len(fwd.Resource); idx++ {
-		if fwd.Resource[idx] == '/' {
-			resourceType = fwd.Resource[:idx]
-			resourceName = fwd.Resource[idx+1:]
-			break
-		}
+	if parts := strings.SplitN(fwd.Resource, "/", 2); len(parts) == 2 {
+		resourceType = parts[0]
+		resourceName = parts[1]
 	}
 
 	alias := fwd.Alias
@@ -380,10 +382,10 @@ func (m model) View() string {
 
 	// Fallback to reasonable defaults if dimensions not yet received
 	if termWidth == 0 {
-		termWidth = 120
+		termWidth = DefaultTermWidth
 	}
 	if termHeight == 0 {
-		termHeight = 40
+		termHeight = DefaultTermHeight
 	}
 
 	// Overlay delete confirmation if active
@@ -411,28 +413,98 @@ func (m model) View() string {
 	}
 }
 
+// mainViewColors holds the color palette for the main view
+type mainViewColors struct {
+	header     lipgloss.Color
+	active     lipgloss.Color
+	warning    lipgloss.Color
+	errorColor lipgloss.Color
+	muted      lipgloss.Color
+	selectedBg lipgloss.Color
+	selectedFg lipgloss.Color
+}
+
+// defaultMainViewColors returns the default color palette
+func defaultMainViewColors() mainViewColors {
+	return mainViewColors{
+		header:     lipgloss.Color("220"), // Yellow
+		active:     lipgloss.Color("46"),  // Green
+		warning:    lipgloss.Color("220"), // Yellow
+		errorColor: lipgloss.Color("196"), // Red
+		muted:      lipgloss.Color("240"), // Gray
+		selectedBg: lipgloss.Color("240"), // Gray background
+		selectedFg: lipgloss.Color("230"), // Light foreground
+	}
+}
+
+// keyBinding represents a keyboard shortcut and its description
+type keyBinding struct {
+	key  string
+	desc string
+}
+
+// mainViewKeyBindings returns the key bindings for the main view
+func mainViewKeyBindings() []keyBinding {
+	return []keyBinding{
+		{"↑↓/jk", "Navigate"},
+		{"Space", "Toggle"},
+		{"n", "New"},
+		{"e", "Edit"},
+		{"d", "Delete"},
+		{"b", "Bench"},
+		{"l", "Logs"},
+		{"q", "Quit"},
+	}
+}
+
 func (m model) renderMainView() string {
 	m.ui.mu.RLock()
 	defer m.ui.mu.RUnlock()
 
 	var b strings.Builder
+	colors := defaultMainViewColors()
 
 	// Get terminal dimensions for proper sizing
-	termHeight := m.termHeight
-	if termHeight == 0 {
-		termHeight = 40 // Fallback
+	termWidth, termHeight := m.getTermDimensions()
+
+	// Render title header
+	b.WriteString(m.renderTitle(colors.header))
+
+	// Render forwards table or empty message
+	if len(m.ui.forwardOrder) == 0 {
+		b.WriteString(m.renderEmptyMessage(colors.muted))
+	} else {
+		b.WriteString(m.renderForwardsTable(colors))
 	}
 
-	// Color palette
-	headerColor := lipgloss.Color("220")  // Yellow
-	activeColor := lipgloss.Color("46")   // Green
-	warningColor := lipgloss.Color("220") // Yellow
-	errorColor := lipgloss.Color("196")   // Red
-	mutedColor := lipgloss.Color("240")   // Gray
-	selectedBg := lipgloss.Color("240")   // Gray background
-	selectedFg := lipgloss.Color("230")   // Light foreground
+	// Render error section if any errors exist
+	if len(m.ui.errors) > 0 {
+		b.WriteString(m.renderErrorSection())
+	}
 
-	// Title with version
+	// Render footer with proper spacing
+	b.WriteString(m.renderFooterWithSpacing(termWidth, termHeight, &b))
+
+	return b.String()
+}
+
+// getTermDimensions returns terminal dimensions with fallback defaults
+func (m model) getTermDimensions() (width, height int) {
+	width = m.termWidth
+	height = m.termHeight
+	if width == 0 {
+		width = DefaultTermWidth
+	}
+	if height == 0 {
+		height = DefaultTermHeight
+	}
+	return
+}
+
+// renderTitle renders the title bar with version and optional update notification
+func (m model) renderTitle(headerColor lipgloss.Color) string {
+	var b strings.Builder
+
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(headerColor).
@@ -451,180 +523,222 @@ func (m model) renderMainView() string {
 	}
 	b.WriteString("\n\n")
 
-	// No forwards
-	if len(m.ui.forwardOrder) == 0 {
-		disabledStyle := lipgloss.NewStyle().Foreground(mutedColor)
-		b.WriteString(disabledStyle.Render("No forwards configured\n"))
-	} else {
-		// Build table rows
-		var rows [][]string
-		for _, id := range m.ui.forwardOrder {
+	return b.String()
+}
+
+// renderEmptyMessage renders the message shown when no forwards are configured
+func (m model) renderEmptyMessage(mutedColor lipgloss.Color) string {
+	disabledStyle := lipgloss.NewStyle().Foreground(mutedColor)
+	return disabledStyle.Render("No forwards configured\n")
+}
+
+// renderForwardsTable renders the forwards table with all styling
+func (m model) renderForwardsTable(colors mainViewColors) string {
+	var b strings.Builder
+
+	// Build table rows
+	rows := m.buildTableRows()
+
+	// Create table with styling (no borders for cleaner look)
+	t := table.New().
+		Border(lipgloss.HiddenBorder()).
+		Headers("CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE", "LOCAL", "STATUS").
+		Rows(rows...).
+		StyleFunc(m.createTableStyleFunc(colors))
+
+	b.WriteString(t.Render())
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+// buildTableRows builds the data rows for the forwards table
+func (m model) buildTableRows() [][]string {
+	var rows [][]string
+
+	for _, id := range m.ui.forwardOrder {
+		fwd, ok := m.ui.forwards[id]
+		if !ok {
+			continue
+		}
+
+		statusIcon, statusText := m.getStatusIconAndText(id, fwd)
+
+		rows = append(rows, []string{
+			truncate(fwd.Context, ColumnWidthContext),
+			truncate(fwd.Namespace, ColumnWidthNamespace),
+			truncate(fwd.Alias, ColumnWidthAlias),
+			truncate(fwd.Type, ColumnWidthType),
+			truncate(fwd.Resource, ColumnWidthResource),
+			fmt.Sprintf("%d", fwd.RemotePort),
+			fmt.Sprintf("%d", fwd.LocalPort),
+			statusIcon + " " + statusText,
+		})
+	}
+
+	return rows
+}
+
+// getStatusIconAndText returns the appropriate status icon and text for a forward
+func (m model) getStatusIconAndText(id string, fwd *ForwardStatus) (icon, text string) {
+	icon = "●"
+	text = fwd.Status
+
+	if m.ui.isForwardDisabled(id) {
+		return "○", "Disabled"
+	}
+
+	switch fwd.Status {
+	case "Starting":
+		icon = "○"
+	case "Reconnecting":
+		icon = "◐"
+	case "Error":
+		icon = "✗"
+	}
+
+	return icon, text
+}
+
+// createTableStyleFunc creates the style function for the forwards table
+func (m model) createTableStyleFunc(colors mainViewColors) func(row, col int) lipgloss.Style {
+	return func(row, col int) lipgloss.Style {
+		// Header row
+		if row == table.HeaderRow {
+			return lipgloss.NewStyle().
+				Bold(true).
+				Foreground(colors.header).
+				Padding(0, 1)
+		}
+
+		baseStyle := lipgloss.NewStyle().Padding(0, 1)
+
+		if row >= 0 && row < len(m.ui.forwardOrder) {
+			id := m.ui.forwardOrder[row]
 			fwd, ok := m.ui.forwards[id]
-			if !ok {
-				continue
+			isSelected := row == m.ui.selectedIndex
+			isDisabled := m.ui.isForwardDisabled(id)
+
+			// Selected row gets background highlight
+			if isSelected {
+				return baseStyle.
+					Background(colors.selectedBg).
+					Foreground(colors.selectedFg)
 			}
 
-			isDisabled := m.ui.disabledMap[id] || fwd.Status == "Disabled"
-
-			// Status icon and text
-			statusIcon := "●"
-			statusText := fwd.Status
-
+			// Disabled rows are muted
 			if isDisabled {
-				statusIcon = "○"
-				statusText = "Disabled"
-			} else {
+				return baseStyle.Foreground(colors.muted)
+			}
+
+			// Status column gets colored based on status
+			if col == ColumnStatus && ok {
 				switch fwd.Status {
-				case "Starting":
-					statusIcon = "○"
-				case "Reconnecting":
-					statusIcon = "◐"
+				case "Active":
+					return baseStyle.Foreground(colors.active)
+				case "Starting", "Reconnecting":
+					return baseStyle.Foreground(colors.warning)
 				case "Error":
-					statusIcon = "✗"
-				}
-			}
-
-			rows = append(rows, []string{
-				truncate(fwd.Context, 14),
-				truncate(fwd.Namespace, 16),
-				truncate(fwd.Alias, 18),
-				truncate(fwd.Type, 8),
-				truncate(fwd.Resource, 20),
-				fmt.Sprintf("%d", fwd.RemotePort),
-				fmt.Sprintf("%d", fwd.LocalPort),
-				statusIcon + " " + statusText,
-			})
-		}
-
-		// Create table with styling (no borders for cleaner look)
-		t := table.New().
-			Border(lipgloss.HiddenBorder()).
-			Headers("CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE", "LOCAL", "STATUS").
-			Rows(rows...).
-			StyleFunc(func(row, col int) lipgloss.Style {
-				// Header row
-				if row == table.HeaderRow {
-					return lipgloss.NewStyle().
-						Bold(true).
-						Foreground(headerColor).
-						Padding(0, 1)
-				}
-
-				// Get the forward for this row to check its status
-				baseStyle := lipgloss.NewStyle().Padding(0, 1)
-
-				if row >= 0 && row < len(m.ui.forwardOrder) {
-					id := m.ui.forwardOrder[row]
-					fwd, ok := m.ui.forwards[id]
-					isSelected := row == m.ui.selectedIndex
-					isDisabled := m.ui.disabledMap[id] || (ok && fwd.Status == "Disabled")
-
-					// Selected row gets background highlight
-					if isSelected {
-						return baseStyle.
-							Background(selectedBg).
-							Foreground(selectedFg)
-					}
-
-					// Disabled rows are muted
-					if isDisabled {
-						return baseStyle.Foreground(mutedColor)
-					}
-
-					// Status column gets colored based on status
-					if col == 7 && ok { // STATUS column
-						switch fwd.Status {
-						case "Active":
-							return baseStyle.Foreground(activeColor)
-						case "Starting", "Reconnecting":
-							return baseStyle.Foreground(warningColor)
-						case "Error":
-							return baseStyle.Foreground(errorColor)
-						}
-					}
-				}
-
-				return baseStyle
-			})
-
-		b.WriteString(t.Render())
-		b.WriteString("\n")
-	}
-
-	// Display errors if any (before footer)
-	if len(m.ui.errors) > 0 {
-		b.WriteString("\n\n")
-		errorHeaderStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("196"))
-
-		b.WriteString(errorHeaderStyle.Render("Errors:"))
-		b.WriteString("\n")
-
-		errorLineStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Width(118). // Slightly less than table width (120) for padding
-			MaxWidth(118)
-
-		for id, errMsg := range m.ui.errors {
-			// Find the forward to display its alias
-			if fwd, ok := m.ui.forwards[id]; ok {
-				// Format: "  • alias: error message"
-				prefix := fmt.Sprintf("  • %s: ", fwd.Alias)
-
-				// Wrap the error message if it's too long
-				// Max line length is 118, subtract prefix length
-				maxErrLen := 118 - len(prefix)
-				wrappedMsg := wrapText(errMsg, maxErrLen)
-
-				// Render first line with prefix
-				lines := strings.Split(wrappedMsg, "\n")
-				if len(lines) > 0 {
-					b.WriteString(errorLineStyle.Render(prefix + lines[0]))
-					b.WriteString("\n")
-
-					// Render subsequent lines with indentation
-					indent := strings.Repeat(" ", len(prefix))
-					for i := 1; i < len(lines); i++ {
-						b.WriteString(errorLineStyle.Render(indent + lines[i]))
-						b.WriteString("\n")
-					}
+					return baseStyle.Foreground(colors.errorColor)
 				}
 			}
 		}
+
+		return baseStyle
 	}
+}
+
+// renderErrorSection renders the error display section
+func (m model) renderErrorSection() string {
+	var b strings.Builder
+
+	b.WriteString("\n\n")
+	errorHeaderStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("196"))
+
+	b.WriteString(errorHeaderStyle.Render("Errors:"))
+	b.WriteString("\n")
+
+	errorLineStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Width(ErrorDisplayWidth).
+		MaxWidth(ErrorDisplayWidth)
+
+	for id, errMsg := range m.ui.errors {
+		// Find the forward to display its alias
+		if fwd, ok := m.ui.forwards[id]; ok {
+			b.WriteString(m.renderErrorLine(fwd.Alias, errMsg, errorLineStyle))
+		}
+	}
+
+	return b.String()
+}
+
+// renderErrorLine renders a single error line with proper wrapping
+func (m model) renderErrorLine(alias, errMsg string, style lipgloss.Style) string {
+	var b strings.Builder
+
+	// Format: "  • alias: error message"
+	prefix := fmt.Sprintf("  • %s: ", alias)
+
+	// Wrap the error message if it's too long
+	maxErrLen := ErrorDisplayWidth - len(prefix)
+	wrappedMsg := wrapText(errMsg, maxErrLen)
+
+	// Render first line with prefix
+	lines := strings.Split(wrappedMsg, "\n")
+	if len(lines) > 0 {
+		b.WriteString(style.Render(prefix + lines[0]))
+		b.WriteString("\n")
+
+		// Render subsequent lines with indentation
+		indent := strings.Repeat(" ", len(prefix))
+		for i := 1; i < len(lines); i++ {
+			b.WriteString(style.Render(indent + lines[i]))
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String()
+}
+
+// renderFooterWithSpacing renders the footer with proper vertical spacing
+func (m model) renderFooterWithSpacing(termWidth, termHeight int, content *strings.Builder) string {
+	var b strings.Builder
 
 	// Calculate current content height
-	currentContent := b.String()
+	currentContent := content.String()
 	currentLines := strings.Count(currentContent, "\n") + 1
 
-	// Footer styles
+	// Build footer content
+	footerLines := m.buildFooterLines(termWidth)
+
+	// Calculate footer height and add spacing
+	footerHeight := len(footerLines) + 1 // +1 for the blank line before footer
+	remainingLines := termHeight - currentLines - footerHeight
+	if remainingLines > 0 {
+		b.WriteString(strings.Repeat("\n", remainingLines))
+	}
+
+	// Add footer at bottom
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	b.WriteString("\n")
+	for i, line := range footerLines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(footerStyle.Render(line))
+	}
+
+	return b.String()
+}
+
+// buildFooterLines builds the footer lines that fit within terminal width
+func (m model) buildFooterLines(termWidth int) []string {
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	bindings := mainViewKeyBindings()
 
-	// Get terminal width for footer wrapping
-	termWidth := m.termWidth
-	if termWidth == 0 {
-		termWidth = 120
-	}
-
-	// Define key bindings as structured data for flexible rendering
-	type keyBinding struct {
-		key  string
-		desc string
-	}
-	bindings := []keyBinding{
-		{"↑↓/jk", "Navigate"},
-		{"Space", "Toggle"},
-		{"n", "New"},
-		{"e", "Edit"},
-		{"d", "Delete"},
-		{"b", "Bench"},
-		{"l", "Logs"},
-		{"q", "Quit"},
-	}
-
-	// Build footer lines that fit within terminal width
 	var footerLines []string
 	var currentLine strings.Builder
 	currentLineVisualLen := 0
@@ -676,23 +790,7 @@ func (m model) renderMainView() string {
 	currentLine.WriteString(totalSuffix)
 	footerLines = append(footerLines, currentLine.String())
 
-	// Calculate footer height
-	footerHeight := len(footerLines) + 1 // +1 for the blank line before footer
-	remainingLines := termHeight - currentLines - footerHeight
-	if remainingLines > 0 {
-		b.WriteString(strings.Repeat("\n", remainingLines))
-	}
-
-	// Add footer at bottom
-	b.WriteString("\n")
-	for i, line := range footerLines {
-		if i > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString(footerStyle.Render(line))
-	}
-
-	return b.String()
+	return footerLines
 }
 
 // wrapText wraps text to the specified width, breaking at word boundaries
@@ -834,4 +932,19 @@ func (ui *BubbleTeaUI) toggleSelected() {
 	if ui.toggleCallback != nil {
 		go ui.toggleCallback(selectedID, !newState) // enable is inverse of disabled
 	}
+}
+
+// isForwardDisabled checks if a forward is disabled.
+// A forward is considered disabled if either:
+// 1. The user has disabled it via the UI (tracked in disabledMap)
+// 2. The forward's status is "Disabled" (from the manager)
+// Caller must hold ui.mu.RLock or ui.mu.Lock.
+func (ui *BubbleTeaUI) isForwardDisabled(id string) bool {
+	if ui.disabledMap[id] {
+		return true
+	}
+	if fwd, ok := ui.forwards[id]; ok && fwd.Status == "Disabled" {
+		return true
+	}
+	return false
 }

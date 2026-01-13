@@ -1,3 +1,14 @@
+// Package benchmark provides HTTP benchmarking capabilities for port forwards.
+// It measures latency, throughput, and reliability of forwarded connections.
+//
+// The benchmark runner sends configurable numbers of concurrent requests
+// and collects statistics including:
+//   - Latency percentiles (P50, P95, P99)
+//   - Request success/failure rates
+//   - Throughput (requests/second)
+//   - Status code distribution
+//
+// Results can be displayed in the UI or exported for analysis.
 package benchmark
 
 import (
@@ -7,17 +18,17 @@ import (
 
 // Results holds the aggregated results of a benchmark run
 type Results struct {
-	ForwardID     string          `json:"forward_id"`
-	URL           string          `json:"url"`
-	Method        string          `json:"method"`
 	StartTime     time.Time       `json:"start_time"`
 	EndTime       time.Time       `json:"end_time"`
+	StatusCodes   map[int]int     `json:"status_codes"`
+	Errors        map[string]int  `json:"errors,omitempty"`
+	Method        string          `json:"method"`
+	URL           string          `json:"url"`
+	ForwardID     string          `json:"forward_id"`
+	Latencies     []time.Duration `json:"-"`
 	TotalRequests int             `json:"total_requests"`
 	Successful    int             `json:"successful"`
 	Failed        int             `json:"failed"`
-	Latencies     []time.Duration `json:"-"` // Raw latencies for percentile calculation
-	StatusCodes   map[int]int     `json:"status_codes"`
-	Errors        map[string]int  `json:"errors,omitempty"`
 	BytesRead     int64           `json:"bytes_read"`
 	BytesWritten  int64           `json:"bytes_written"`
 }

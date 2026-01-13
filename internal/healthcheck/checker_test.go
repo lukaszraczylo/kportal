@@ -88,9 +88,9 @@ func (s *HealthCheckTestSuite) TestRegisterAndUnregister() {
 func (s *HealthCheckTestSuite) TestTCPDialMethod() {
 	tests := []struct {
 		name           string
-		setupPort      bool
 		expectedStatus Status
 		description    string
+		setupPort      bool
 	}{
 		{
 			name:           "port available - healthy",
@@ -109,10 +109,9 @@ func (s *HealthCheckTestSuite) TestTCPDialMethod() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			var testPort int
-			var testListener net.Listener
 
 			if tt.setupPort {
-				// Use the existing listener
+				// Use the existing listener from suite setup
 				testPort = s.port
 			} else {
 				// Use a port that's not listening
@@ -143,10 +142,6 @@ func (s *HealthCheckTestSuite) TestTCPDialMethod() {
 			status, exists := checker.GetStatus("test-forward")
 			assert.True(s.T(), exists)
 			assert.Equal(s.T(), tt.expectedStatus, status, tt.description)
-
-			if testListener != nil {
-				testListener.Close()
-			}
 		})
 	}
 }
@@ -201,7 +196,7 @@ func (s *HealthCheckTestSuite) TestDataTransferMethod() {
 						}
 						switch tt.serverBehavior {
 						case "banner":
-							conn.Write([]byte("220 Welcome\r\n"))
+							_, _ = conn.Write([]byte("220 Welcome\r\n"))
 							time.Sleep(50 * time.Millisecond)
 							conn.Close()
 						case "close":

@@ -27,7 +27,7 @@ func TestNewWatcher(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }
@@ -57,7 +57,7 @@ func TestNewWatcher_Verbose(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }
@@ -85,13 +85,15 @@ func TestNewWatcher_RelativePath(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	// Change to tmpDir and use relative path
-	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(tmpDir)
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(originalDir) }()
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }
 
@@ -119,7 +121,7 @@ func TestWatcher_StartStop(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }
@@ -161,7 +163,7 @@ func TestWatcher_DetectsFileChange(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	var mu sync.Mutex
@@ -199,7 +201,7 @@ func TestWatcher_DetectsFileChange(t *testing.T) {
             port: 9090
             localPort: 9090
 `
-	err = os.WriteFile(configPath, []byte(updated), 0644)
+	err = os.WriteFile(configPath, []byte(updated), 0600)
 	require.NoError(t, err)
 
 	// Wait for callback with timeout
@@ -239,7 +241,7 @@ func TestWatcher_IgnoresInvalidConfig(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callbackCount := 0
@@ -267,7 +269,7 @@ func TestWatcher_IgnoresInvalidConfig(t *testing.T) {
       - name: default
         forwards: [this is invalid
 `
-	err = os.WriteFile(configPath, []byte(invalid), 0644)
+	err = os.WriteFile(configPath, []byte(invalid), 0600)
 	require.NoError(t, err)
 
 	// Wait a bit
@@ -294,7 +296,7 @@ func TestWatcher_IgnoresValidationErrors(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callbackCount := 0
@@ -328,7 +330,7 @@ func TestWatcher_IgnoresValidationErrors(t *testing.T) {
             port: 9090
             localPort: 8080
 `
-	err = os.WriteFile(configPath, []byte(invalid), 0644)
+	err = os.WriteFile(configPath, []byte(invalid), 0600)
 	require.NoError(t, err)
 
 	// Wait a bit
@@ -356,7 +358,7 @@ func TestWatcher_IgnoresOtherFiles(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callbackCount := 0
@@ -378,7 +380,7 @@ func TestWatcher_IgnoresOtherFiles(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Write to a different file
-	err = os.WriteFile(otherPath, []byte("some content"), 0644)
+	err = os.WriteFile(otherPath, []byte("some content"), 0600)
 	require.NoError(t, err)
 
 	// Wait a bit
@@ -405,7 +407,7 @@ func TestWatcher_HandleReload_LoadError(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callbackCalled := false
@@ -445,7 +447,7 @@ func TestWatcher_DoubleStop(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }
@@ -479,7 +481,7 @@ func TestWatcher_StopWithoutStart(t *testing.T) {
             port: 8080
             localPort: 8080
 `
-	err := os.WriteFile(configPath, []byte(initial), 0644)
+	err := os.WriteFile(configPath, []byte(initial), 0600)
 	require.NoError(t, err)
 
 	callback := func(cfg *Config) error { return nil }

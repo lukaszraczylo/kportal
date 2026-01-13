@@ -1,3 +1,17 @@
+// Package healthcheck provides connection health monitoring for port-forwards.
+// It detects stale, hung, or broken connections and triggers reconnection.
+//
+// The Checker supports two health check methods:
+//   - tcp-dial: Simple TCP connection test (fast but less reliable)
+//   - data-transfer: Attempts to read data from the connection (more reliable)
+//
+// Stale connection detection prevents issues during long-running operations
+// like database dumps by monitoring:
+//   - Connection age (default: 25 minutes, before k8s 30-minute timeout)
+//   - Idle time (default: 10 minutes, detects hung tunnels)
+//
+// The package uses a sync.Pool for buffer reuse to minimize GC pressure
+// during frequent health checks.
 package healthcheck
 
 import (
@@ -47,13 +61,13 @@ const (
 
 // PortHealth represents the health status of a single port
 type PortHealth struct {
-	Port           int
 	LastCheck      time.Time
+	RegisteredAt   time.Time
+	ConnectionTime time.Time
+	LastActivity   time.Time
 	Status         Status
 	ErrorMessage   string
-	RegisteredAt   time.Time // When this port was registered
-	ConnectionTime time.Time // When current connection was established
-	LastActivity   time.Time // Last time data was transferred
+	Port           int
 }
 
 // StatusCallback is called when a port's health status changes
@@ -63,26 +77,26 @@ type StatusCallback func(forwardID string, status Status, errorMsg string)
 // Uses a single goroutine to check all registered ports, reducing overhead
 // compared to one goroutine per port.
 type Checker struct {
-	mu               sync.RWMutex
-	ports            map[string]*PortHealth // key: forward ID
-	callbacks        map[string]StatusCallback
-	interval         time.Duration
-	timeout          time.Duration
-	method           CheckMethod
-	maxConnectionAge time.Duration
-	maxIdleTime      time.Duration
 	ctx              context.Context
+	ports            map[string]*PortHealth
+	callbacks        map[string]StatusCallback
+	eventBus         *events.Bus
 	cancel           context.CancelFunc
+	method           CheckMethod
 	wg               sync.WaitGroup
+	interval         time.Duration
+	maxIdleTime      time.Duration
+	maxConnectionAge time.Duration
+	timeout          time.Duration
+	mu               sync.RWMutex
 	started          bool
-	eventBus         *events.Bus // Optional event bus for decoupled communication
 }
 
 // CheckerOptions configures the health checker
 type CheckerOptions struct {
+	Method           CheckMethod
 	Interval         time.Duration
 	Timeout          time.Duration
-	Method           CheckMethod
 	MaxConnectionAge time.Duration
 	MaxIdleTime      time.Duration
 }
@@ -339,7 +353,10 @@ func (c *Checker) checkPort(forwardID string) {
 			connectionAge.Round(time.Second), c.maxConnectionAge, idleTime.Round(time.Second))
 	} else if c.maxIdleTime > 0 && idleTime > c.maxIdleTime {
 		newStatus = StatusStale
-		errorMsg = fmt.Sprintf("idle time %v exceeds max %v", idleTime.Round(time.Second), c.maxIdleTime)
+		// Round up to next second to ensure displayed time is always > max
+		// (avoids confusing "10m0s exceeds max 10m0s" when actual is 10m0.1s)
+		displayIdle := idleTime.Truncate(time.Second) + time.Second
+		errorMsg = fmt.Sprintf("idle time %v exceeds max %v", displayIdle, c.maxIdleTime)
 	} else {
 		// Perform connectivity check
 		var checkErr error
@@ -408,7 +425,7 @@ func (c *Checker) checkTCPDial(port int) error {
 	if err != nil {
 		return err
 	}
-	_ = conn.Close()
+	_ = conn.Close() // Best-effort cleanup; health check succeeded
 	return nil
 }
 

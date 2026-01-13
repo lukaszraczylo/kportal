@@ -109,45 +109,33 @@ func (r ResourceType) Description() string {
 
 // AddWizardState maintains the state for the add port forward wizard
 type AddWizardState struct {
-	step         AddWizardStep
-	inputMode    InputMode
-	cursor       int
-	scrollOffset int // For scrolling long lists
-	textInput    string
-	searchFilter string // For filtering lists (contexts, namespaces, services)
-	loading      bool
-	error        error
-
-	// Selections made by user
+	error                error
+	resourceValue        string
+	originalID           string
+	portCheckMsg         string
+	alias                string
+	textInput            string
+	searchFilter         string
+	selector             string
 	selectedContext      string
 	selectedNamespace    string
+	pods                 []k8s.PodInfo
+	contexts             []string
+	detectedPorts        []k8s.PortInfo
+	matchingPods         []k8s.PodInfo
+	services             []k8s.ServiceInfo
+	namespaces           []string
+	scrollOffset         int
 	selectedResourceType ResourceType
-	resourceValue        string // pod prefix or service name
-	selector             string // for pod selector type
-	remotePort           int
+	step                 AddWizardStep
 	localPort            int
-	alias                string
-
-	// Available options (loaded asynchronously from k8s)
-	contexts   []string
-	namespaces []string
-	pods       []k8s.PodInfo
-	services   []k8s.ServiceInfo
-
-	// Validation state
-	portAvailable bool
-	portCheckMsg  string
-	matchingPods  []k8s.PodInfo
-
-	// Edit mode
-	isEditing  bool
-	originalID string // ID of the forward being edited
-
-	// Detected ports from resources
-	detectedPorts []k8s.PortInfo
-
-	// Confirmation focus (alias field vs buttons)
-	confirmationFocus ConfirmationFocus
+	cursor               int
+	remotePort           int
+	inputMode            InputMode
+	confirmationFocus    ConfirmationFocus
+	portAvailable        bool
+	isEditing            bool
+	loading              bool
 }
 
 // newAddWizardState creates a new add wizard state initialized to the first step
@@ -239,11 +227,11 @@ func (w *AddWizardState) clearTextInput() {
 
 // RemoveWizardState maintains the state for the remove port forward wizard
 type RemoveWizardState struct {
+	selected      map[int]bool
 	forwards      []RemovableForward
 	cursor        int
-	selected      map[int]bool
+	confirmCursor int
 	confirming    bool
-	confirmCursor int // 0 = Yes, 1 = No
 }
 
 // RemovableForward represents a forward that can be removed
@@ -387,45 +375,39 @@ const (
 
 // BenchmarkState maintains the state for the benchmark wizard
 type BenchmarkState struct {
-	step         BenchmarkStep
+	error        error
+	results      *BenchmarkResults
+	cancelFunc   func()
+	progressCh   chan BenchmarkProgressMsg
+	textInput    string
 	forwardID    string
 	forwardAlias string
+	urlPath      string
+	method       string
+	cursor       int
+	progress     int
+	total        int
+	step         BenchmarkStep
+	requests     int
+	concurrency  int
 	localPort    int
-
-	// Configuration
-	urlPath     string
-	method      string
-	concurrency int
-	requests    int
-	cursor      int // Current field being edited
-	textInput   string
-
-	// Running state
-	running    bool
-	progress   int
-	total      int
-	progressCh chan BenchmarkProgressMsg // Channel for progress updates
-	cancelFunc func()                    // Function to cancel the running benchmark
-
-	// Results
-	results *BenchmarkResults
-	error   error
+	running      bool
 }
 
 // BenchmarkResults holds benchmark results for display
 type BenchmarkResults struct {
+	StatusCodes   map[int]int
 	TotalRequests int
 	Successful    int
 	Failed        int
-	MinLatency    float64 // milliseconds
+	MinLatency    float64
 	MaxLatency    float64
 	AvgLatency    float64
 	P50Latency    float64
 	P95Latency    float64
 	P99Latency    float64
-	Throughput    float64 // requests per second
+	Throughput    float64
 	BytesRead     int64
-	StatusCodes   map[int]int
 }
 
 // newBenchmarkState creates a new benchmark state for a forward
@@ -455,41 +437,35 @@ const (
 
 // HTTPLogState maintains the state for HTTP log viewing
 type HTTPLogState struct {
-	forwardID    string
-	forwardAlias string
-	entries      []HTTPLogEntry
-	cursor       int
-	scrollOffset int
-	autoScroll   bool
-
-	// Filtering
-	filterMode   HTTPLogFilterMode
-	filterText   string
-	filterActive bool // true when typing in filter input
-
-	// Detail view
-	showingDetail bool   // true when viewing full entry details
-	detailScroll  int    // scroll position in detail view
-	copyMessage   string // temporary message after copying (e.g., "Copied!")
+	forwardID     string
+	forwardAlias  string
+	filterText    string
+	copyMessage   string
+	entries       []HTTPLogEntry
+	cursor        int
+	scrollOffset  int
+	filterMode    HTTPLogFilterMode
+	detailScroll  int
+	autoScroll    bool
+	filterActive  bool
+	showingDetail bool
 }
 
 // HTTPLogEntry represents a single HTTP log entry for display
 type HTTPLogEntry struct {
-	RequestID  string // Used to match request/response pairs
-	Timestamp  string
-	Direction  string
-	Method     string
-	Path       string
-	StatusCode int
-	LatencyMs  int64
-	BodySize   int
-
-	// Detail fields - for viewing full request/response
 	RequestHeaders  map[string]string
 	ResponseHeaders map[string]string
+	Method          string
+	RequestID       string
+	Path            string
+	Direction       string
+	Timestamp       string
 	RequestBody     string
 	ResponseBody    string
 	Error           string
+	StatusCode      int
+	LatencyMs       int64
+	BodySize        int
 }
 
 // newHTTPLogState creates a new HTTP log viewing state

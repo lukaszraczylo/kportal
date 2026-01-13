@@ -13,13 +13,13 @@ import (
 
 func TestLoggerTextFormat(t *testing.T) {
 	tests := []struct {
+		fields         map[string]interface{}
 		name           string
+		message        string
+		expectContains []string
 		level          Level
 		logLevel       Level
-		message        string
-		fields         map[string]interface{}
 		expectOutput   bool
-		expectContains []string
 	}{
 		{
 			name:           "info logged at info level",
@@ -138,13 +138,13 @@ func TestLoggerTextFormat(t *testing.T) {
 
 func TestLoggerJSONFormat(t *testing.T) {
 	tests := []struct {
+		fields       map[string]interface{}
 		name         string
+		message      string
+		expectLevel  string
 		level        Level
 		logLevel     Level
-		message      string
-		fields       map[string]interface{}
 		expectOutput bool
-		expectLevel  string
 	}{
 		{
 			name:         "info logged at info level",
@@ -268,12 +268,12 @@ func TestLoggerJSONFormat(t *testing.T) {
 
 func TestGlobalLogger(t *testing.T) {
 	tests := []struct {
-		name           string
-		initLevel      Level
-		initFormat     Format
 		logFunc        func(string, ...map[string]interface{})
+		name           string
 		message        string
 		expectContains string
+		initLevel      Level
+		initFormat     Format
 	}{
 		{
 			name:           "global info logger text",
@@ -321,9 +321,9 @@ func TestGlobalLogger(t *testing.T) {
 func TestLogLevelsFiltering(t *testing.T) {
 	tests := []struct {
 		name          string
-		loggerLevel   Level
 		logAtLevels   []Level
 		expectOutputs []bool
+		loggerLevel   Level
 	}{
 		{
 			name:          "debug level logs everything",
@@ -387,14 +387,14 @@ func TestLoggerNilOutput(t *testing.T) {
 
 func TestLevelToString(t *testing.T) {
 	tests := []struct {
-		level    Level
 		expected string
+		level    Level
 	}{
-		{LevelDebug, "DEBUG"},
-		{LevelInfo, "INFO"},
-		{LevelWarn, "WARN"},
-		{LevelError, "ERROR"},
-		{Level(999), "UNKNOWN"},
+		{level: LevelDebug, expected: "DEBUG"},
+		{level: LevelInfo, expected: "INFO"},
+		{level: LevelWarn, expected: "WARN"},
+		{level: LevelError, expected: "ERROR"},
+		{level: Level(999), expected: "UNKNOWN"},
 	}
 
 	for _, tt := range tests {
@@ -407,8 +407,8 @@ func TestLevelToString(t *testing.T) {
 
 func TestJSONFieldTypes(t *testing.T) {
 	tests := []struct {
-		name   string
 		fields map[string]interface{}
+		name   string
 	}{
 		{
 			name: "string fields",
@@ -467,10 +467,10 @@ func TestJSONFieldTypes(t *testing.T) {
 
 func TestInitWithCustomOutput(t *testing.T) {
 	tests := []struct {
-		name          string
 		output        io.Writer
-		expectDiscard bool
+		name          string
 		description   string
+		expectDiscard bool
 	}{
 		{
 			name:          "init with custom buffer",

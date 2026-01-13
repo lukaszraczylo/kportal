@@ -185,8 +185,8 @@ type StatusUpdate struct {
 }
 
 type ForwardAdd struct {
-	ID  string
 	Fwd *config.Forward
+	ID  string
 }
 
 type ErrorSet struct {

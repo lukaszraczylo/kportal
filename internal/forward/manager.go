@@ -1,3 +1,17 @@
+// Package forward provides the core port-forwarding orchestration for kportal.
+// It manages the lifecycle of port-forward workers, handles hot-reload of
+// configuration changes, and coordinates with the health checker and watchdog.
+//
+// The Manager is the central orchestrator that:
+//   - Creates and manages ForwardWorker instances for each configured forward
+//   - Handles graceful startup, shutdown, and reconfiguration
+//   - Coordinates with the HealthChecker for connection monitoring
+//   - Integrates with mDNS for hostname publishing
+//
+// ForwardWorker handles individual port-forward connections with:
+//   - Automatic retry with exponential backoff (1s → 2s → 4s → 8s → 10s max)
+//   - Pod restart detection and re-resolution
+//   - Graceful shutdown support
 package forward
 
 import (
@@ -24,19 +38,19 @@ type StatusUpdater interface {
 // Manager orchestrates all port-forward workers.
 // It handles starting, stopping, and hot-reloading forwards.
 type Manager struct {
-	workers       map[string]*ForwardWorker // key: forward.ID()
-	workersMu     sync.RWMutex
+	statusUI      StatusUpdater
+	healthChecker *healthcheck.Checker
 	clientPool    *k8s.ClientPool
 	resolver      *k8s.ResourceResolver
 	portForwarder *k8s.PortForwarder
 	portChecker   *PortChecker
-	healthChecker *healthcheck.Checker
+	workers       map[string]*ForwardWorker
 	watchdog      *Watchdog
 	mdnsPublisher *mdns.Publisher
-	eventBus      *events.Bus // Event bus for decoupled communication
-	verbose       bool
+	eventBus      *events.Bus
 	currentConfig *config.Config
-	statusUI      StatusUpdater
+	workersMu     sync.RWMutex
+	verbose       bool
 }
 
 // NewManager creates a new forward Manager.
@@ -414,11 +428,11 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 
 			// Find and notify the worker to reconnect
 			m.workersMu.RLock()
-			worker, exists := m.workers[forwardID]
+			staleWorker, exists := m.workers[forwardID]
 			m.workersMu.RUnlock()
 
 			if exists {
-				worker.TriggerReconnect("stale connection")
+				staleWorker.TriggerReconnect("stale connection")
 			}
 		}
 	})
