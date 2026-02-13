@@ -439,7 +439,7 @@ func (c *Checker) checkDataTransfer(port int) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Set a short read deadline to detect hung connections
 	// We don't expect to receive data, but we want to verify the connection isn't hung

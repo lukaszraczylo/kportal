@@ -20,7 +20,7 @@ func TestNewLogger_OutputModes(t *testing.T) {
 	t.Run("empty logFile uses io.Discard", func(t *testing.T) {
 		l, err := NewLogger("test-forward", "", 1024)
 		require.NoError(t, err)
-		defer l.Close()
+		defer func() { _ = l.Close() }()
 
 		assert.Nil(t, l.file)
 		assert.Equal(t, io.Discard, l.output)
@@ -34,7 +34,7 @@ func TestNewLogger_OutputModes(t *testing.T) {
 
 		l, err := NewLogger("test-forward", logFile, 2048)
 		require.NoError(t, err)
-		defer l.Close()
+		defer func() { _ = l.Close() }()
 
 		assert.NotNil(t, l.file)
 		assert.NotEqual(t, io.Discard, l.output)
@@ -58,7 +58,7 @@ func TestNewLogger_OutputModes(t *testing.T) {
 
 		err = l.Log(Entry{Direction: "request"})
 		require.NoError(t, err)
-		l.Close()
+		_ = l.Close()
 
 		// File should have both contents
 		data, _ := os.ReadFile(logFile)

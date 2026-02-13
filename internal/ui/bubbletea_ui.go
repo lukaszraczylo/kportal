@@ -564,6 +564,11 @@ func (m model) buildTableRows() [][]string {
 
 		statusIcon, statusText := m.getStatusIconAndText(id, fwd)
 
+		localPortText := fmt.Sprintf("%d", fwd.LocalPort)
+		if fwd.Status == "Active" && !m.ui.isForwardDisabled(id) {
+			localPortText = hyperlink(fmt.Sprintf("http://127.0.0.1:%d", fwd.LocalPort), fmt.Sprintf("%d→", fwd.LocalPort))
+		}
+
 		rows = append(rows, []string{
 			truncate(fwd.Context, ColumnWidthContext),
 			truncate(fwd.Namespace, ColumnWidthNamespace),
@@ -571,7 +576,7 @@ func (m model) buildTableRows() [][]string {
 			truncate(fwd.Type, ColumnWidthType),
 			truncate(fwd.Resource, ColumnWidthResource),
 			fmt.Sprintf("%d", fwd.RemotePort),
-			fmt.Sprintf("%d", fwd.LocalPort),
+			localPortText,
 			statusIcon + " " + statusText,
 		})
 	}
@@ -642,6 +647,7 @@ func (m model) createTableStyleFunc(colors mainViewColors) func(row, col int) li
 					return baseStyle.Foreground(colors.errorColor)
 				}
 			}
+
 		}
 
 		return baseStyle

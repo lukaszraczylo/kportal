@@ -101,7 +101,7 @@ func (c *Checker) fetchLatestRelease(ctx context.Context) (*ReleaseInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)

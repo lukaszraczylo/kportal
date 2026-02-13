@@ -210,7 +210,7 @@ func TestPortChecker_CheckAvailability_ExcludeMap(t *testing.T) {
 	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err, "should create listener")
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	// Get the port that's now occupied
 	addr := listener.Addr().(*net.TCPAddr)
@@ -236,12 +236,12 @@ func TestPortChecker_CheckAvailability_MultipleSkipPorts(t *testing.T) {
 	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener1, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err)
-	defer listener1.Close()
+	defer func() { _ = listener1.Close() }()
 
 	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener2, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err)
-	defer listener2.Close()
+	defer func() { _ = listener2.Close() }()
 
 	port1 := listener1.Addr().(*net.TCPAddr).Port
 	port2 := listener2.Addr().(*net.TCPAddr).Port
@@ -360,7 +360,7 @@ func TestPortChecker_PortAvailability_Integration(t *testing.T) {
 	// #nosec G102 -- test intentionally binds to all interfaces to match production port checking
 	listener, err := net.Listen("tcp", ":0")
 	assert.NoError(t, err, "should create listener")
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	// Get the occupied port
 	occupiedPort := listener.Addr().(*net.TCPAddr).Port
@@ -370,7 +370,7 @@ func TestPortChecker_PortAvailability_Integration(t *testing.T) {
 	assert.False(t, available, "occupied port should not be available")
 
 	// Close the listener
-	listener.Close()
+	_ = listener.Close()
 
 	// The port should now be available (though there might be a brief delay)
 	// We don't assert this to avoid flakiness in CI environments

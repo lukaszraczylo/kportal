@@ -1304,10 +1304,10 @@ func decompressContent(content string, headers map[string]string) string {
 		if err != nil {
 			return content // Return original on error
 		}
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 	case "deflate":
 		reader = flate.NewReader(bytes.NewReader(data))
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 	default:
 		// br (brotli), compress, zstd - not in stdlib, return original
 		return content

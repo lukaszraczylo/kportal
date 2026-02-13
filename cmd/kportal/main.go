@@ -347,10 +347,11 @@ func main() {
 				}
 
 				// Populate headers based on direction
-				if entry.Direction == "request" {
+				switch entry.Direction {
+				case "request":
 					uiEntry.RequestHeaders = entry.Headers
 					uiEntry.RequestBody = entry.Body
-				} else if entry.Direction == "response" {
+				case "response":
 					uiEntry.ResponseHeaders = entry.Headers
 					uiEntry.ResponseBody = entry.Body
 				}

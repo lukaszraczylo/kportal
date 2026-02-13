@@ -98,13 +98,13 @@ func (l *Logger) log(level Level, msg string, fields map[string]interface{}) {
 			Fields:  fields,
 		}
 		data, _ := json.Marshal(entry)
-		fmt.Fprintln(l.output, string(data))
+		_, _ = fmt.Fprintln(l.output, string(data))
 	} else {
 		// Text format
 		if len(fields) > 0 {
-			fmt.Fprintf(l.output, "[%s] %s %v\n", levelStr, msg, fields)
+			_, _ = fmt.Fprintf(l.output, "[%s] %s %v\n", levelStr, msg, fields)
 		} else {
-			fmt.Fprintf(l.output, "[%s] %s\n", levelStr, msg)
+			_, _ = fmt.Fprintf(l.output, "[%s] %s\n", levelStr, msg)
 		}
 	}
 }

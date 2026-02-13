@@ -856,11 +856,12 @@ func TestModel_Update_ViewModeRouting(t *testing.T) {
 			ui := NewBubbleTeaUI(nil, "1.0.0")
 			ui.mu.Lock()
 			ui.viewMode = tt.viewMode
-			if tt.viewMode == ViewModeAddWizard {
+			switch tt.viewMode {
+			case ViewModeAddWizard:
 				ui.addWizard = newAddWizardState()
-			} else if tt.viewMode == ViewModeBenchmark {
+			case ViewModeBenchmark:
 				ui.benchmarkState = newBenchmarkState("id", "alias", 8080)
-			} else if tt.viewMode == ViewModeHTTPLog {
+			case ViewModeHTTPLog:
 				ui.httpLogState = newHTTPLogState("id", "alias")
 			}
 			ui.mu.Unlock()
