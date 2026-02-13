@@ -160,7 +160,7 @@ func TestNewLogger(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, l)
 	assert.Nil(t, l.file) // No file when using stdout
-	l.Close()
+	_ = l.Close()
 
 	// Test file logger (using temp file)
 	tmpFile := t.TempDir() + "/test.log"
@@ -173,7 +173,7 @@ func TestNewLogger(t *testing.T) {
 	err = l.Log(Entry{Direction: "request", Method: "GET"})
 	require.NoError(t, err)
 
-	l.Close()
+	_ = l.Close()
 
 	// Verify file has content
 	data, err := os.ReadFile(tmpFile)

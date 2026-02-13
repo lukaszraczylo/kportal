@@ -423,7 +423,7 @@ func TestWatcher_HandleReload_LoadError(t *testing.T) {
 	defer watcher.Stop()
 
 	// Delete the config file to cause load error
-	os.Remove(configPath)
+	_ = os.Remove(configPath)
 
 	// Call handleReload directly
 	watcher.handleReload()

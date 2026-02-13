@@ -46,7 +46,7 @@ func (s *HealthCheckTestSuite) TearDownTest() {
 		s.checker.Stop()
 	}
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
 	}
 }
 
@@ -198,17 +198,17 @@ func (s *HealthCheckTestSuite) TestDataTransferMethod() {
 						case "banner":
 							_, _ = conn.Write([]byte("220 Welcome\r\n"))
 							time.Sleep(50 * time.Millisecond)
-							conn.Close()
+							_ = conn.Close()
 						case "close":
-							conn.Close()
+							_ = conn.Close()
 						case "silent":
 							// Just keep connection open
 							time.Sleep(200 * time.Millisecond)
-							conn.Close()
+							_ = conn.Close()
 						}
 					}
 				}()
-				defer testListener.Close()
+				defer func() { _ = testListener.Close() }()
 			} else {
 				testPort = 54322 // Unused port
 			}

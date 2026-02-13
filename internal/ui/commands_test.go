@@ -368,7 +368,7 @@ func TestHTTPLogEntry(t *testing.T) {
 func TestHTTPLogSubscriberType(t *testing.T) {
 	// Test that our mock matches the type
 	mock := NewMockHTTPLogSubscriber()
-	var subscriber HTTPLogSubscriber = mock.GetSubscriberFunc()
+	subscriber := mock.GetSubscriberFunc()
 
 	// Test subscription
 	callCount := 0

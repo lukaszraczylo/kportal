@@ -661,12 +661,13 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 				Alias:     wizard.alias,
 			}
 
-			if wizard.selectedResourceType == ResourceTypePodPrefix {
+			switch wizard.selectedResourceType {
+			case ResourceTypePodPrefix:
 				fwd.Resource = "pod/" + wizard.resourceValue
-			} else if wizard.selectedResourceType == ResourceTypePodSelector {
+			case ResourceTypePodSelector:
 				fwd.Resource = wizard.resourceValue
 				fwd.Selector = wizard.selector
-			} else if wizard.selectedResourceType == ResourceTypeService {
+			case ResourceTypeService:
 				fwd.Resource = "service/" + wizard.resourceValue
 			}
 

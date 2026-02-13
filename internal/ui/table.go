@@ -187,6 +187,13 @@ func (t *TableUI) Remove(id string) {
 	delete(t.forwards, id)
 }
 
+// hyperlink wraps text in an OSC 8 terminal hyperlink escape sequence.
+// Clicking the text opens the URL in terminals that support it (Ghostty, iTerm2,
+// Windows Terminal, Kitty, WezTerm, etc.). Unsupported terminals show plain text.
+func hyperlink(url, text string) string {
+	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, text)
+}
+
 // truncate truncates a string to maxLen, adding "..." if needed
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {

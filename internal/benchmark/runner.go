@@ -201,7 +201,7 @@ func (r *Runner) makeRequest(ctx context.Context, cfg Config) (statusCode int, b
 	if err != nil {
 		return 0, 0, bytesWritten, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body to measure bytes
 	respBody, err := io.ReadAll(resp.Body)
