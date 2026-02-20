@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 

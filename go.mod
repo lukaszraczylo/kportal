@@ -1,4 +1,4 @@
-module github.com/nvm/kportal
+module github.com/lukaszraczylo/kportal
 
 go 1.25.0
 

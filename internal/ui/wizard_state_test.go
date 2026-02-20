@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/nvm/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 	"github.com/stretchr/testify/assert"
 )
 

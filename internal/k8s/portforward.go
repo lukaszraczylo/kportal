@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/config"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

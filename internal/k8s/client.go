@@ -24,7 +24,7 @@ import (
 // ClientPool manages Kubernetes clients per context with thread-safe access.
 type ClientPool struct {
 	loader  clientcmd.ClientConfig
-	clients map[string]*kubernetes.Clientset
+	clients map[string]kubernetes.Interface
 	configs map[string]*rest.Config
 	mu      sync.RWMutex
 }
@@ -38,7 +38,7 @@ func NewClientPool() (*ClientPool, error) {
 	loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 
 	return &ClientPool{
-		clients: make(map[string]*kubernetes.Clientset),
+		clients: make(map[string]kubernetes.Interface),
 		configs: make(map[string]*rest.Config),
 		loader:  loader,
 	}, nil
@@ -47,7 +47,7 @@ func NewClientPool() (*ClientPool, error) {
 // GetClient returns a Kubernetes client for the given context.
 // Clients are cached and reused across multiple calls.
 // This method is thread-safe.
-func (p *ClientPool) GetClient(contextName string) (*kubernetes.Clientset, error) {
+func (p *ClientPool) GetClient(contextName string) (kubernetes.Interface, error) {
 	// Try to get cached client (read lock)
 	p.mu.RLock()
 	client, exists := p.clients[contextName]
@@ -183,7 +183,7 @@ func (p *ClientPool) ClearCache() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.clients = make(map[string]*kubernetes.Clientset)
+	p.clients = make(map[string]kubernetes.Interface)
 	p.configs = make(map[string]*rest.Config)
 }
 
@@ -215,4 +215,16 @@ func (p *ClientPool) GetNamespace(contextName string) (string, error) {
 	}
 
 	return context.Namespace, nil
+}
+
+// setTestClient is a test helper that injects a fake client for a context.
+// This is only used in tests to enable testing without real kubeconfig.
+func (p *ClientPool) setTestClient(contextName string, client kubernetes.Interface) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.clients == nil {
+		p.clients = make(map[string]kubernetes.Interface)
+	}
+	p.clients[contextName] = client
 }

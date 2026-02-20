@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/nvm/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/logger"
 )
 
 // This test demonstrates the logger output formats

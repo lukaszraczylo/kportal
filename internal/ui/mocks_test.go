@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
 
 // MockDiscovery is a mock implementation of DiscoveryInterface for testing

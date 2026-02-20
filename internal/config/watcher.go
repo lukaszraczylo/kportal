@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/nvm/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/logger"
 )
 
 // ReloadCallback is called when the configuration file changes.

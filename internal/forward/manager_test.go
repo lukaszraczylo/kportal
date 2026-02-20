@@ -1,11 +1,12 @@
 package forward
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/events"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/events"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -330,4 +331,46 @@ func TestManager_EventBusIntegration(t *testing.T) {
 	manager.eventBus.SubscribeAll(func(event events.Event) {
 		// Handler
 	})
+}
+
+// TestManager_Stop_WithManyWorkers tests that shutdown limits concurrent stops
+func TestManager_Stop_WithManyWorkers(t *testing.T) {
+	manager, err := NewManager(false)
+	if err != nil {
+		t.Skip("Skipping test - no kubeconfig available")
+	}
+
+	// Create and add mock workers directly to test shutdown behavior
+	numWorkers := 25
+	manager.workersMu.Lock()
+	for i := 0; i < numWorkers; i++ {
+		fwd := config.Forward{
+			Resource:  fmt.Sprintf("pod/app-%d", i),
+			Port:      8080,
+			LocalPort: 10000 + i,
+		}
+		worker := NewForwardWorker(fwd, manager.portForwarder, false, nil, manager.healthChecker, manager.watchdog)
+		manager.workers[fwd.ID()] = worker
+	}
+	manager.workersMu.Unlock()
+
+	// Stop should complete successfully with limited concurrency
+	done := make(chan bool)
+	go func() {
+		manager.Stop()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Success - all workers stopped
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stop timed out with many workers")
+	}
+
+	// Verify workers map is cleared
+	manager.workersMu.RLock()
+	workerCount := len(manager.workers)
+	manager.workersMu.RUnlock()
+	assert.Equal(t, 0, workerCount, "Workers map should be empty after Stop")
 }

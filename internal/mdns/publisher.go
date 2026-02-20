@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/grandcat/zeroconf"
-	"github.com/nvm/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/logger"
 )
 
 const (

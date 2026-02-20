@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

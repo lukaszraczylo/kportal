@@ -15,7 +15,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/nvm/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

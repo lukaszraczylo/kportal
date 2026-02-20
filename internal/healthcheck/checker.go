@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/events"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/events"
 )
 
 // bufferPool is a sync.Pool for reusing buffers in data transfer health checks.

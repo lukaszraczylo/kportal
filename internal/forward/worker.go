@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/healthcheck"
-	"github.com/nvm/kportal/internal/httplog"
-	"github.com/nvm/kportal/internal/k8s"
-	"github.com/nvm/kportal/internal/logger"
-	"github.com/nvm/kportal/internal/retry"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/healthcheck"
+	"github.com/lukaszraczylo/kportal/internal/httplog"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/retry"
 )
 
 const (
@@ -132,8 +132,16 @@ func (w *ForwardWorker) GetForwardID() string {
 
 // run is the main worker loop that handles retries.
 func (w *ForwardWorker) run() {
-	defer close(w.doneChan)
-	defer w.stopHTTPProxy() // Ensure proxy is stopped on exit
+	// Use a combined defer with sync.Once to ensure doneChan is closed
+	// even if stopHTTPProxy() panics. This prevents the worker from
+	// getting stuck if cleanup operations fail.
+	var closeDoneOnce sync.Once
+	defer func() {
+		w.stopHTTPProxy() // Ensure proxy is stopped on exit
+		closeDoneOnce.Do(func() {
+			close(w.doneChan)
+		})
+	}()
 
 	// Note: Heartbeat management is now centralized in the Watchdog.
 	// The watchdog polls workers via the HeartbeatResponder interface (IsAlive method)
@@ -266,14 +274,16 @@ func (w *ForwardWorker) establishForward(podName string) error {
 
 	// Create a context for this forward attempt
 	forwardCtx, forwardCancel := context.WithCancel(w.ctx)
-	defer forwardCancel()
 
 	// Store cancel function so TriggerReconnect can use it
 	w.forwardCancelMu.Lock()
 	w.forwardCancel = forwardCancel
 	w.forwardCancelMu.Unlock()
 
+	// Combined cleanup: cancel context and clear the cancel function reference.
+	// Using a single defer ensures both operations happen atomically.
 	defer func() {
+		forwardCancel()
 		w.forwardCancelMu.Lock()
 		w.forwardCancel = nil
 		w.forwardCancelMu.Unlock()

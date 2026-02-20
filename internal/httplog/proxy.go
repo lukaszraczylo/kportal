@@ -14,9 +14,28 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/logger"
 )
+
+// bufferPool is used to reuse byte buffers for body reading.
+// This significantly reduces GC pressure under high load.
+// Using *([]byte) to avoid allocations when storing/retrieving from pool (SA6002).
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, 0, 8192) // Start with 8KB capacity
+		return &buf
+	},
+}
+
+// readBufferPool provides fixed-size buffers for io.Reader operations.
+// Using a pool eliminates per-read allocations of temporary buffers.
+var readBufferPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, 4096) // 4KB fixed-size read buffer
+		return &buf
+	},
+}
 
 // Proxy is an HTTP reverse proxy with logging capabilities
 type Proxy struct {
@@ -218,27 +237,73 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 // Returns the body content (up to maxSize bytes) and the actual content length.
 // If the body exceeds maxSize, it reads only maxSize bytes for logging but
 // consumes the entire body to get the true size for BodySize reporting.
+// Uses sync.Pool to reuse buffers and reduce allocations.
 func (t *loggingTransport) readBodyLimited(body io.ReadCloser, maxSize int) ([]byte, int) {
+	// Get a buffer from the pool for accumulating body content
+	bufPtr := bufferPool.Get().(*[]byte)
+	buf := *bufPtr
+	buf = buf[:0] // Reset length but keep capacity
+	defer bufferPool.Put(bufPtr)
+
+	// Get a pooled read buffer to eliminate per-read allocation
+	tmpPtr := readBufferPool.Get().(*[]byte)
+	tmp := *tmpPtr
+	defer readBufferPool.Put(tmpPtr)
+
 	// Read up to maxSize+1 to detect if there's more
 	limitedReader := io.LimitReader(body, int64(maxSize+1))
-	data, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return nil, 0
+
+	// Read into the pooled buffer
+	var totalRead int
+	for {
+		n, err := limitedReader.Read(tmp)
+		if n > 0 {
+			buf = append(buf, tmp[:n]...)
+			totalRead += n
+		}
+		if err != nil {
+			break
+		}
 	}
 
-	actualSize := len(data)
+	actualSize := len(buf)
 	wasTruncated := actualSize > maxSize
 
 	// If we read exactly maxSize+1, there might be more data
 	// Discard the rest but count the bytes for accurate BodySize
 	if wasTruncated {
-		data = data[:maxSize] // Keep only maxSize bytes for logging
 		// Count remaining bytes without storing them
 		remaining, _ := io.Copy(io.Discard, body)
 		actualSize = maxSize + int(remaining)
+		// Return a copy of just the maxSize bytes for logging
+		resultPtr := bufferPool.Get().(*[]byte)
+		result := *resultPtr
+		result = result[:maxSize]
+		copy(result, buf)
+		return result, actualSize
 	}
 
-	return data, actualSize
+	// For small results, allocate minimally. For larger results, use pooled buffer.
+	resultLen := len(buf)
+	var result []byte
+	if resultLen <= 4096 {
+		// Small body: allocate exact size to avoid holding large buffers
+		result = make([]byte, resultLen)
+		copy(result, buf)
+	} else {
+		// Larger body: try to use pooled buffer
+		resultPtr := bufferPool.Get().(*[]byte)
+		result = *resultPtr
+		if cap(result) >= resultLen {
+			result = result[:resultLen]
+			copy(result, buf)
+		} else {
+			// Pooled buffer too small, allocate new and don't return to pool
+			result = make([]byte, resultLen)
+			copy(result, buf)
+		}
+	}
+	return result, actualSize
 }
 
 // shouldLog checks if the request path matches the filter
@@ -274,7 +339,8 @@ func (p *Proxy) logError(req *http.Request, err error) {
 	_ = p.logger.Log(entry)
 }
 
-// flattenHeaders converts http.Header to map[string]string
+// flattenHeaders converts http.Header to map[string]string.
+// Pre-allocates the map with the exact size needed to avoid reallocations.
 func flattenHeaders(h http.Header) map[string]string {
 	result := make(map[string]string, len(h))
 	for k, v := range h {

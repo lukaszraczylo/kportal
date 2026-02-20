@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nvm/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/config"
 )
 
 // ForwardStatus represents the current status of a port forward

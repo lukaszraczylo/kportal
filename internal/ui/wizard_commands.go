@@ -6,10 +6,10 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/nvm/kportal/internal/benchmark"
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/k8s"
-	"github.com/nvm/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/benchmark"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/logger"
 )
 
 const (

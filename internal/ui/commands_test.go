@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nvm/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

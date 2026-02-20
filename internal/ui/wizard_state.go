@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/nvm/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
 
 // filterStrings filters a slice of strings by a search filter (case-insensitive substring match)

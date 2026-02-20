@@ -20,12 +20,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nvm/kportal/internal/config"
-	"github.com/nvm/kportal/internal/events"
-	"github.com/nvm/kportal/internal/healthcheck"
-	"github.com/nvm/kportal/internal/k8s"
-	"github.com/nvm/kportal/internal/logger"
-	"github.com/nvm/kportal/internal/mdns"
+	"github.com/lukaszraczylo/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/events"
+	"github.com/lukaszraczylo/kportal/internal/healthcheck"
+	"github.com/lukaszraczylo/kportal/internal/k8s"
+	"github.com/lukaszraczylo/kportal/internal/logger"
+	"github.com/lukaszraczylo/kportal/internal/mdns"
 )
 
 // StatusUpdater is an interface for updating forward status
@@ -241,12 +241,17 @@ func (m *Manager) Stop() {
 	}
 	m.workersMu.Unlock()
 
-	// Stop all workers
+	// Stop all workers with limited concurrency to avoid unbounded goroutine creation
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // Limit to 10 concurrent stops
+
 	for _, worker := range workers {
 		wg.Add(1)
+		sem <- struct{}{} // Acquire semaphore
+
 		go func(w *ForwardWorker) {
 			defer wg.Done()
+			defer func() { <-sem }() // Release semaphore
 			w.Stop()
 		}(worker)
 	}

@@ -13,12 +13,21 @@
 package httplog
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
 	"sync"
 	"time"
 )
+
+// logBufferPool is used to reuse byte buffers for JSON encoding.
+// This reduces allocations when serializing log entries.
+var logBufferPool = sync.Pool{
+	New: func() interface{} {
+		return bytes.NewBuffer(make([]byte, 0, 4096))
+	},
+}
 
 // Entry represents a single HTTP log entry
 type Entry struct {
@@ -89,18 +98,50 @@ func (l *Logger) ClearCallbacks() {
 	l.callbacks = nil
 }
 
-// Log writes a log entry as JSON
+// stringBuilderPool provides reusable string builders for body truncation.
+// This reduces allocations when building truncated body strings.
+var stringBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
+
+// truncateBody truncates a body string to maxLen, adding a suffix if truncated.
+// Uses a pooled buffer to avoid allocations during truncation.
+func truncateBody(body string, maxLen int) string {
+	if len(body) <= maxLen {
+		return body
+	}
+
+	// Use pooled buffer for truncation
+	buf := stringBuilderPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer stringBuilderPool.Put(buf)
+
+	// Write truncated content
+	buf.WriteString(body[:maxLen])
+	buf.WriteString("...(truncated)")
+	return buf.String()
+}
+
+// Log writes a log entry as JSON using a pooled buffer to reduce allocations.
 func (l *Logger) Log(entry Entry) error {
 	entry.ForwardID = l.forwardID
 	entry.Timestamp = time.Now()
 
-	// Truncate body if too large
+	// Truncate body if too large using pooled buffer
 	if len(entry.Body) > l.maxBodyLen {
-		entry.Body = entry.Body[:l.maxBodyLen] + "...(truncated)"
+		entry.Body = truncateBody(entry.Body, l.maxBodyLen)
 	}
 
-	data, err := json.Marshal(entry)
-	if err != nil {
+	// Get a buffer from the pool
+	buf := logBufferPool.Get().(*bytes.Buffer)
+	buf.Reset() // Clear any previous content
+	defer logBufferPool.Put(buf)
+
+	// Encode JSON directly into the pooled buffer
+	encoder := json.NewEncoder(buf)
+	if err := encoder.Encode(entry); err != nil {
 		return err
 	}
 
@@ -112,7 +153,7 @@ func (l *Logger) Log(entry Entry) error {
 		cb(entry)
 	}
 
-	_, err = l.output.Write(append(data, '\n'))
+	_, err := l.output.Write(buf.Bytes())
 	return err
 }
 

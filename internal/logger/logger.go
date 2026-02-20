@@ -97,10 +97,21 @@ func (l *Logger) log(level Level, msg string, fields map[string]interface{}) {
 			Message: msg,
 			Fields:  fields,
 		}
-		data, _ := json.Marshal(entry)
-		_, _ = fmt.Fprintln(l.output, string(data))
+		data, err := json.Marshal(entry)
+		if err != nil {
+			// Fall back to simple text format on marshal error
+			// Error intentionally ignored - best effort fallback logging
+			_, _ = fmt.Fprintf(l.output, "[%s] %s (json marshal error: %v)\n", levelStr, msg, err)
+			return
+		}
+		if _, err := fmt.Fprintln(l.output, string(data)); err != nil {
+			// Write errors are typically unrecoverable (e.g., closed pipe, disk full)
+			// We silently ignore them to prevent cascading failures in logging
+			return
+		}
 	} else {
 		// Text format
+		// Write errors are silently ignored to prevent cascading failures
 		if len(fields) > 0 {
 			_, _ = fmt.Fprintf(l.output, "[%s] %s %v\n", levelStr, msg, fields)
 		} else {

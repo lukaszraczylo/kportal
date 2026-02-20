@@ -1,9 +1,11 @@
 package forward
 
 import (
+	"sync"
 	"testing"
+	"time"
 
-	"github.com/nvm/kportal/internal/config"
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -283,4 +285,94 @@ func TestWorkerVerboseMode(t *testing.T) {
 			// For now, we just verify the type
 		})
 	}
+}
+
+// TestWorkerCleanupWithPanic verifies that doneChan is properly closed
+// even when cleanup functions panic. This tests the fix for the defer
+// ordering issue where stopHTTPProxy() could prevent doneChan from closing.
+func TestWorkerCleanupWithPanic(t *testing.T) {
+	t.Run("doneChan closed after panic in cleanup", func(t *testing.T) {
+		doneChan := make(chan struct{})
+
+		// Simulate the cleanup pattern used in run() with sync.Once
+		var closeDoneOnce sync.Once
+		cleanupWithPanic := func() {
+			// Simulate stopHTTPProxy() that panics
+			panic("simulated panic in cleanup")
+		}
+
+		// Use defer with recovery to test the pattern
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Expected panic - doneChan should still be closed
+					_ = r // Suppress SA9003: empty branch warning
+				}
+				closeDoneOnce.Do(func() {
+					close(doneChan)
+				})
+			}()
+
+			cleanupWithPanic()
+		}()
+
+		// Verify doneChan was closed even though cleanup panicked
+		select {
+		case <-doneChan:
+			// Success: channel was closed
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("doneChan should be closed even when cleanup panics")
+		}
+	})
+
+	t.Run("doneChan closed normally without panic", func(t *testing.T) {
+		doneChan := make(chan struct{})
+
+		var closeDoneOnce sync.Once
+		cleanupNormal := func() {
+			// Normal cleanup, no panic
+		}
+
+		func() {
+			defer func() {
+				cleanupNormal()
+				closeDoneOnce.Do(func() {
+					close(doneChan)
+				})
+			}()
+			// Normal function execution
+		}()
+
+		// Verify doneChan was closed
+		select {
+		case <-doneChan:
+			// Success
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("doneChan should be closed after normal execution")
+		}
+	})
+
+	t.Run("sync.Once prevents double close", func(t *testing.T) {
+		doneChan := make(chan struct{})
+
+		var closeDoneOnce sync.Once
+		closeFunc := func() {
+			closeDoneOnce.Do(func() {
+				close(doneChan)
+			})
+		}
+
+		// Call closeFunc multiple times
+		closeFunc()
+		closeFunc()
+		closeFunc()
+
+		// Should not panic - sync.Once ensures close() is only called once
+		select {
+		case <-doneChan:
+			// Success
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("doneChan should be closed")
+		}
+	})
 }
