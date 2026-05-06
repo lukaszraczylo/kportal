@@ -273,6 +273,32 @@ kportal --check
 kportal -c /path/to/config.yaml
 ```
 
+### Generate Forwards from a Cluster
+
+The `generate` subcommand discovers services in a Kubernetes context and lets you
+interactively pick which ones to forward. Selected entries are appended to the
+config file with consecutive local ports starting from a value you choose.
+
+```bash
+kportal generate --context=my-cluster
+kportal generate --context=my-cluster --config=/path/to/.kportal.yaml
+kportal generate --context=my-cluster --dry-run
+```
+
+| Flag | Description |
+|------|-------------|
+| `--context` | (required) Kubernetes context to scan |
+| `--config` | Path to kportal config file (default: `.kportal.yaml`) |
+| `--dry-run` | Print the planned forwards but do not modify the config |
+
+The interactive flow has three steps:
+
+1. **Namespaces** — multi-select with `space`, toggle-all with `a`, filter with `/`.
+2. **Services** — same controls; rows already present in the config are locked off, and non-TCP ports are skipped (UDP is not supported by kportal's forward layer).
+3. **Port assignment** — choose a starting local port (default `10000`, must be ≥ `1024`). Local ports are assigned consecutively in stable order, skipping any already in use.
+
+Press `enter` on the final step to save (or to print and exit when `--dry-run` is set), `b` to go back, or `esc` to cancel.
+
 ## Status Indicators
 
 | Indicator | Description |

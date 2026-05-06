@@ -68,6 +68,13 @@ func promptCreateConfig(path string) bool {
 }
 
 func main() {
+	// Subcommand dispatch. Must run BEFORE flag.Parse() because the global flag
+	// set is reused from here and we don't want generate-specific flags to be
+	// rejected as unknown by the main flag set.
+	if len(os.Args) >= 2 && os.Args[1] == "generate" {
+		os.Exit(runGenerate(os.Args[2:]))
+	}
+
 	flag.Parse()
 
 	if *showVersion {
