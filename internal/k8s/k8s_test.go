@@ -919,14 +919,11 @@ func TestDiscovery_GetCurrentContext(t *testing.T) {
 
 	d := NewDiscovery(pool)
 
-	// This will either succeed or fail based on kubeconfig availability
-	context, err := d.GetCurrentContext()
-
+	// On CI without a kubeconfig, clientcmd returns an empty config with no
+	// error and CurrentContext == "". On a dev box with a real kubeconfig,
+	// CurrentContext is whatever the user has set. Either is valid.
+	_, err = d.GetCurrentContext()
 	if err != nil {
-		// Expected if no kubeconfig
 		assert.Contains(t, err.Error(), "kubeconfig")
-	} else {
-		// If successful, should be a string
-		assert.NotEmpty(t, context)
 	}
 }
