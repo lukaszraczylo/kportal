@@ -71,7 +71,12 @@ brew install --cask lukaszraczylo/taps/kportal
 curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash
 ```
 
-The installer downloads `kportal-<version>-checksums.txt` from the same release and verifies the archive's SHA-256 before installing. If [`cosign`](https://github.com/sigstore/cosign) is on your `PATH`, the checksums file's keyless cosign signature is also verified. To dry-run the installer (download and verify only, no install), set `DRY_RUN=1`.
+The installer downloads `kportal-<version>-checksums.txt` from the same release and verifies the archive's SHA-256 before installing. If [`cosign`](https://github.com/sigstore/cosign) is on your `PATH`, the checksums file's keyless cosign signature is also verified against the shared-actions reusable workflow identity.
+
+| Variable | Effect |
+|----------|--------|
+| `DRY_RUN=1` | Download and verify only; do not install |
+| `SKIP_COSIGN=1` | Skip cosign signature verification (SHA-256 is still enforced) |
 
 ### Manual Download
 
@@ -255,10 +260,14 @@ Run without TUI for scripting and automation:
 kportal -headless
 ```
 
+Headless mode emits both structured and standard-library logs to stderr by default
+(suitable for redirecting to a log file or systemd journal). The `-v` flag controls
+log level (debug vs info), not destination.
+
 Combines well with verbose mode for background operation:
 
 ```bash
-kportal -headless -v &
+kportal -headless -v 2>kportal.log &
 ```
 
 ### Validate Configuration
@@ -361,6 +370,37 @@ Press `Enter` on any entry to see full request/response details including:
 - **Non-2xx** - Hide successful (2xx) responses
 - **Errors** - Show only 4xx and 5xx responses
 
+**Toggling per-forward logging:**
+
+In the add/edit wizard, press `h` on the confirmation step to toggle `httpLog` on or
+off for the current forward. The wizard preserves any advanced `httpLog` keys
+(`logFile`, `includeHeaders`, `maxBodySize`, `filterPath`) you set in YAML.
+
+**Header redaction:**
+
+When `httpLog.includeHeaders: true` is set, sensitive header values are
+automatically replaced with `[REDACTED]`. The header name is preserved so you can
+see that an `Authorization` header was present without exposing its value. Redacted
+headers include `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`,
+`X-Auth-Token`, `X-Csrf-Token`, `Proxy-Authorization`, `X-Access-Token`, and any
+header whose name contains `token`, `secret`, `password`, or `apikey`. This is
+always on and cannot be disabled.
+
+**Advanced configuration:**
+
+```yaml
+forwards:
+  - resource: service/api
+    port: 8080
+    localPort: 8080
+    httpLog:
+      enabled: true
+      includeHeaders: true   # values of sensitive headers are redacted
+      maxBodySize: 65536     # bytes; 0 = unlimited
+      filterPath: "/api/"    # only log paths matching this substring
+      logFile: "api.log"     # append entries to a file in addition to the in-memory ring
+```
+
 ### Connection Benchmarking
 
 Press `b` in the TUI to benchmark a selected forward. Configure:
@@ -424,6 +464,10 @@ kill <pid>
 ```bash
 kubectl config get-contexts
 ```
+
+Context names containing `@`, `.`, `:`, or `/` (e.g. `admin@home`,
+`user@cluster.example.com`, GKE dotted names, EKS ARNs) are accepted by the
+config validator.
 
 ## 🔧 Development
 

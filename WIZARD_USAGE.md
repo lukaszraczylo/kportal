@@ -1,17 +1,18 @@
 # Interactive Wizards
 
-kportal includes wizards for adding and removing port forwards from the running UI.
+kportal includes wizards for adding, editing, and removing port forwards from the running UI.
 
 ## ⌨️ Quick Reference
 
 | Key | Action |
 |-----|--------|
-| `a` | Add new forward |
+| `n` | Add new forward |
+| `e` | Edit selected forward |
 | `d` | Delete forwards |
 
 ## ➕ Add Forward Wizard
 
-Press `a` from the main view to start the wizard.
+Press `n` from the main view to start the wizard.
 
 ### Steps
 
@@ -21,7 +22,7 @@ Press `a` from the main view to start the wizard.
 4. **Resource** - Enter prefix, selector, or select service
 5. **Remote Port** - Enter port on the resource
 6. **Local Port** - Enter local port (validates availability)
-7. **Confirm** - Review and optionally add an alias
+7. **Confirm** - Review, optionally add an alias, and toggle HTTP logging
 
 ### Navigation
 
@@ -31,6 +32,16 @@ Press `a` from the main view to start the wizard.
 | `Enter` | Confirm and proceed |
 | `Esc` | Go back / Cancel |
 | `Ctrl+C` | Cancel immediately |
+| `h` | Toggle HTTP traffic logging (confirmation step, when alias not focused) |
+| `Tab` | Switch focus between alias field and buttons (confirmation step) |
+
+## ✏️ Edit Forward Wizard
+
+Press `e` on a selected row to edit it. The wizard reuses the add flow with values
+pre-filled. The local-port availability check skips the forward being edited, so
+keeping the same local port is always allowed. Advanced `httpLog` settings
+(`logFile`, `includeHeaders`, `maxBodySize`, `filterPath`) defined in YAML are
+preserved when toggling `httpLog` with `h`.
 
 ## 🗑️ Delete Forward Wizard
 
@@ -45,7 +56,7 @@ Press `d` from the main view.
 | `a` | Select all |
 | `n` | Deselect all |
 | `Enter` | Confirm deletion |
-| `Esc` | Cancel |
+| `Esc` | Cancel (does not confirm deletion) |
 
 ## 🎯 Resource Selection
 

@@ -34,6 +34,7 @@ contexts:
             port: 8080
             localPort: 8080
             alias: prod-api
+            httpLog: true             # Enable HTTP traffic logging for this forward (press 'l' in the TUI)
 
           # Forward to PostgreSQL database
           - resource: service/postgres

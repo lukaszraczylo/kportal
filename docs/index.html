@@ -297,7 +297,40 @@
                             </div>
                             <div>
                                 <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Headless Mode</h3>
-                                <p class="text-sm text-gray-600 dark:text-gray-400">Background operation for scripting and automation</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Background operation for scripting and automation, logs to stderr</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-magic-wand-sparkles text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Bulk Generate</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400"><code class="text-xs">kportal generate</code> discovers cluster services and bulk-adds forwards with consecutive ports</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-user-secret text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Sensitive Header Redaction</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">HTTP log header values for <code class="text-xs">Authorization</code>, <code class="text-xs">Cookie</code>, tokens and similar are redacted automatically</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-lime-500 to-lime-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-shield-halved text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Verified Installer</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">SHA-256 checksum verification on every install, with optional cosign signature check</p>
                             </div>
                         </div>
                     </div>
@@ -576,6 +609,7 @@
                             <code class="block whitespace-nowrap font-mono">curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash</code>
                             <div class="absolute top-3 right-3"><i class="fas fa-copy text-gray-500 group-hover:text-green-400 transition-colors duration-300"></i></div>
                         </div>
+                        <p class="mt-3 text-xs sm:text-sm text-gray-600 dark:text-gray-400"><i class="fas fa-shield-halved text-green-500 mr-1"></i>Verifies SHA-256 against the release checksums file. If <code class="text-xs">cosign</code> is on <code class="text-xs">PATH</code>, the keyless cosign signature is verified too. Set <code class="text-xs">DRY_RUN=1</code> to preview, <code class="text-xs">SKIP_COSIGN=1</code> to bypass cosign.</p>
                     </div>
                     <div class="glass p-6 sm:p-8 rounded-xl shadow-modern hover:shadow-xl transition-all duration-300">
                         <div class="flex items-center mb-4">
@@ -635,11 +669,19 @@
                     </div>
                     <div class="glass p-4 sm:p-6 rounded-xl">
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"><i class="fas fa-server text-slate-500 mr-2"></i>Headless Mode</h3>
-                        <div onclick="copyToClipboard('kportal -headless -v &', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-slate-500 transition-all duration-300 mb-3">
-                            <code class="font-mono">kportal -headless -v &</code>
+                        <div onclick="copyToClipboard('kportal -headless -v 2>kportal.log &', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-slate-500 transition-all duration-300 mb-3">
+                            <code class="font-mono">kportal -headless -v 2&gt;kportal.log &amp;</code>
                             <div class="absolute top-3 right-3"><i class="fas fa-copy text-gray-500 group-hover:text-slate-400 transition-colors"></i></div>
                         </div>
-                        <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Run without TUI for scripting and background operation.</p>
+                        <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Run without TUI for scripting; logs are emitted on stderr.</p>
+                    </div>
+                    <div class="glass p-4 sm:p-6 rounded-xl">
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"><i class="fas fa-magic-wand-sparkles text-violet-500 mr-2"></i>Bulk Generate</h3>
+                        <div onclick="copyToClipboard('kportal generate --context=my-cluster', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-violet-500 transition-all duration-300 mb-3">
+                            <code class="font-mono">kportal generate --context=my-cluster</code>
+                            <div class="absolute top-3 right-3"><i class="fas fa-copy text-gray-500 group-hover:text-violet-400 transition-colors"></i></div>
+                        </div>
+                        <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Discover services in a cluster and bulk-add forwards with consecutive local ports. Add <code class="text-xs">--dry-run</code> to preview.</p>
                     </div>
                 </div>
 
@@ -656,7 +698,7 @@
                             <span class="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Toggle</span>
                         </div>
                         <div class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg">
-                            <kbd class="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-xs sm:text-sm font-mono font-semibold">a</kbd>
+                            <kbd class="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-100 dark:bg-gray-700 rounded text-xs sm:text-sm font-mono font-semibold">n</kbd>
                             <span class="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Add</span>
                         </div>
                         <div class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg">
@@ -747,7 +789,8 @@
           - resource: pod/nginx
             protocol: tcp
             port: 80
-            localPort: 8080</code></pre>
+            localPort: 8080
+            httpLog: true   # log HTTP traffic</code></pre>
                         </div>
                     </div>
 
@@ -912,6 +955,12 @@ contexts:
                             </div>
                             <div class="text-gray-500 dark:text-gray-500 text-xs mt-1">
                                 <i class="fas fa-magic mr-1"></i>JSON highlighting, gzip decompression, binary detection
+                            </div>
+                            <div class="text-gray-500 dark:text-gray-500 text-xs">
+                                <i class="fas fa-user-secret mr-1"></i>Sensitive header values (auth, cookies, tokens) redacted automatically
+                            </div>
+                            <div class="text-gray-500 dark:text-gray-500 text-xs">
+                                <i class="fas fa-keyboard mr-1"></i>Press <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">h</kbd> in the add/edit wizard to toggle <code class="text-xs">httpLog</code>
                             </div>
                         </div>
                     </div>
