@@ -26,9 +26,15 @@ var (
 	// A series of DNS labels separated by dots (no consecutive dots allowed)
 	dns1123SubdomainRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 
-	// contextNameRegexp matches valid context names
-	// Allows alphanumeric characters, hyphens, and underscores (to support various kubeconfig naming conventions)
-	contextNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$`)
+	// contextNameRegexp matches valid kubeconfig context names.
+	// kubeconfig itself imposes no character restriction; we accept the union
+	// of common naming conventions seen in the wild:
+	//   - hyphens / underscores: minikube, docker-desktop, gke_proj_zone_cluster
+	//   - "@": user@cluster (kubectl rename, EKS aws-iam-authenticator)
+	//   - ".": cluster.example.com, GKE dotted names
+	//   - ":" and "/": EKS ARNs (arn:aws:eks:us-east-1:123:cluster/foo)
+	// Must start and end with an alphanumeric character.
+	contextNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._:/@_-]*[a-zA-Z0-9])?$`)
 
 	// validResourceTypes contains the allowed Kubernetes resource types
 	validResourceTypes = []string{"pod", "service"}
@@ -571,7 +577,7 @@ func validateContextName(name, field string) *ValidationError {
 	if !contextNameRegexp.MatchString(name) {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("Context name '%s' is not valid (must consist of alphanumeric characters, hyphens, or underscores, and start/end with alphanumeric)", name),
+			Message: fmt.Sprintf("Context name '%s' is not valid (allowed: letters, digits, hyphens, underscores, dots, '@', ':', '/'; must start and end with a letter or digit)", name),
 		}
 	}
 

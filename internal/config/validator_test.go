@@ -1524,7 +1524,7 @@ func TestValidator_ValidateContextAndNamespaceNames(t *testing.T) {
 				},
 			},
 			expectErrors:  true,
-			errorContains: []string{"not valid", "alphanumeric"},
+			errorContains: []string{"not valid", "letter or digit"},
 		},
 		{
 			name: "context name too long",
@@ -1560,7 +1560,7 @@ func TestValidator_ValidateContextAndNamespaceNames(t *testing.T) {
 				},
 			},
 			expectErrors:  true,
-			errorContains: []string{"not valid", "start/end with alphanumeric"},
+			errorContains: []string{"not valid", "letter or digit"},
 		},
 		{
 			name: "invalid context name ends with underscore",
@@ -1578,7 +1578,7 @@ func TestValidator_ValidateContextAndNamespaceNames(t *testing.T) {
 				},
 			},
 			expectErrors:  true,
-			errorContains: []string{"not valid", "start/end with alphanumeric"},
+			errorContains: []string{"not valid", "letter or digit"},
 		},
 		{
 			name: "invalid namespace name with spaces",
@@ -1893,6 +1893,11 @@ func TestValidateContextName(t *testing.T) {
 		{name: "valid single char", contextName: "a", errorMsg: "", expectError: false},
 		{name: "valid single digit", contextName: "1", errorMsg: "", expectError: false},
 		{name: "valid starts with digit", contextName: "123-cluster", errorMsg: "", expectError: false},
+		{name: "valid user@cluster", contextName: "admin@home", errorMsg: "", expectError: false},
+		{name: "valid user@fqdn", contextName: "user@cluster.example.com", errorMsg: "", expectError: false},
+		{name: "valid dotted FQDN", contextName: "cluster.example.com", errorMsg: "", expectError: false},
+		{name: "valid GKE dotted", contextName: "gke_proj_zone_cluster.prod", errorMsg: "", expectError: false},
+		{name: "valid EKS ARN", contextName: "arn:aws:eks:us-east-1:123:cluster/foo", errorMsg: "", expectError: false},
 
 		// Invalid cases
 		{name: "invalid empty", contextName: "", errorMsg: "not valid", expectError: true},
@@ -1900,10 +1905,10 @@ func TestValidateContextName(t *testing.T) {
 		{name: "invalid ends with hyphen", contextName: "cluster-", errorMsg: "not valid", expectError: true},
 		{name: "invalid starts with underscore", contextName: "_cluster", errorMsg: "not valid", expectError: true},
 		{name: "invalid ends with underscore", contextName: "cluster_", errorMsg: "not valid", expectError: true},
+		{name: "invalid starts with @", contextName: "@cluster", errorMsg: "not valid", expectError: true},
+		{name: "invalid ends with /", contextName: "cluster/", errorMsg: "not valid", expectError: true},
+		{name: "invalid ends with .", contextName: "cluster.", errorMsg: "not valid", expectError: true},
 		{name: "invalid with spaces", contextName: "my cluster", errorMsg: "not valid", expectError: true},
-		{name: "invalid with dots", contextName: "my.cluster", errorMsg: "not valid", expectError: true},
-		{name: "invalid with special chars", contextName: "cluster@123", errorMsg: "not valid", expectError: true},
-		{name: "invalid with slash", contextName: "cluster/name", errorMsg: "not valid", expectError: true},
 		{name: "invalid too long", contextName: strings.Repeat("a", 254), errorMsg: "exceeds maximum length", expectError: true},
 	}
 
