@@ -71,6 +71,8 @@ brew install --cask lukaszraczylo/taps/kportal
 curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash
 ```
 
+The installer downloads `kportal-<version>-checksums.txt` from the same release and verifies the archive's SHA-256 before installing. If [`cosign`](https://github.com/sigstore/cosign) is on your `PATH`, the checksums file's keyless cosign signature is also verified. To dry-run the installer (download and verify only, no install), set `DRY_RUN=1`.
+
 ### Manual Download
 
 Download binaries from the [releases page](https://github.com/lukaszraczylo/kportal/releases).
