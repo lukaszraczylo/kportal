@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
 
@@ -110,6 +111,7 @@ func (r ResourceType) Description() string {
 // AddWizardState maintains the state for the add port forward wizard
 type AddWizardState struct {
 	error                error
+	httpLogOriginal      *config.HTTPLogSpec
 	resourceValue        string
 	originalID           string
 	portCheckMsg         string
@@ -119,16 +121,16 @@ type AddWizardState struct {
 	selector             string
 	selectedContext      string
 	selectedNamespace    string
-	pods                 []k8s.PodInfo
-	contexts             []string
+	services             []k8s.ServiceInfo
 	detectedPorts        []k8s.PortInfo
 	matchingPods         []k8s.PodInfo
-	services             []k8s.ServiceInfo
+	contexts             []string
 	namespaces           []string
-	scrollOffset         int
+	pods                 []k8s.PodInfo
+	localPort            int
 	selectedResourceType ResourceType
 	step                 AddWizardStep
-	localPort            int
+	scrollOffset         int
 	cursor               int
 	remotePort           int
 	inputMode            InputMode
@@ -136,6 +138,7 @@ type AddWizardState struct {
 	portAvailable        bool
 	isEditing            bool
 	loading              bool
+	httpLog              bool
 }
 
 // newAddWizardState creates a new add wizard state initialized to the first step

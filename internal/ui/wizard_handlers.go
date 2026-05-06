@@ -119,6 +119,8 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ui.addWizard.remotePort = selectedForward.RemotePort
 		m.ui.addWizard.localPort = selectedForward.LocalPort
 		m.ui.addWizard.alias = selectedForward.Alias
+		m.ui.addWizard.httpLogOriginal = selectedForward.HTTPLog
+		m.ui.addWizard.httpLog = selectedForward.HTTPLog != nil && selectedForward.HTTPLog.Enabled
 
 		// Determine resource type from the resource string
 		if strings.HasPrefix(selectedForward.Type, "service") {
@@ -429,6 +431,29 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case "h":
+		// In confirmation step (when not typing into the alias field), 'h'
+		// toggles whether this forward has HTTP traffic logging enabled.
+		// When the alias field is focused, fall through to text input below.
+		if wizard.step == StepConfirmation && wizard.confirmationFocus != FocusAlias {
+			wizard.httpLog = !wizard.httpLog
+			return m, nil
+		}
+		// Otherwise treat as text input (filter or alias).
+		canTypeText := wizard.inputMode == InputModeText ||
+			(wizard.step == StepConfirmation && wizard.confirmationFocus == FocusAlias) ||
+			(wizard.inputMode == InputModeList && isFilterableStep(wizard.step))
+		if canTypeText {
+			if wizard.inputMode == InputModeList && isFilterableStep(wizard.step) {
+				wizard.searchFilter += "h"
+				wizard.cursor = 0
+				wizard.scrollOffset = 0
+			} else {
+				wizard.handleTextInput('h')
+			}
+		}
+		return m, nil
+
 	case "enter":
 		return m.handleAddWizardEnter()
 
@@ -669,6 +694,20 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 				fwd.Selector = wizard.selector
 			case ResourceTypeService:
 				fwd.Resource = "service/" + wizard.resourceValue
+			}
+
+			// HTTPLog: when toggled on, preserve any advanced fields the
+			// user had configured in YAML (logFile, includeHeaders, etc.)
+			// so the wizard does not silently strip them. When toggled
+			// off, leave HTTPLog nil (= absent in YAML = disabled).
+			if wizard.httpLog {
+				if wizard.httpLogOriginal != nil {
+					spec := *wizard.httpLogOriginal
+					spec.Enabled = true
+					fwd.HTTPLog = &spec
+				} else {
+					fwd.HTTPLog = &config.HTTPLogSpec{Enabled: true}
+				}
 			}
 
 			wizard.loading = true

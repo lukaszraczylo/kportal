@@ -997,3 +997,83 @@ func TestHandleRemoveWizardKeys_EnterOnYesStillConfirms(t *testing.T) {
 
 	assert.NotNil(t, cmd, "Enter on Yes must still dispatch removeForwardsCmd")
 }
+
+// TestHandleAddWizardKeys_HToggleHTTPLog verifies that pressing 'h' on the
+// confirmation step (when not focused on the alias text input) flips the
+// httpLog flag on the wizard state.
+func TestHandleAddWizardKeys_HToggleHTTPLog(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	ui.SetWizardDependencies(nil, &config.Mutator{}, "/path/to/config")
+
+	ui.mu.Lock()
+	ui.viewMode = ViewModeAddWizard
+	ui.addWizard = newAddWizardState()
+	ui.addWizard.step = StepConfirmation
+	ui.addWizard.confirmationFocus = FocusButtons
+	ui.addWizard.inputMode = InputModeList
+	ui.mu.Unlock()
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	require.False(t, m.ui.addWizard.httpLog, "httpLog should default to false")
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+	m.handleAddWizardKeys(keyMsg)
+	assert.True(t, m.ui.addWizard.httpLog, "first 'h' should enable httpLog")
+
+	m.handleAddWizardKeys(keyMsg)
+	assert.False(t, m.ui.addWizard.httpLog, "second 'h' should disable httpLog")
+}
+
+// TestHandleAddWizardKeys_HOnAliasFocusIsTextInput verifies that 'h' is
+// treated as a regular character when the alias text input has focus, so the
+// user can still type aliases like "host" or "http-proxy".
+func TestHandleAddWizardKeys_HOnAliasFocusIsTextInput(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	ui.SetWizardDependencies(nil, &config.Mutator{}, "/path/to/config")
+
+	ui.mu.Lock()
+	ui.viewMode = ViewModeAddWizard
+	ui.addWizard = newAddWizardState()
+	ui.addWizard.step = StepConfirmation
+	ui.addWizard.confirmationFocus = FocusAlias
+	ui.addWizard.inputMode = InputModeList
+	ui.mu.Unlock()
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+	m.handleAddWizardKeys(keyMsg)
+
+	assert.False(t, m.ui.addWizard.httpLog, "httpLog must NOT toggle when alias has focus")
+	assert.Contains(t, m.ui.addWizard.textInput, "h", "'h' should land in alias text input")
+}
+
+// TestEditPrefill_PreservesHTTPLog verifies that opening the wizard in edit
+// mode for a forward whose ForwardStatus has HTTPLog set initialises the
+// wizard's httpLog flag and httpLogOriginal pointer correctly.
+func TestEditPrefill_PreservesHTTPLog(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	disco := &k8s.Discovery{}
+	ui.SetWizardDependencies(disco, &config.Mutator{}, "/path/to/config")
+
+	fwd := &config.Forward{
+		Resource:  "pod/api",
+		Port:      8080,
+		LocalPort: 8080,
+		HTTPLog:   &config.HTTPLogSpec{Enabled: true, IncludeHeaders: true, MaxBodySize: 4096},
+	}
+	ui.AddForward("api", fwd)
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}
+	m.handleMainViewKeys(keyMsg)
+
+	require.NotNil(t, m.ui.addWizard, "wizard should be active after 'e'")
+	assert.True(t, m.ui.addWizard.isEditing)
+	assert.True(t, m.ui.addWizard.httpLog, "httpLog flag should reflect existing forward")
+	require.NotNil(t, m.ui.addWizard.httpLogOriginal, "original spec should be retained for advanced fields")
+	assert.True(t, m.ui.addWizard.httpLogOriginal.IncludeHeaders)
+	assert.Equal(t, 4096, m.ui.addWizard.httpLogOriginal.MaxBodySize)
+}

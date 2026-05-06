@@ -11,6 +11,7 @@ import (
 
 // ForwardStatus represents the current status of a port forward
 type ForwardStatus struct {
+	HTTPLog    *config.HTTPLogSpec
 	Context    string
 	Namespace  string
 	Alias      string

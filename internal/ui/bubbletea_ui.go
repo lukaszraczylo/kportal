@@ -200,6 +200,7 @@ func (ui *BubbleTeaUI) AddForward(id string, fwd *config.Forward) {
 		Alias:      alias,
 		Type:       resourceType,
 		Resource:   resourceName,
+		HTTPLog:    fwd.HTTPLog,
 		RemotePort: fwd.Port,
 		LocalPort:  fwd.LocalPort,
 		Status:     "Starting",

@@ -510,6 +510,12 @@ func (m model) renderConfirmation() string {
 	b.WriteString(fmt.Sprintf("  Local Port:   %d\n", wizard.localPort))
 	b.WriteString("  Protocol:     tcp\n")
 
+	httpLogMark := "[ ] disabled"
+	if wizard.httpLog {
+		httpLogMark = "[x] enabled"
+	}
+	b.WriteString(fmt.Sprintf("  HTTP Log:     %s\n", httpLogMark))
+
 	b.WriteString("\n")
 
 	// Show alias field with focus indicator
@@ -538,7 +544,7 @@ func (m model) renderConfirmation() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(wrapHelpText("↑/↓/Tab: Navigate  Enter: Confirm  Esc: Back", wizardHelpWidth(m.termWidth)))
+	b.WriteString(wrapHelpText("↑/↓/Tab: Navigate  h: Toggle HTTP Log  Enter: Confirm  Esc: Back", wizardHelpWidth(m.termWidth)))
 
 	return b.String()
 }
