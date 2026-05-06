@@ -901,3 +901,99 @@ func TestModel_ImplementsTeaModel(t *testing.T) {
 	var _ tea.Model = m
 	require.NotNil(t, m)
 }
+
+// TestHandleRemoveWizardKeys_EscInConfirmingCancels verifies that pressing Esc
+// while the remove wizard is in confirming state CANCELS the confirmation
+// instead of dispatching the deletion command. The help text on the
+// confirmation screen advertises "Esc: Cancel" — destructive Esc was a P0 UX bug.
+func TestHandleRemoveWizardKeys_EscInConfirmingCancels(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	ui.SetWizardDependencies(nil, &config.Mutator{}, "/path/to/config")
+
+	ui.mu.Lock()
+	ui.viewMode = ViewModeRemoveWizard
+	ui.removeWizard = &RemoveWizardState{
+		forwards: []RemovableForward{
+			{ID: "fwd-1", Alias: "alpha"},
+			{ID: "fwd-2", Alias: "beta"},
+		},
+		selected:      map[int]bool{0: true, 1: true},
+		confirming:    true,
+		confirmCursor: 0, // cursor on "Yes" — worst case: reflexive Esc would have triggered Yes
+	}
+	ui.mu.Unlock()
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	_, cmd := m.handleRemoveWizardKeys(keyMsg)
+
+	// No removal command must be dispatched.
+	assert.Nil(t, cmd, "Esc in confirming state must NOT dispatch removeForwardsCmd")
+
+	m.ui.mu.RLock()
+	defer m.ui.mu.RUnlock()
+
+	// Wizard must remain alive (we returned to selection, not aborted entirely).
+	require.NotNil(t, m.ui.removeWizard, "wizard should still exist after cancelling confirmation")
+	// Confirming flag must be cleared.
+	assert.False(t, m.ui.removeWizard.confirming, "wizard.confirming must be false after Esc cancels")
+	// View mode unchanged.
+	assert.Equal(t, ViewModeRemoveWizard, m.ui.viewMode, "view mode should remain in remove wizard")
+	// Selections preserved so user can re-confirm or adjust.
+	assert.True(t, m.ui.removeWizard.selected[0])
+	assert.True(t, m.ui.removeWizard.selected[1])
+}
+
+// TestHandleRemoveWizardKeys_EscNotConfirmingExits verifies that Esc still
+// exits the wizard entirely when not in confirming state.
+func TestHandleRemoveWizardKeys_EscNotConfirmingExits(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	ui.SetWizardDependencies(nil, &config.Mutator{}, "/path/to/config")
+
+	ui.mu.Lock()
+	ui.viewMode = ViewModeRemoveWizard
+	ui.removeWizard = &RemoveWizardState{
+		forwards:   []RemovableForward{{ID: "fwd-1", Alias: "alpha"}},
+		selected:   map[int]bool{},
+		confirming: false,
+	}
+	ui.mu.Unlock()
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	_, cmd := m.handleRemoveWizardKeys(keyMsg)
+
+	// Should return tea.ClearScreen command on full exit.
+	assert.NotNil(t, cmd, "Esc outside confirmation should return ClearScreen cmd")
+
+	m.ui.mu.RLock()
+	defer m.ui.mu.RUnlock()
+	assert.Nil(t, m.ui.removeWizard, "wizard should be nil after exit")
+	assert.Equal(t, ViewModeMain, m.ui.viewMode)
+}
+
+// TestHandleRemoveWizardKeys_EnterOnYesStillConfirms verifies that the Enter-on-Yes
+// path still produces a removal command (regression guard around the Esc fix).
+func TestHandleRemoveWizardKeys_EnterOnYesStillConfirms(t *testing.T) {
+	ui := NewBubbleTeaUI(nil, "1.0.0")
+	ui.SetWizardDependencies(nil, &config.Mutator{}, "/path/to/config")
+
+	ui.mu.Lock()
+	ui.viewMode = ViewModeRemoveWizard
+	ui.removeWizard = &RemoveWizardState{
+		forwards:      []RemovableForward{{ID: "fwd-1", Alias: "alpha"}},
+		selected:      map[int]bool{0: true},
+		confirming:    true,
+		confirmCursor: 0, // Yes
+	}
+	ui.mu.Unlock()
+
+	m := model{ui: ui, termWidth: 120, termHeight: 40}
+
+	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.handleRemoveWizardKeys(keyMsg)
+
+	assert.NotNil(t, cmd, "Enter on Yes must still dispatch removeForwardsCmd")
+}

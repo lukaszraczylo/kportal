@@ -722,14 +722,15 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "esc":
 		if wizard.confirming {
-			// In confirmation mode, Esc confirms the removal (same as pressing Yes)
-			selectedForwards := wizard.getSelectedForwards()
-			return m, removeForwardsCmd(m.ui.mutator, selectedForwards)
-		} else {
-			// Not confirming yet - cancel entirely
-			m.ui.viewMode = ViewModeMain
-			m.ui.removeWizard = nil
+			// In confirmation mode, Esc cancels the confirmation (matches help text "Esc: Cancel")
+			// Returns to selection state without dispatching removal.
+			wizard.confirming = false
+			wizard.confirmCursor = 0
+			return m, nil
 		}
+		// Not confirming yet - cancel entirely
+		m.ui.viewMode = ViewModeMain
+		m.ui.removeWizard = nil
 		return m, tea.ClearScreen
 
 	case "up", "k":
