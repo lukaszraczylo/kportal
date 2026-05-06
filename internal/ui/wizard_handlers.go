@@ -656,7 +656,11 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			wizard.localPort = port
 			wizard.loading = true
 			wizard.error = nil
-			return m, checkPortCmd(port, m.ui.configPath)
+			excludeID := ""
+			if wizard.isEditing {
+				excludeID = wizard.originalID
+			}
+			return m, checkPortCmd(port, m.ui.configPath, excludeID)
 		}
 
 	case StepConfirmation:

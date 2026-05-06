@@ -145,8 +145,11 @@ func validateSelectorCmd(discovery *k8s.Discovery, contextName, namespace, selec
 	}
 }
 
-// checkPortCmd checks if a local port is available
-func checkPortCmd(port int, configPath string) tea.Cmd {
+// checkPortCmd checks if a local port is available.
+// excludeID, when non-empty, is the ID of a forward to ignore during the
+// in-config conflict scan. Used in edit mode so the wizard does not flag the
+// forward being edited as conflicting with itself.
+func checkPortCmd(port int, configPath, excludeID string) tea.Cmd {
 	return func() tea.Msg {
 		// First check if port is already in the configuration
 		cfg, err := config.LoadConfig(configPath)
@@ -154,12 +157,16 @@ func checkPortCmd(port int, configPath string) tea.Cmd {
 			// Check all forwards in config for this port
 			allForwards := cfg.GetAllForwards()
 			for _, fwd := range allForwards {
-				if fwd.LocalPort == port {
-					return PortCheckedMsg{
-						port:      port,
-						available: false,
-						message:   fmt.Sprintf("✗ Port %d already assigned to %s", port, fwd.ID()),
-					}
+				if fwd.LocalPort != port {
+					continue
+				}
+				if excludeID != "" && fwd.ID() == excludeID {
+					continue
+				}
+				return PortCheckedMsg{
+					port:      port,
+					available: false,
+					message:   fmt.Sprintf("✗ Port %d already assigned to %s", port, fwd.ID()),
 				}
 			}
 		}

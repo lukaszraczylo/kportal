@@ -162,7 +162,7 @@ func TestCheckPortCmd_PortAvailability(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test checking a random high port that should be available
-	cmd := checkPortCmd(59999, configPath)
+	cmd := checkPortCmd(59999, configPath, "")
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -192,7 +192,7 @@ func TestCheckPortCmd_ConfigConflict(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test checking port that's already in config
-	cmd := checkPortCmd(8080, configPath)
+	cmd := checkPortCmd(8080, configPath, "")
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -202,10 +202,46 @@ func TestCheckPortCmd_ConfigConflict(t *testing.T) {
 	assert.Contains(t, portMsg.message, "already assigned")
 }
 
+// TestCheckPortCmd_ExcludeID_AllowsKeepingOwnPort verifies that in edit mode
+// (excludeID set to the forward's own ID), the wizard does not falsely report
+// the same local port as already in use by the forward being edited.
+func TestCheckPortCmd_ExcludeID_AllowsKeepingOwnPort(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	configContent := `contexts:
+  - name: test-ctx
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/my-app
+            port: 80
+            localPort: 8080
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0600)
+	require.NoError(t, err)
+
+	// The forward's ID format is "<context>/<namespace>/<resource>:<port>".
+	excludeID := "test-ctx/default/pod/my-app:8080"
+
+	cmd := checkPortCmd(8080, configPath, excludeID)
+	msg := cmd()
+
+	portMsg, ok := msg.(PortCheckedMsg)
+	require.True(t, ok, "Expected PortCheckedMsg")
+	assert.Equal(t, 8080, portMsg.port)
+	// The config-conflict path must skip the excluded ID. The OS-level port
+	// availability check still runs, so the result depends on whether 8080 is
+	// in use by some other process — the relevant assertion is that the
+	// message does NOT mention "already assigned" (which is the config check).
+	assert.NotContains(t, portMsg.message, "already assigned",
+		"excludeID should suppress the config self-conflict, but got %q", portMsg.message)
+}
+
 // TestCheckPortCmd_InvalidConfig tests behavior with invalid config file
 func TestCheckPortCmd_InvalidConfig(t *testing.T) {
 	// Use a non-existent config path
-	cmd := checkPortCmd(59998, "/nonexistent/path/.kportal.yaml")
+	cmd := checkPortCmd(59998, "/nonexistent/path/.kportal.yaml", "")
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
