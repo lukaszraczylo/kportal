@@ -721,7 +721,15 @@ func TestStartWorker_HealthCallback_StatusChange(t *testing.T) {
 	// but MarkConnected spawns a goroutine; MarkReconnecting calls markStatus directly).
 	time.Sleep(20 * time.Millisecond)
 
-	// The callback should have updated status.
+	// Stop the healthchecker so its background per-port goroutine drains
+	// before we read the mock — establishes happens-before for the read and
+	// keeps the race detector quiet on slower CI runners.
+	m.healthChecker.Unregister(fwd.ID())
+
+	// The callback should have updated status. Hold the mock's lock during
+	// the read because background goroutines may still be unwinding.
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
 	var sawUpdate bool
 	for _, u := range ui.updates {
 		if u.ID == fwd.ID() {
