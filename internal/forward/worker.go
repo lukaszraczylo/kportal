@@ -39,6 +39,7 @@ type ForwardWorker struct {
 	lastPod         string
 	forward         config.Forward
 	forwardCancelMu sync.Mutex
+	stopOnce        sync.Once // Guards close(stopChan) against concurrent Stop() calls
 	verbose         bool
 }
 
@@ -97,9 +98,12 @@ func (w *ForwardWorker) Start() {
 }
 
 // Stop gracefully stops the port-forward worker.
+// Safe to call concurrently and multiple times — stopChan is closed exactly once.
 func (w *ForwardWorker) Stop() {
 	w.cancel()
-	close(w.stopChan)
+	w.stopOnce.Do(func() {
+		close(w.stopChan)
+	})
 
 	// Wait for worker to finish with timeout to prevent blocking forever
 	select {

@@ -48,6 +48,9 @@ type Manager struct {
 	watchdog      *Watchdog
 	mdnsPublisher *mdns.Publisher
 	eventBus      *events.Bus
+	// currentConfig holds the active configuration. Access MUST be guarded by
+	// workersMu — it is read from the health-checker callback goroutine
+	// (registered in startWorker) and written by Start/Reload.
 	currentConfig *config.Config
 	workersMu     sync.RWMutex
 	verbose       bool
@@ -159,7 +162,9 @@ func (m *Manager) Start(cfg *config.Config) error {
 		return fmt.Errorf("configuration is nil")
 	}
 
+	m.workersMu.Lock()
 	m.currentConfig = cfg
+	m.workersMu.Unlock()
 
 	// Configure health checker with settings from config
 	m.configureHealthChecker(cfg)
@@ -284,9 +289,27 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 	newForwards := newCfg.GetAllForwards()
 
 	if len(newForwards) == 0 {
-		log.Printf("New configuration has no forwards, stopping all")
-		m.Stop()
+		log.Printf("New configuration has no forwards, stopping all workers")
+		// Do NOT call m.Stop() here: it tears down healthChecker, watchdog
+		// and eventBus, which must remain alive so subsequent
+		// EnableForward / Reload calls can register against them.
+		// Only stop currently-running workers and update currentConfig.
+		m.workersMu.RLock()
+		ids := make([]string, 0, len(m.workers))
+		for id := range m.workers {
+			ids = append(ids, id)
+		}
+		m.workersMu.RUnlock()
+
+		for _, id := range ids {
+			if err := m.stopWorkerInternal(id, true); err != nil {
+				log.Printf("Failed to stop worker %s: %v", id, err)
+			}
+		}
+
+		m.workersMu.Lock()
 		m.currentConfig = newCfg
+		m.workersMu.Unlock()
 		return nil
 	}
 
@@ -369,7 +392,9 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 	}
 
 	// Update current config
+	m.workersMu.Lock()
 	m.currentConfig = newCfg
+	m.workersMu.Unlock()
 
 	log.Printf("Configuration reloaded successfully")
 	return nil
@@ -424,20 +449,24 @@ func (m *Manager) startWorker(fwd config.Forward) error {
 			}
 		}
 
-		// Handle stale connections: trigger reconnection if retryOnStale is enabled
-		if status == healthcheck.StatusStale && m.currentConfig.GetRetryOnStale() {
-			logger.Info("Stale connection detected, triggering reconnection", map[string]interface{}{
-				"forward_id": forwardID,
-				"reason":     errorMsg,
-			})
-
-			// Find and notify the worker to reconnect
+		// Handle stale connections: trigger reconnection if retryOnStale is enabled.
+		// Read currentConfig and worker map under a single lock acquisition
+		// to avoid racing with Reload/Start writes.
+		if status == healthcheck.StatusStale {
 			m.workersMu.RLock()
+			retryOnStale := m.currentConfig != nil && m.currentConfig.GetRetryOnStale()
 			staleWorker, exists := m.workers[forwardID]
 			m.workersMu.RUnlock()
 
-			if exists {
-				staleWorker.TriggerReconnect("stale connection")
+			if retryOnStale {
+				logger.Info("Stale connection detected, triggering reconnection", map[string]interface{}{
+					"forward_id": forwardID,
+					"reason":     errorMsg,
+				})
+
+				if exists {
+					staleWorker.TriggerReconnect("stale connection")
+				}
 			}
 		}
 	})
@@ -545,12 +574,16 @@ func (m *Manager) DisableForward(id string) error {
 
 // EnableForward re-enables a previously disabled forward
 func (m *Manager) EnableForward(id string) error {
-	// Find the forward configuration in current config
-	if m.currentConfig == nil {
+	// Find the forward configuration in current config (read under lock)
+	m.workersMu.RLock()
+	cfg := m.currentConfig
+	m.workersMu.RUnlock()
+
+	if cfg == nil {
 		return fmt.Errorf("no configuration available")
 	}
 
-	forwards := m.currentConfig.GetAllForwards()
+	forwards := cfg.GetAllForwards()
 	var targetFwd *config.Forward
 	for _, fwd := range forwards {
 		if fwd.ID() == id {

@@ -185,9 +185,15 @@ func (pf *PortForwarder) forwardToService(ctx context.Context, req *ForwardReque
 
 // executePortForward performs the actual port-forward operation.
 func (pf *PortForwarder) executePortForward(config *rest.Config, url *url.URL, req *ForwardRequest) error {
+	// Clone the rest.Config before mutating. ClientPool.GetRestConfig returns a
+	// cached pointer shared across all forwards on the same context; mutating
+	// config.Dial directly causes a write-write race when multiple forwards
+	// run concurrently against the same context.
+	cfg := rest.CopyConfig(config)
+
 	// Configure TCP settings on the underlying connection
 	// This is set in the rest.Config which will be used by the SPDY transport
-	if config.Dial == nil {
+	if cfg.Dial == nil {
 		// Create a custom dialer with configurable timeout and keepalive
 		// - Timeout: How long to wait for connection to establish
 		// - KeepAlive: TCP keepalive helps OS detect dead connections at network layer
@@ -195,11 +201,11 @@ func (pf *PortForwarder) executePortForward(config *rest.Config, url *url.URL, r
 			Timeout:   pf.dialTimeout,  // Configurable dial timeout
 			KeepAlive: pf.tcpKeepalive, // Configurable keepalive interval
 		}
-		config.Dial = dialer.DialContext
+		cfg.Dial = dialer.DialContext
 	}
 
 	// Create SPDY roundtripper
-	transport, upgrader, err := spdy.RoundTripperFor(config)
+	transport, upgrader, err := spdy.RoundTripperFor(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create round tripper: %w", err)
 	}
