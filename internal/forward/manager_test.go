@@ -2,6 +2,7 @@ package forward
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -172,12 +173,18 @@ func TestManager_getResourceForPort(t *testing.T) {
 	assert.Equal(t, "unknown", resource)
 }
 
-// MockStatusUpdater is a mock implementation of StatusUpdater
+// MockStatusUpdater is a mock implementation of StatusUpdater. Methods are
+// invoked concurrently from the test goroutine and from the health-checker /
+// watchdog goroutines registered by Manager.startWorker, so the recorded
+// slices are guarded by mu. Tests inspect the slices only after Manager.Stop
+// has drained the background goroutines (Stop's wg.Wait establishes a
+// happens-before edge) so the read side does not need to hold mu.
 type MockStatusUpdater struct {
 	updates   []StatusUpdate
 	adds      []ForwardAdd
 	removes   []string
 	errorSets []ErrorSet
+	mu        sync.Mutex
 }
 
 type StatusUpdate struct {
@@ -196,18 +203,26 @@ type ErrorSet struct {
 }
 
 func (m *MockStatusUpdater) UpdateStatus(id string, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.updates = append(m.updates, StatusUpdate{ID: id, Status: status})
 }
 
 func (m *MockStatusUpdater) AddForward(id string, fwd *config.Forward) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.adds = append(m.adds, ForwardAdd{ID: id, Fwd: fwd})
 }
 
 func (m *MockStatusUpdater) Remove(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.removes = append(m.removes, id)
 }
 
 func (m *MockStatusUpdater) SetError(id, msg string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.errorSets = append(m.errorSets, ErrorSet{ID: id, Msg: msg})
 }
 
