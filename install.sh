@@ -133,8 +133,12 @@ verify_cosign_signature() {
     fi
 
     print_info "Verifying cosign signature on checksums.txt..."
+    # Releases are signed by the shared-actions reusable workflow, so the
+    # cert subject is the workflow URL — NOT this repo. Override with
+    # COSIGN_CERT_IDENTITY_REGEXP if you fork the release pipeline.
+    local cert_identity_regexp="${COSIGN_CERT_IDENTITY_REGEXP:-^https://github\.com/lukaszraczylo/shared-actions/\.github/workflows/go-release\.yaml@refs/heads/main$}"
     if cosign verify-blob \
-        --certificate-identity-regexp "https://github.com/${REPO}/.*" \
+        --certificate-identity-regexp "${cert_identity_regexp}" \
         --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
         --bundle "${sig_file}" \
         "${checksums_file}" >/dev/null 2>&1; then

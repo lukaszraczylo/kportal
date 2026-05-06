@@ -92,7 +92,7 @@ All release checksums are signed with [cosign](https://github.com/sigstore/cosig
 ```bash
 # Download the checksum file and its sigstore bundle from the release
 cosign verify-blob \
-  --certificate-identity-regexp "https://github.com/lukaszraczylo/kportal/.*" \
+  --certificate-identity-regexp "^https://github\.com/lukaszraczylo/shared-actions/\.github/workflows/go-release\.yaml@refs/heads/main$" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   --bundle "kportal-<version>-checksums.txt.sigstore.json" \
   kportal-<version>-checksums.txt
