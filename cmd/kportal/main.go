@@ -102,16 +102,33 @@ func main() {
 	}
 
 	// Initialize structured logger
+	//
+	// Output destination depends on run mode, NOT on the -v flag:
+	//   - headless mode: always stderr, so daemons under launchd/systemd/journald
+	//     can surface startup and runtime errors. Without this the daemon would
+	//     fail silently and operators have no way to diagnose it.
+	//   - TUI (interactive) mode: stderr would corrupt the bubbletea UI, so we
+	//     route to io.Discard. Verbose TUI is not supported here either; -v in
+	//     interactive mode upgrades to the simple table UI further down.
+	//
+	// The -v flag only controls log *level* (debug vs info), never destination.
 	var logLevel logger.Level
 	var logFmt logger.Format
 	var logOutput io.Writer
 
 	if *verbose {
 		logLevel = logger.LevelDebug
-		logOutput = os.Stderr
 	} else {
 		logLevel = logger.LevelInfo
-		logOutput = io.Discard // Silence logger in non-verbose/headless mode to prevent UI corruption
+	}
+
+	if *headless || *verbose {
+		// Headless daemons must always emit logs so operators can see failures.
+		// Verbose mode (with or without TUI) also goes to stderr.
+		logOutput = os.Stderr
+	} else {
+		// Interactive TUI mode: silence logger to avoid corrupting bubbletea UI.
+		logOutput = io.Discard
 	}
 
 	switch *logFormat {
@@ -179,14 +196,22 @@ func main() {
 		os.Exit(0)
 	}
 
-	if !*verbose {
-		// In interactive mode, disable ALL logging to avoid interfering with bubbletea UI
+	// Configure stdlib log destination using the same rule as the structured
+	// logger: only the bubbletea TUI path needs total silence. Headless mode
+	// keeps stderr so daemonised runs surface errors to journald/launchd.
+	switch {
+	case *verbose:
+		// Verbose mode - enable standard log formatting on stderr (default)
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	case *headless:
+		// Headless mode without -v: keep stderr (default writer) but use plain
+		// timestamps so journald-style log collectors show readable lines.
+		log.SetFlags(log.LstdFlags)
+	default:
+		// Interactive bubbletea mode: silence stdlib log to avoid UI corruption.
 		log.SetOutput(io.Discard)
 		log.SetPrefix("")
 		log.SetFlags(0)
-	} else {
-		// Verbose mode - enable standard log formatting
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
 	// Load configuration

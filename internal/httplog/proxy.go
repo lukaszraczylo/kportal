@@ -339,11 +339,70 @@ func (p *Proxy) logError(req *http.Request, err error) {
 	_ = p.logger.Log(entry)
 }
 
-// flattenHeaders converts http.Header to map[string]string.
-// Pre-allocates the map with the exact size needed to avoid reallocations.
+// redactedHeaderNames is the set of header names whose values are always
+// redacted before being captured into log entries. Comparison is
+// case-insensitive (canonical MIME header form is used as the key).
+//
+// Redaction is unconditional and on-by-default as a defense-in-depth measure:
+// these headers commonly carry bearer tokens, session cookies, API keys, or
+// other credentials that must never be persisted to disk or surfaced to the
+// UI. Users who genuinely need raw header capture should use a dedicated
+// packet-capture tool (e.g. tcpdump) instead.
+var redactedHeaderNames = map[string]struct{}{
+	"Authorization":       {},
+	"Proxy-Authorization": {},
+	"Cookie":              {},
+	"Set-Cookie":          {},
+	"X-Api-Key":           {},
+	"X-Auth-Token":        {},
+	"X-Csrf-Token":        {},
+	"X-Access-Token":      {},
+}
+
+// redactedHeaderSubstrings is a list of lowercase substrings that, when
+// found anywhere in a header name (case-insensitive), trigger redaction.
+// This catches custom or vendor-specific sensitive headers without needing
+// to enumerate every variant.
+var redactedHeaderSubstrings = []string{
+	"token",
+	"secret",
+	"password",
+	"apikey",
+}
+
+// redactedValue is the placeholder written in place of any sensitive header
+// value. The header name itself is preserved so operators can see which
+// sensitive headers were present without leaking their contents.
+const redactedValue = "[REDACTED]"
+
+// shouldRedactHeader reports whether the given header name should have its
+// value redacted before being recorded. The check is case-insensitive and
+// covers both the explicit name list and the substring patterns.
+func shouldRedactHeader(name string) bool {
+	if _, ok := redactedHeaderNames[http.CanonicalHeaderKey(name)]; ok {
+		return true
+	}
+	lower := strings.ToLower(name)
+	for _, sub := range redactedHeaderSubstrings {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// flattenHeaders converts http.Header to map[string]string, redacting the
+// values of any sensitive headers (see redactedHeaderNames /
+// redactedHeaderSubstrings) so that credentials never reach the log file or
+// UI subscribers. Pre-allocates the map with the exact size needed to avoid
+// reallocations.
 func flattenHeaders(h http.Header) map[string]string {
 	result := make(map[string]string, len(h))
 	for k, v := range h {
+		if shouldRedactHeader(k) {
+			result[k] = redactedValue
+			continue
+		}
 		result[k] = strings.Join(v, ", ")
 	}
 	return result
