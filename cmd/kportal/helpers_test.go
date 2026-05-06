@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,24 +40,6 @@ users:
 
 // ---- promptCreateConfig ----
 
-// redirectStdin replaces os.Stdin with a pipe that has the given text
-// already written into it. Returns a cleanup function that restores
-// the original Stdin and closes the pipe ends.
-func redirectStdin(t *testing.T, text string) func() {
-	t.Helper()
-	origStdin := os.Stdin
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	_, err = io.WriteString(w, text)
-	require.NoError(t, err)
-	require.NoError(t, w.Close())
-	os.Stdin = r
-	return func() {
-		os.Stdin = origStdin
-		require.NoError(t, r.Close())
-	}
-}
-
 func TestPromptCreateConfig_YesResponses(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -72,10 +53,7 @@ func TestPromptCreateConfig_YesResponses(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			restore := redirectStdin(t, tc.input)
-			defer restore()
-
-			result := promptCreateConfig("/some/path.yaml")
+			result := promptCreateConfig("/some/path.yaml", strings.NewReader(tc.input), io.Discard)
 			assert.True(t, result, "expected true for input %q", tc.input)
 		})
 	}
@@ -93,28 +71,15 @@ func TestPromptCreateConfig_NoResponses(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			restore := redirectStdin(t, tc.input)
-			defer restore()
-
-			result := promptCreateConfig("/some/path.yaml")
+			result := promptCreateConfig("/some/path.yaml", strings.NewReader(tc.input), io.Discard)
 			assert.False(t, result, "expected false for input %q", tc.input)
 		})
 	}
 }
 
 func TestPromptCreateConfig_EOFReturnsFalse(t *testing.T) {
-	// Provide an empty pipe (write end immediately closed) → EOF → false.
-	origStdin := os.Stdin
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	require.NoError(t, w.Close()) // no data written → EOF on first read
-	os.Stdin = r
-	defer func() {
-		os.Stdin = origStdin
-		require.NoError(t, r.Close())
-	}()
-
-	result := promptCreateConfig("/some/path.yaml")
+	// Empty reader → EOF on first read → no data → false.
+	result := promptCreateConfig("/some/path.yaml", strings.NewReader(""), io.Discard)
 	assert.False(t, result, "EOF should return false")
 }
 
@@ -302,26 +267,7 @@ func TestRunGenerate_ValidContextNoUI(t *testing.T) {
 
 // TestPromptCreateConfig_PathIncludedInOutput verifies the path is printed.
 func TestPromptCreateConfig_PathIncludedInOutput(t *testing.T) {
-	// Capture stdout by swapping os.Stdout temporarily.
-	origStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stdout = w
-
-	restore := redirectStdin(t, "n\n")
-	defer restore()
-
-	_ = promptCreateConfig("/my/special/config.yaml")
-
-	require.NoError(t, w.Close())
-	os.Stdout = origStdout
-
-	var sb strings.Builder
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		sb.WriteString(scanner.Text())
-	}
-	require.NoError(t, r.Close())
-
-	assert.Contains(t, sb.String(), "/my/special/config.yaml")
+	var stdout strings.Builder
+	_ = promptCreateConfig("/my/special/config.yaml", strings.NewReader("n\n"), &stdout)
+	assert.Contains(t, stdout.String(), "/my/special/config.yaml")
 }
