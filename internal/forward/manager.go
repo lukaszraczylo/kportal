@@ -53,6 +53,7 @@ type Manager struct {
 	// (registered in startWorker) and written by Start/Reload.
 	currentConfig *config.Config
 	workersMu     sync.RWMutex
+	stopOnce      sync.Once
 	verbose       bool
 }
 
@@ -223,52 +224,54 @@ func (m *Manager) Start(cfg *config.Config) error {
 
 // Stop gracefully stops all port-forward workers.
 func (m *Manager) Stop() {
-	log.Printf("Stopping all port-forwards...")
+	m.stopOnce.Do(func() {
+		log.Printf("Stopping all port-forwards...")
 
-	// Stop health checker and watchdog first
-	m.healthChecker.Stop()
-	m.watchdog.Stop()
+		// Stop health checker and watchdog first
+		m.healthChecker.Stop()
+		m.watchdog.Stop()
 
-	// Close event bus
-	if m.eventBus != nil {
-		m.eventBus.Close()
-	}
+		// Close event bus
+		if m.eventBus != nil {
+			m.eventBus.Close()
+		}
 
-	// Stop mDNS publisher
-	if m.mdnsPublisher != nil {
-		m.mdnsPublisher.Stop()
-	}
+		// Stop mDNS publisher
+		if m.mdnsPublisher != nil {
+			m.mdnsPublisher.Stop()
+		}
 
-	m.workersMu.Lock()
-	workers := make([]*ForwardWorker, 0, len(m.workers))
-	for _, worker := range m.workers {
-		workers = append(workers, worker)
-	}
-	m.workersMu.Unlock()
+		m.workersMu.Lock()
+		workers := make([]*ForwardWorker, 0, len(m.workers))
+		for _, worker := range m.workers {
+			workers = append(workers, worker)
+		}
+		m.workersMu.Unlock()
 
-	// Stop all workers with limited concurrency to avoid unbounded goroutine creation
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // Limit to 10 concurrent stops
+		// Stop all workers with limited concurrency to avoid unbounded goroutine creation
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 10) // Limit to 10 concurrent stops
 
-	for _, worker := range workers {
-		wg.Add(1)
-		sem <- struct{}{} // Acquire semaphore
+		for _, worker := range workers {
+			wg.Add(1)
+			sem <- struct{}{} // Acquire semaphore
 
-		go func(w *ForwardWorker) {
-			defer wg.Done()
-			defer func() { <-sem }() // Release semaphore
-			w.Stop()
-		}(worker)
-	}
+			go func(w *ForwardWorker) {
+				defer wg.Done()
+				defer func() { <-sem }() // Release semaphore
+				w.Stop()
+			}(worker)
+		}
 
-	wg.Wait()
+		wg.Wait()
 
-	// Clear workers map
-	m.workersMu.Lock()
-	m.workers = make(map[string]*ForwardWorker)
-	m.workersMu.Unlock()
+		// Clear workers map
+		m.workersMu.Lock()
+		m.workers = make(map[string]*ForwardWorker)
+		m.workersMu.Unlock()
 
-	log.Printf("All port-forwards stopped")
+		log.Printf("All port-forwards stopped")
+	})
 }
 
 // Reload applies a new configuration with hot-reload logic.

@@ -165,3 +165,44 @@ func TestManager_CurrentConfig_RaceFree(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+// TestManager_Stop_Idempotent verifies that calling Manager.Stop() multiple
+// times — sequentially or concurrently — does not panic from a double-close
+// of eventBus or a double Stop on healthChecker/watchdog. The body of Stop()
+// is wrapped in sync.Once.
+func TestManager_Stop_Idempotent(t *testing.T) {
+	manager, err := NewManager(false)
+	if err != nil {
+		t.Skip("Skipping test - no kubeconfig available")
+	}
+	if err := manager.Start(&config.Config{}); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Sequential double-stop must not panic.
+	manager.Stop()
+	manager.Stop()
+
+	// Build a second manager and call Stop concurrently from many goroutines —
+	// any non-idempotent close path would panic at least one of them.
+	m2, err := NewManager(false)
+	if err != nil {
+		t.Skip("Skipping test - no kubeconfig available")
+	}
+	if err := m2.Start(&config.Config{}); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	const callers = 16
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	start := make(chan struct{})
+	for i := 0; i < callers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			m2.Stop()
+		}()
+	}
+	close(start)
+	wg.Wait()
+}
