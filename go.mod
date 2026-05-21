@@ -8,6 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-logr/logr v1.4.3
 	github.com/grandcat/zeroconf v1.0.0
+	github.com/lukaszraczylo/oss-telemetry v0.0.0-20260521005811-e02d51419c52
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.0
@@ -60,7 +61,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

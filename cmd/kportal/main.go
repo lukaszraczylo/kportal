@@ -24,6 +24,7 @@ import (
 	"github.com/lukaszraczylo/kportal/internal/mdns"
 	"github.com/lukaszraczylo/kportal/internal/ui"
 	"github.com/lukaszraczylo/kportal/internal/version"
+	telemetry "github.com/lukaszraczylo/oss-telemetry"
 	"k8s.io/klog/v2"
 )
 
@@ -96,10 +97,19 @@ func promptCreateConfig(path string, stdin io.Reader, stdout io.Writer) bool {
 }
 
 func main() {
+	os.Exit(runMain())
+}
+
+// runMain wraps the real entry point so that deferred cleanup (telemetry
+// drain, signal context cancel) runs before the surrounding os.Exit.
+func runMain() int {
+	telemetry.Send("kportal", appVersion)
+	defer telemetry.Wait(2 * time.Second)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
-	cancel()
-	os.Exit(code)
+	defer cancel()
+
+	return run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 }
 
 // run is the testable entry point. It returns the desired process exit code
