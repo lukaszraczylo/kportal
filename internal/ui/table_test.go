@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lukaszraczylo/kportal/internal/config"
@@ -140,10 +141,14 @@ func TestTruncate(t *testing.T) {
 		{"hi!", "hi", 2},   // maxLen <= 3 branch: no ellipsis
 		{"abcd", "abc", 3}, // maxLen <= 3 branch
 		{"", "", 5},
+		{"café-service", "café-...", 8}, // multibyte: count/slice by rune, no mojibake
+		{"日本語ポッド", "日本...", 5},          // CJK runes truncated cleanly
+		{"naïve", "naïve", 5},           // exactly maxLen runes (6 bytes) — unchanged
+		{"abc", "", 0},                  // non-positive maxLen
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input+"_"+string(rune('0'+tt.maxLen)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_%d", tt.input, tt.maxLen), func(t *testing.T) {
 			assert.Equal(t, tt.expected, truncate(tt.input, tt.maxLen))
 		})
 	}

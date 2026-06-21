@@ -43,3 +43,15 @@ const (
 	// MaxPathWidth is the maximum width for displaying file paths
 	MaxPathWidth = 48
 )
+
+// HTTP log table layout
+const (
+	// HTTPLogRowFormat is the column layout shared by the HTTP-log table header
+	// and its rows (TIME, METHOD, STATUS, LATENCY, PATH) so they stay aligned.
+	HTTPLogRowFormat = "%-10s  %-7s  %-6s  %-8s  %s"
+
+	// HTTPLogFixedCols is the width consumed by every column except PATH
+	// (prefix + the four fixed columns and their separators), used to size the
+	// remaining space for the path column responsively.
+	HTTPLogFixedCols = 48
+)

@@ -448,6 +448,7 @@ type keyBinding struct {
 func mainViewKeyBindings() []keyBinding {
 	return []keyBinding{
 		{"↑↓/jk", "Navigate"},
+		{"PgUp/Dn", "Page"},
 		{"Space", "Toggle"},
 		{"n", "New"},
 		{"e", "Edit"},
@@ -480,7 +481,7 @@ func (m model) renderMainView() string {
 
 	// Render error section if any errors exist
 	if len(m.ui.errors) > 0 {
-		b.WriteString(m.renderErrorSection())
+		b.WriteString(m.renderErrorSection(termWidth))
 	}
 
 	// Render footer with proper spacing
@@ -527,10 +528,14 @@ func (m model) renderTitle(headerColor lipgloss.Color) string {
 	return b.String()
 }
 
-// renderEmptyMessage renders the message shown when no forwards are configured
+// renderEmptyMessage renders the message shown when no forwards are configured.
+// It includes an actionable hint so a first-time user knows how to proceed.
 func (m model) renderEmptyMessage(mutedColor lipgloss.Color) string {
-	disabledStyle := lipgloss.NewStyle().Foreground(mutedColor)
-	return disabledStyle.Render("No forwards configured\n")
+	mutedStyle := lipgloss.NewStyle().Foreground(mutedColor)
+	hintStyle := lipgloss.NewStyle().Foreground(highlightColor)
+	return mutedStyle.Render("No forwards configured") + "\n\n" +
+		hintStyle.Render("  Press ") + selectedStyle.Render("n") +
+		hintStyle.Render(" to add your first port forward.") + "\n"
 }
 
 // renderForwardsTable renders the forwards table with all styling
@@ -655,9 +660,11 @@ func (m model) createTableStyleFunc(colors mainViewColors) func(row, col int) li
 	}
 }
 
-// renderErrorSection renders the error display section
-func (m model) renderErrorSection() string {
+// renderErrorSection renders the error display section, sized to the terminal.
+func (m model) renderErrorSection(termWidth int) string {
 	var b strings.Builder
+
+	width := errorWidth(termWidth)
 
 	b.WriteString("\n\n")
 	errorHeaderStyle := lipgloss.NewStyle().
@@ -669,28 +676,44 @@ func (m model) renderErrorSection() string {
 
 	errorLineStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("196")).
-		Width(ErrorDisplayWidth).
-		MaxWidth(ErrorDisplayWidth)
+		Width(width).
+		MaxWidth(width)
 
 	for id, errMsg := range m.ui.errors {
 		// Find the forward to display its alias
 		if fwd, ok := m.ui.forwards[id]; ok {
-			b.WriteString(m.renderErrorLine(fwd.Alias, errMsg, errorLineStyle))
+			b.WriteString(m.renderErrorLine(fwd.Alias, errMsg, width, errorLineStyle))
 		}
 	}
 
 	return b.String()
 }
 
+// errorWidth clamps the error display to the terminal width, falling back to the
+// default cap so errors never overflow narrow terminals nor sprawl on wide ones.
+func errorWidth(termWidth int) int {
+	width := ErrorDisplayWidth
+	if termWidth > 0 && termWidth-2 < width {
+		width = termWidth - 2
+	}
+	if width < 20 {
+		width = 20
+	}
+	return width
+}
+
 // renderErrorLine renders a single error line with proper wrapping
-func (m model) renderErrorLine(alias, errMsg string, style lipgloss.Style) string {
+func (m model) renderErrorLine(alias, errMsg string, width int, style lipgloss.Style) string {
 	var b strings.Builder
 
 	// Format: "  • alias: error message"
 	prefix := fmt.Sprintf("  • %s: ", alias)
 
 	// Wrap the error message if it's too long
-	maxErrLen := ErrorDisplayWidth - len(prefix)
+	maxErrLen := width - len(prefix)
+	if maxErrLen < 1 {
+		maxErrLen = 1
+	}
 	wrappedMsg := wrapText(errMsg, maxErrLen)
 
 	// Render first line with prefix
@@ -750,9 +773,10 @@ func (m model) buildFooterLines(termWidth int) []string {
 	var currentLine strings.Builder
 	currentLineVisualLen := 0
 
-	// Calculate how much space we need for the total count suffix
+	// Calculate how much space we need for the total count suffix.
+	// Use lipgloss.Width for true display width (the "│" glyph is 3 bytes / 1 col).
 	totalSuffix := fmt.Sprintf("  │  Total: %d", len(m.ui.forwardOrder))
-	totalSuffixLen := len(totalSuffix)
+	totalSuffixLen := lipgloss.Width(totalSuffix)
 
 	// Available width (account for some margin)
 	availableWidth := termWidth - 4
@@ -761,8 +785,9 @@ func (m model) buildFooterLines(termWidth int) []string {
 		// Build this binding's text
 		keyRendered := keyStyle.Render(binding.key)
 		bindingText := keyRendered + ": " + binding.desc
-		// Visual length without ANSI codes
-		bindingVisualLen := len(binding.key) + 2 + len(binding.desc)
+		// True display width: strips ANSI and counts wide/unicode glyphs (e.g. ↑↓)
+		// correctly, where len() would over-count multibyte runes and wrap early.
+		bindingVisualLen := lipgloss.Width(bindingText)
 
 		// Add separator if not first item on line
 		separator := ""

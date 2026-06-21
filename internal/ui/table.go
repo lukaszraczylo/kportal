@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/lukaszraczylo/kportal/internal/config"
 )
@@ -195,15 +196,21 @@ func hyperlink(url, text string) string {
 	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, text)
 }
 
-// truncate truncates a string to maxLen, adding "..." if needed
+// truncate truncates a string to maxLen runes, adding "..." if needed.
+// It counts and slices by rune (not byte) so multibyte aliases/resource names
+// are never cut mid-rune into mojibake.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+	r := []rune(s)
 	if maxLen <= 3 {
-		return s[:maxLen]
+		return string(r[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+	return string(r[:maxLen-3]) + "..."
 }
 
 // formatStatusWithIndicator adds color-coded indicator symbols to status

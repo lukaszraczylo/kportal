@@ -447,10 +447,10 @@ func FormatValidationErrors(errs []ValidationError) string {
 	sb.WriteString(strings.Repeat("=", 50) + "\n\n")
 
 	for i, err := range errs {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, err.Message))
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, err.Message)
 		if len(err.Context) > 0 {
 			for k, v := range err.Context {
-				sb.WriteString(fmt.Sprintf("   %s: %s\n", k, v))
+				fmt.Fprintf(&sb, "   %s: %s\n", k, v)
 			}
 		}
 		sb.WriteString("\n")

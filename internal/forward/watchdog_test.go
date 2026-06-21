@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -264,7 +265,7 @@ func (s *WatchdogTestSuite) TestConcurrentOperations() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			forwardID := string(rune('a' + id))
+			forwardID := fmt.Sprintf("worker-%d", id)
 			s.watchdog.RegisterWorker(forwardID, nil)
 			for j := 0; j < 10; j++ {
 				s.watchdog.Heartbeat(forwardID)

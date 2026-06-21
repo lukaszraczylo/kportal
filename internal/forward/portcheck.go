@@ -67,6 +67,10 @@ func formatProcessList(processes []processInfo) string {
 
 // getProcessNameByPID retrieves the process name for a given PID on Unix systems
 func getProcessNameByPID(pid string) string {
+	if !isValidPID(pid) {
+		return ""
+	}
+	// #nosec G204 -- pid is validated by isValidPID() to contain only digits
 	cmd := exec.Command("ps", "-p", pid, "-o", "comm=")
 	output, err := cmd.Output()
 	if err != nil {
@@ -302,11 +306,11 @@ func FormatConflicts(conflicts []PortConflict) string {
 	sb.WriteString(strings.Repeat("=", 50) + "\n\n")
 
 	for _, conflict := range conflicts {
-		sb.WriteString(fmt.Sprintf("Port %d\n", conflict.Port))
+		fmt.Fprintf(&sb, "Port %d\n", conflict.Port)
 		if conflict.Resource != "" {
-			sb.WriteString(fmt.Sprintf("  Needed for: %s\n", conflict.Resource))
+			fmt.Fprintf(&sb, "  Needed for: %s\n", conflict.Resource)
 		}
-		sb.WriteString(fmt.Sprintf("  Currently used by: %s\n", conflict.UsedBy))
+		fmt.Fprintf(&sb, "  Currently used by: %s\n", conflict.UsedBy)
 		sb.WriteString("\n")
 	}
 

@@ -9,7 +9,22 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
+
+// formatDetectedPort renders a discovered port for the port-selection list,
+// e.g. "8080", "80 → 8000" (service target differs), optionally "(http)".
+func formatDetectedPort(port k8s.PortInfo) string {
+	desc := fmt.Sprintf("%d", port.Port)
+	if port.TargetPort > 0 && port.TargetPort != port.Port {
+		desc = fmt.Sprintf("%d → %d", port.Port, port.TargetPort)
+	}
+	if port.Name != "" {
+		desc += fmt.Sprintf(" (%s)", port.Name)
+	}
+	return desc
+}
 
 // renderAddWizard renders the appropriate step of the add wizard
 func (m model) renderAddWizard() string {
@@ -61,24 +76,25 @@ func (m model) renderSelectContext() string {
 		b.WriteString(spinnerStyle.Render("⣾ Loading contexts..."))
 	} else if wizard.error != nil {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("✗ Error: %v", wizard.error)))
+		b.WriteString(mutedStyle.Render("\n\nCould not read kubeconfig. Press Esc to cancel."))
 	} else if len(wizard.contexts) == 0 {
 		b.WriteString(mutedStyle.Render("No contexts found in kubeconfig"))
+		b.WriteString(mutedStyle.Render("\n\nAdd one with: kubectl config use-context <name>"))
 	} else {
 		filteredContexts := wizard.getFilteredContexts()
 		if len(filteredContexts) == 0 {
 			b.WriteString(mutedStyle.Render("No matching contexts"))
 		} else {
-			const viewportHeight = 20
 			totalItems := len(filteredContexts)
 
 			// Show scroll up indicator if there are items above the viewport
 			if wizard.scrollOffset > 0 {
-				b.WriteString(mutedStyle.Render("        ↑ More above ↑") + "\n")
+				b.WriteString(scrollUpIndicator())
 			}
 
 			// Calculate visible range
 			start := wizard.scrollOffset
-			end := wizard.scrollOffset + viewportHeight
+			end := wizard.scrollOffset + ViewportHeight
 			if end > totalItems {
 				end = totalItems
 			}
@@ -103,7 +119,7 @@ func (m model) renderSelectContext() string {
 
 			// Show scroll down indicator if there are items below the viewport
 			if end < totalItems {
-				b.WriteString(mutedStyle.Render("        ↓ More below ↓") + "\n")
+				b.WriteString(scrollDownIndicator())
 			}
 		}
 	}
@@ -124,7 +140,7 @@ func (m model) renderSelectNamespace() string {
 	var b strings.Builder
 
 	b.WriteString(renderHeader("Add Port Forward", renderProgress(2, 7)))
-	b.WriteString(fmt.Sprintf("Context: %s\n\n", breadcrumbStyle.Render(wizard.selectedContext)))
+	fmt.Fprintf(&b, "Context: %s\n\n", breadcrumbStyle.Render(wizard.selectedContext))
 
 	b.WriteString("Select Namespace:\n\n")
 
@@ -342,39 +358,23 @@ func (m model) renderEnterRemotePort() string {
 		b.WriteString("Select remote port:")
 		b.WriteString("\n\n")
 
-		const viewportHeight = 20
 		totalItems := len(wizard.detectedPorts) + 1 // +1 for manual entry option
 
 		// Show scroll up indicator if there are items above the viewport
 		if wizard.scrollOffset > 0 {
-			b.WriteString(mutedStyle.Render("        ↑ More above ↑") + "\n")
+			b.WriteString(scrollUpIndicator())
 		}
 
 		// Calculate visible range
 		start := wizard.scrollOffset
-		end := wizard.scrollOffset + viewportHeight
+		end := wizard.scrollOffset + ViewportHeight
 		if end > totalItems {
 			end = totalItems
 		}
 
 		// Render detected ports within viewport
 		for i := start; i < end && i < len(wizard.detectedPorts); i++ {
-			port := wizard.detectedPorts[i]
-			// For services, show both service port and target port if they differ
-			var portDesc string
-			if port.TargetPort > 0 && port.TargetPort != port.Port {
-				// Service with different target port: "80 → 8000 (http)"
-				portDesc = fmt.Sprintf("%d → %d", port.Port, port.TargetPort)
-				if port.Name != "" {
-					portDesc += fmt.Sprintf(" (%s)", port.Name)
-				}
-			} else {
-				// Pod port or service with same port
-				portDesc = fmt.Sprintf("%d", port.Port)
-				if port.Name != "" {
-					portDesc += fmt.Sprintf(" (%s)", port.Name)
-				}
-			}
+			portDesc := formatDetectedPort(wizard.detectedPorts[i])
 
 			prefix := "  "
 			if i == wizard.cursor {
@@ -402,7 +402,7 @@ func (m model) renderEnterRemotePort() string {
 
 		// Show scroll down indicator if there are items below the viewport
 		if end < totalItems {
-			b.WriteString(mutedStyle.Render("        ↓ More below ↓") + "\n")
+			b.WriteString(scrollDownIndicator())
 		}
 
 		b.WriteString("\n")
@@ -412,19 +412,7 @@ func (m model) renderEnterRemotePort() string {
 		if len(wizard.detectedPorts) > 0 {
 			b.WriteString(mutedStyle.Render("Detected ports:\n"))
 			for _, port := range wizard.detectedPorts {
-				var portDesc string
-				if port.TargetPort > 0 && port.TargetPort != port.Port {
-					portDesc = fmt.Sprintf("%d → %d", port.Port, port.TargetPort)
-					if port.Name != "" {
-						portDesc += fmt.Sprintf(" (%s)", port.Name)
-					}
-				} else {
-					portDesc = fmt.Sprintf("%d", port.Port)
-					if port.Name != "" {
-						portDesc += fmt.Sprintf(" (%s)", port.Name)
-					}
-				}
-				b.WriteString(mutedStyle.Render(fmt.Sprintf("  • %s\n", portDesc)))
+				b.WriteString(mutedStyle.Render(fmt.Sprintf("  • %s\n", formatDetectedPort(port))))
 			}
 			b.WriteString("\n")
 		}
@@ -503,18 +491,18 @@ func (m model) renderConfirmation() string {
 		resourceInfo = fmt.Sprintf("service/%s", wizard.resourceValue)
 	}
 
-	b.WriteString(fmt.Sprintf("  Context:      %s\n", wizard.selectedContext))
-	b.WriteString(fmt.Sprintf("  Namespace:    %s\n", wizard.selectedNamespace))
-	b.WriteString(fmt.Sprintf("  Resource:     %s\n", resourceInfo))
-	b.WriteString(fmt.Sprintf("  Remote Port:  %d\n", wizard.remotePort))
-	b.WriteString(fmt.Sprintf("  Local Port:   %d\n", wizard.localPort))
+	fmt.Fprintf(&b, "  Context:      %s\n", wizard.selectedContext)
+	fmt.Fprintf(&b, "  Namespace:    %s\n", wizard.selectedNamespace)
+	fmt.Fprintf(&b, "  Resource:     %s\n", resourceInfo)
+	fmt.Fprintf(&b, "  Remote Port:  %d\n", wizard.remotePort)
+	fmt.Fprintf(&b, "  Local Port:   %d\n", wizard.localPort)
 	b.WriteString("  Protocol:     tcp\n")
 
 	httpLogMark := "[ ] disabled"
 	if wizard.httpLog {
 		httpLogMark = "[x] enabled"
 	}
-	b.WriteString(fmt.Sprintf("  HTTP Log:     %s\n", httpLogMark))
+	fmt.Fprintf(&b, "  HTTP Log:     %s\n", httpLogMark)
 
 	b.WriteString("\n")
 
@@ -648,7 +636,7 @@ func (m model) renderRemoveSelection() string {
 	}
 
 	selectedCount := wizard.getSelectedCount()
-	b.WriteString(fmt.Sprintf("%d of %d selected\n\n", selectedCount, len(wizard.forwards)))
+	fmt.Fprintf(&b, "%d of %d selected\n\n", selectedCount, len(wizard.forwards))
 
 	b.WriteString(wrapHelpText("Space: Toggle  a: All  n: None  Enter: Remove  Esc: Cancel", wizardHelpWidth(m.termWidth)))
 
@@ -663,7 +651,7 @@ func (m model) renderRemoveConfirmation() string {
 	b.WriteString("\n")
 
 	selectedCount := wizard.getSelectedCount()
-	b.WriteString(fmt.Sprintf("Remove %d port forward(s)?\n\n", selectedCount))
+	fmt.Fprintf(&b, "Remove %d port forward(s)?\n\n", selectedCount)
 
 	selectedForwards := wizard.getSelectedForwards()
 	for _, fwd := range selectedForwards {
@@ -718,7 +706,7 @@ func (m model) renderBenchmarkConfig() string {
 	var b strings.Builder
 
 	b.WriteString(renderHeader("HTTP Benchmark", ""))
-	b.WriteString(fmt.Sprintf("Target: %s (localhost:%d)", breadcrumbStyle.Render(state.forwardAlias), state.localPort))
+	fmt.Fprintf(&b, "Target: %s (localhost:%d)", breadcrumbStyle.Render(state.forwardAlias), state.localPort)
 	b.WriteString("\n\n")
 
 	b.WriteString("Configure benchmark parameters:")
@@ -741,7 +729,7 @@ func (m model) renderBenchmarkConfig() string {
 			b.WriteString(selectedStyle.Render(fmt.Sprintf("%s%-12s", prefix, field.label+":")))
 			b.WriteString(validInputStyle.Render(field.value + "█"))
 		} else {
-			b.WriteString(fmt.Sprintf("%s%-12s %s", prefix, field.label+":", field.value))
+			fmt.Fprintf(&b, "%s%-12s %s", prefix, field.label+":", field.value)
 		}
 		b.WriteString("\n")
 	}
@@ -759,7 +747,7 @@ func (m model) renderBenchmarkRunning() string {
 	var b strings.Builder
 
 	b.WriteString(renderHeader("HTTP Benchmark", ""))
-	b.WriteString(fmt.Sprintf("Target: %s", breadcrumbStyle.Render(state.forwardAlias)))
+	fmt.Fprintf(&b, "Target: %s", breadcrumbStyle.Render(state.forwardAlias))
 	b.WriteString("\n\n")
 
 	// Progress bar
@@ -779,7 +767,7 @@ func (m model) renderBenchmarkRunning() string {
 	b.WriteString(spinnerStyle.Render("Running benchmark..."))
 	b.WriteString("\n\n")
 
-	b.WriteString(fmt.Sprintf("  [%s] %d%%", successStyle.Render(bar), percent))
+	fmt.Fprintf(&b, "  [%s] %d%%", successStyle.Render(bar), percent)
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d / %d requests completed", state.progress, state.total)))
 	b.WriteString("\n\n")
@@ -799,7 +787,7 @@ func (m model) renderBenchmarkResults() string {
 	var b strings.Builder
 
 	b.WriteString(renderHeader("Benchmark Results", ""))
-	b.WriteString(fmt.Sprintf("Target: %s", breadcrumbStyle.Render(state.forwardAlias)))
+	fmt.Fprintf(&b, "Target: %s", breadcrumbStyle.Render(state.forwardAlias))
 	b.WriteString("\n\n")
 
 	if state.error != nil {
@@ -824,43 +812,43 @@ func (m model) renderBenchmarkResults() string {
 		successRate = 0
 	}
 
-	b.WriteString(fmt.Sprintf("Total Requests:  %d", r.TotalRequests))
+	fmt.Fprintf(&b, "Total Requests:  %d", r.TotalRequests)
 	b.WriteString("\n")
 	if r.Failed == 0 {
 		b.WriteString(successStyle.Render(fmt.Sprintf("Successful:      %d (%.1f%%)", r.Successful, successRate)))
 	} else {
-		b.WriteString(fmt.Sprintf("Successful:      %d (%.1f%%)", r.Successful, successRate))
+		fmt.Fprintf(&b, "Successful:      %d (%.1f%%)", r.Successful, successRate)
 	}
 	b.WriteString("\n")
 	if r.Failed > 0 {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("Failed:          %d", r.Failed)))
 	} else {
-		b.WriteString(fmt.Sprintf("Failed:          %d", r.Failed))
+		fmt.Fprintf(&b, "Failed:          %d", r.Failed)
 	}
 	b.WriteString("\n\n")
 
 	// Latency stats
 	b.WriteString(breadcrumbStyle.Render("Latency (ms)"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Min:    %.2f", r.MinLatency))
+	fmt.Fprintf(&b, "  Min:    %.2f", r.MinLatency)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Max:    %.2f", r.MaxLatency))
+	fmt.Fprintf(&b, "  Max:    %.2f", r.MaxLatency)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Avg:    %.2f", r.AvgLatency))
+	fmt.Fprintf(&b, "  Avg:    %.2f", r.AvgLatency)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  P50:    %.2f", r.P50Latency))
+	fmt.Fprintf(&b, "  P50:    %.2f", r.P50Latency)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  P95:    %.2f", r.P95Latency))
+	fmt.Fprintf(&b, "  P95:    %.2f", r.P95Latency)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  P99:    %.2f", r.P99Latency))
+	fmt.Fprintf(&b, "  P99:    %.2f", r.P99Latency)
 	b.WriteString("\n\n")
 
 	// Throughput
 	b.WriteString(breadcrumbStyle.Render("Throughput"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Requests/sec:  %.2f", r.Throughput))
+	fmt.Fprintf(&b, "  Requests/sec:  %.2f", r.Throughput)
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Bytes read:    %d", r.BytesRead))
+	fmt.Fprintf(&b, "  Bytes read:    %d", r.BytesRead)
 	b.WriteString("\n")
 
 	// Status codes if interesting
@@ -874,7 +862,7 @@ func (m model) renderBenchmarkResults() string {
 			} else if code >= 400 {
 				b.WriteString(errorStyle.Render(fmt.Sprintf("  %d: %d", code, count)))
 			} else {
-				b.WriteString(fmt.Sprintf("  %d: %d", code, count))
+				fmt.Fprintf(&b, "  %d: %d", code, count)
 			}
 			b.WriteString("\n")
 		}
@@ -966,7 +954,7 @@ func (m model) renderHTTPLog() string {
 		b.WriteString("\n")
 
 		// Header
-		header := fmt.Sprintf("  %-10s  %-7s  %-6s  %-8s  %s",
+		header := "  " + fmt.Sprintf(HTTPLogRowFormat,
 			"TIME", "METHOD", "STATUS", "LATENCY", "PATH")
 		b.WriteString(mutedStyle.Render(header))
 		b.WriteString("\n")
@@ -1004,8 +992,8 @@ func (m model) renderHTTPLog() string {
 			end = totalEntries
 		}
 
-		// Calculate max path width
-		maxPathWidth := termWidth - 48
+		// Calculate max path width (remaining space after the fixed columns)
+		maxPathWidth := termWidth - HTTPLogFixedCols
 		if maxPathWidth < 10 {
 			maxPathWidth = 10
 		}
@@ -1028,14 +1016,11 @@ func (m model) renderHTTPLog() string {
 				}
 			}
 
-			// Truncate path
-			path := entry.Path
-			if len(path) > maxPathWidth {
-				path = path[:maxPathWidth-3] + "..."
-			}
+			// Truncate path (rune-aware, no mid-rune mojibake)
+			path := truncate(entry.Path, maxPathWidth)
 
 			// Build line
-			line := fmt.Sprintf("%-10s  %-7s  %-6s  %-8s  %s",
+			line := fmt.Sprintf(HTTPLogRowFormat,
 				entry.Timestamp,
 				entry.Method,
 				statusStr,
@@ -1079,7 +1064,7 @@ func (m model) renderHTTPLog() string {
 	// Footer with entry count
 	b.WriteString("\n")
 	if totalEntries != totalUnfiltered {
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d of %d entries (filtered from %d)", totalEntries, totalEntries, totalUnfiltered)))
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d of %d entries (filtered)", totalEntries, totalUnfiltered)))
 	} else {
 		b.WriteString(mutedStyle.Render(fmt.Sprintf("  %d entries", totalEntries)))
 	}
@@ -1121,11 +1106,7 @@ func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int
 		}
 		sort.Strings(headerKeys)
 		for _, k := range headerKeys {
-			v := entry.RequestHeaders[k]
-			// Truncate long header values
-			if len(v) > termWidth-20 {
-				v = v[:termWidth-23] + "..."
-			}
+			v := truncate(entry.RequestHeaders[k], termWidth-20)
 			lines = append(lines, fmt.Sprintf("    %s: %s", mutedStyle.Render(k), v))
 		}
 		lines = append(lines, "")
@@ -1146,11 +1127,7 @@ func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int
 			reqBody = formatJSONContent(reqBody, entry.RequestHeaders)
 			bodyLines := strings.Split(reqBody, "\n")
 			for _, line := range bodyLines {
-				// Truncate long lines
-				if len(line) > termWidth-6 {
-					line = line[:termWidth-9] + "..."
-				}
-				lines = append(lines, "    "+line)
+				lines = append(lines, "    "+truncate(line, termWidth-6))
 			}
 		}
 		lines = append(lines, "")
@@ -1192,11 +1169,7 @@ func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int
 		}
 		sort.Strings(headerKeys)
 		for _, k := range headerKeys {
-			v := entry.ResponseHeaders[k]
-			// Truncate long header values
-			if len(v) > termWidth-20 {
-				v = v[:termWidth-23] + "..."
-			}
+			v := truncate(entry.ResponseHeaders[k], termWidth-20)
 			lines = append(lines, fmt.Sprintf("    %s: %s", mutedStyle.Render(k), v))
 		}
 		lines = append(lines, "")
@@ -1217,11 +1190,7 @@ func (m model) renderHTTPLogDetail(entry HTTPLogEntry, termWidth, termHeight int
 			respBody = formatJSONContent(respBody, entry.ResponseHeaders)
 			bodyLines := strings.Split(respBody, "\n")
 			for _, line := range bodyLines {
-				// Truncate long lines
-				if len(line) > termWidth-6 {
-					line = line[:termWidth-9] + "..."
-				}
-				lines = append(lines, "    "+line)
+				lines = append(lines, "    "+truncate(line, termWidth-6))
 			}
 		}
 		lines = append(lines, "")

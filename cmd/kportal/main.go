@@ -117,9 +117,14 @@ func runMain() int {
 // of long-running modes (headless, verbose-loop, interactive).
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Subcommand dispatch must run BEFORE the main flag set is parsed because
-	// generate has its own FlagSet and must not see kportal's top-level flags.
-	if len(args) >= 1 && args[0] == "generate" {
-		return runGenerate(args[1:])
+	// generate and completion have their own FlagSets and must not see kportal's top-level flags.
+	if len(args) >= 1 {
+		switch args[0] {
+		case "generate":
+			return runGenerate(args[1:])
+		case "completion":
+			return completionCmd(args[1:])
+		}
 	}
 
 	opts, code, handled := parseFlags(args, stderr)
@@ -498,7 +503,7 @@ func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, d
 	// Background update check (best effort).
 	go func() {
 		checker := version.NewChecker(githubOwner, githubRepo, appVersion)
-		uctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		uctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if update := checker.CheckForUpdate(uctx); update != nil {
 			log.Printf("Update available: v%s (current: v%s) - %s",
@@ -590,7 +595,7 @@ func runInteractive(ctx context.Context, opts runOptions, cfg *config.Config, de
 
 	go func() {
 		checker := version.NewChecker(githubOwner, githubRepo, appVersion)
-		uctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		uctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if update := checker.CheckForUpdate(uctx); update != nil {
 			bubbleTeaUI.SetUpdateAvailable(update.LatestVersion, update.ReleaseURL)

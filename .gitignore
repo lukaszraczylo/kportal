@@ -3,3 +3,7 @@ CLAUDE.md
 DEPLOYMENT_SUMMARY.md
 HOMEBREW_COMPLIANCE.md
 RELEASE_SETUP.md
+
+# Local/live test configs (cluster-specific, never committed)
+.kportal.test.yaml
+.kportal.*.local.yaml

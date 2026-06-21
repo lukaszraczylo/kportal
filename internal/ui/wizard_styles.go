@@ -139,6 +139,18 @@ func renderBreadcrumb(parts ...string) string {
 	return breadcrumbStyle.Render(strings.Join(parts, " / "))
 }
 
+// scrollUpIndicator returns the styled "more items above" hint shown when a
+// viewport is scrolled down past its first item.
+func scrollUpIndicator() string {
+	return mutedStyle.Render("        ↑ More above ↑") + "\n"
+}
+
+// scrollDownIndicator returns the styled "more items below" hint shown when a
+// viewport has items beyond its last visible row.
+func scrollDownIndicator() string {
+	return mutedStyle.Render("        ↓ More below ↓") + "\n"
+}
+
 // renderList renders a list of items with cursor selection and viewport scrolling
 func renderList(items []string, cursor int, prefix string, scrollOffset int) string {
 	var b strings.Builder
@@ -147,7 +159,7 @@ func renderList(items []string, cursor int, prefix string, scrollOffset int) str
 
 	// Show scroll up indicator if there are items above the viewport
 	if scrollOffset > 0 {
-		b.WriteString(mutedStyle.Render("        ↑ More above ↑") + "\n")
+		b.WriteString(scrollUpIndicator())
 	}
 
 	// Calculate visible range
@@ -171,7 +183,7 @@ func renderList(items []string, cursor int, prefix string, scrollOffset int) str
 
 	// Show scroll down indicator if there are items below the viewport
 	if end < totalItems {
-		b.WriteString(mutedStyle.Render("        ↓ More below ↓") + "\n")
+		b.WriteString(scrollDownIndicator())
 	}
 
 	return b.String()
