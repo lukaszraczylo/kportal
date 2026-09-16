@@ -668,6 +668,14 @@
                         <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Use a custom configuration file instead of .kportal.yaml</p>
                     </div>
                     <div class="glass p-4 sm:p-6 rounded-xl">
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"><i class="fas fa-layer-group text-teal-500 mr-2"></i>Select Contexts</h3>
+                        <div onclick="copyToClipboard('kportal --context development-team-a', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-teal-500 transition-all duration-300 mb-3">
+                            <code class="font-mono">kportal --context development-team-a</code>
+                            <div class="absolute top-3 right-3"><i class="fas fa-copy text-gray-500 group-hover:text-teal-400 transition-colors"></i></div>
+                        </div>
+                        <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Forward only the contexts you name instead of all of them. Repeatable and comma-separated. Contexts never selected together can reuse the same local ports.</p>
+                    </div>
+                    <div class="glass p-4 sm:p-6 rounded-xl">
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4"><i class="fas fa-server text-slate-500 mr-2"></i>Headless Mode</h3>
                         <div onclick="copyToClipboard('kportal -headless -v 2>kportal.log &', this)" class="relative bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100 p-4 rounded-lg text-sm cursor-pointer group border border-gray-700 hover:border-slate-500 transition-all duration-300 mb-3">
                             <code class="font-mono">kportal -headless -v 2&gt;kportal.log &amp;</code>

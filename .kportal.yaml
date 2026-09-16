@@ -22,6 +22,35 @@ reliability:
   retryOnStale: true          # Automatically reconnect when stale connections detected (default: true)
   watchdogPeriod: "30s"       # Goroutine watchdog check interval to detect hung workers (default: 30s)
 
+# Every context below is forwarded by default. Pass --context to run only some
+# of them, for example:
+#
+#   kportal --context staging
+#   kportal --context production,staging     # repeatable, or comma-separated
+#
+# Local-port conflicts are only reported between forwards that could run at the
+# same time, so contexts you never select together may reuse the same
+# localPort - handy when the same service exists in several clusters and you
+# want it on a fixed local port in each:
+#
+#   contexts:
+#     - name: development-team-a
+#       namespaces:
+#         - name: rate-service
+#           forwards:
+#             - resource: pod/rpc-server
+#               protocol: tcp
+#               port: 50051
+#               localPort: 3004      # same port as team-b below
+#     - name: development-team-b
+#       namespaces:
+#         - name: rate-service
+#           forwards:
+#             - resource: pod/rpc-server
+#               protocol: tcp
+#               port: 50051
+#               localPort: 3004      # only valid when one of them is selected
+
 # Optional: TUI table configuration
 # Controls which columns are visible in the forwards table, in what order,
 # and how wide each one renders. Omit this section (or leave it empty) to

@@ -1685,7 +1685,7 @@ func TestRemoveForwardByIDCmd_Success(t *testing.T) {
 	require.NoError(t, mutator.AddForward("ctx", "ns", fwdKeep))
 
 	id := "ctx/ns/pod/app:18083"
-	cmd := removeForwardByIDCmd(mutator, id)
+	cmd := removeForwardByIDCmd(mutator, "", id)
 	msg := cmd()
 	removedMsg, ok := msg.(ForwardsRemovedMsg)
 	require.True(t, ok)

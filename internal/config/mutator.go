@@ -13,8 +13,9 @@ import (
 // All operations use atomic file writes (write to temp, then rename) to prevent
 // corruption and ensure the file watcher picks up changes.
 type Mutator struct {
-	configPath string
-	mu         sync.Mutex // Ensure only one mutation at a time
+	configPath     string
+	activeContexts []string
+	mu             sync.Mutex // Ensure only one mutation at a time
 }
 
 // NewMutator creates a new configuration mutator for the given config file path.
@@ -22,6 +23,24 @@ func NewMutator(configPath string) *Mutator {
 	return &Mutator{
 		configPath: configPath,
 	}
+}
+
+// SetActiveContexts records which contexts are currently being forwarded, as
+// selected with --context. Local-port conflicts are then only reported between
+// forwards that could actually run at the same time, so editing a forward is
+// not blocked by a port that is only used by a context you are not running.
+//
+// Validation still covers the whole file, and the whole file is still written
+// back, so a config saved here always reloads cleanly.
+func (m *Mutator) SetActiveContexts(names []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activeContexts = names
+}
+
+// activeContextsLocked returns the active selection. Callers must hold m.mu.
+func (m *Mutator) activeContextsLocked() []string {
+	return m.activeContexts
 }
 
 // findOrCreateContext finds an existing context or creates a new one
@@ -82,20 +101,28 @@ func (m *Mutator) AddForward(contextName, namespaceName string, fwd Forward) err
 	// Set context/namespace on the forward for validation
 	fwd.SetContext(contextName, namespaceName)
 
-	// Check for duplicate local port
+	// Check for a duplicate local port among forwards that could run alongside
+	// this one. A port used only by a context that is never active at the same
+	// time is free to reuse.
+	active := m.activeContextsLocked()
 	allForwards := cfg.GetAllForwards()
 	for _, existing := range allForwards {
-		if existing.LocalPort == fwd.LocalPort {
-			return fmt.Errorf("port %d is already in use by %s", fwd.LocalPort, existing.String())
+		if existing.LocalPort != fwd.LocalPort {
+			continue
 		}
+		if !PortsCanConflict(existing.GetContext(), contextName, active) {
+			continue
+		}
+		return fmt.Errorf("port %d is already in use by %s", fwd.LocalPort, existing.String())
 	}
 
 	// Add the forward
 	targetNamespace.Forwards = append(targetNamespace.Forwards, fwd)
 
-	// Validate the new configuration
+	// Validate the whole configuration - including contexts that are not
+	// currently active - so nothing invalid is ever written to disk.
 	validator := NewValidator()
-	if errs := validator.ValidateConfig(cfg); len(errs) > 0 {
+	if errs := validator.ValidateConfigWithOpts(cfg, ValidateOptions{ActiveContexts: active}); len(errs) > 0 {
 		return fmt.Errorf("validation failed: %s", FormatValidationErrors(errs))
 	}
 
@@ -150,7 +177,7 @@ func (m *Mutator) RemoveForwards(predicate func(ctx, ns string, fwd Forward) boo
 
 	// Validate the new configuration
 	validator := NewValidator()
-	if errs := validator.ValidateConfig(cfg); len(errs) > 0 {
+	if errs := validator.ValidateConfigWithOpts(cfg, ValidateOptions{ActiveContexts: m.activeContextsLocked()}); len(errs) > 0 {
 		return fmt.Errorf("validation failed: %s", FormatValidationErrors(errs))
 	}
 
@@ -159,8 +186,23 @@ func (m *Mutator) RemoveForwards(predicate func(ctx, ns string, fwd Forward) boo
 }
 
 // RemoveForwardByID removes a specific forward by its ID.
+//
+// Forward.ID() is only "alias:localPort" when an alias is set, which is not
+// unique across contexts once contexts are allowed to reuse local ports.
+// Prefer RemoveForwardByIDInContext, which cannot match a forward in a context
+// the caller did not mean.
 func (m *Mutator) RemoveForwardByID(id string) error {
+	return m.RemoveForwardByIDInContext("", id)
+}
+
+// RemoveForwardByIDInContext removes a forward by ID from a single context.
+// An empty contextName matches the ID in every context, preserving the
+// behaviour of RemoveForwardByID.
+func (m *Mutator) RemoveForwardByIDInContext(contextName, id string) error {
 	return m.RemoveForwards(func(ctx, ns string, fwd Forward) bool {
+		if contextName != "" && ctx != contextName {
+			return false
+		}
 		return fwd.ID() == id
 	})
 }
@@ -170,6 +212,17 @@ func (m *Mutator) RemoveForwardByID(id string) error {
 // If the old forward doesn't exist, returns an error.
 // If the new forward validation fails, the operation is rolled back (old forward remains).
 func (m *Mutator) UpdateForward(oldID, newContextName, newNamespaceName string, newFwd Forward) error {
+	return m.UpdateForwardInContext("", oldID, newContextName, newNamespaceName, newFwd)
+}
+
+// UpdateForwardInContext is UpdateForward scoped to the context the edited
+// forward came from. An empty oldContextName matches oldID in every context,
+// preserving the behaviour of UpdateForward.
+//
+// Scoping matters because Forward.ID() is only "alias:localPort" when an alias
+// is set: without a context, editing one forward would collapse every
+// same-alias forward across contexts into a single entry.
+func (m *Mutator) UpdateForwardInContext(oldContextName, oldID, newContextName, newNamespaceName string, newFwd Forward) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -192,7 +245,8 @@ func (m *Mutator) UpdateForward(oldID, newContextName, newNamespaceName string, 
 				// CRITICAL: Set context/namespace so fwd.ID() generates correct ID
 				fwd.SetContext(ctx.Name, ns.Name)
 
-				if fwd.ID() == oldID {
+				matchesContext := oldContextName == "" || ctx.Name == oldContextName
+				if matchesContext && fwd.ID() == oldID {
 					oldForwardFound = true
 					// Skip this forward (remove it)
 					continue
@@ -218,20 +272,27 @@ func (m *Mutator) UpdateForward(oldID, newContextName, newNamespaceName string, 
 	// Set context/namespace on the forward for validation
 	newFwd.SetContext(newContextName, newNamespaceName)
 
-	// Check for duplicate local port (excluding the one we just removed)
+	// Check for a duplicate local port among forwards that could run alongside
+	// this one (excluding the one we just removed).
+	active := m.activeContextsLocked()
 	allForwards := cfg.GetAllForwards()
 	for _, existing := range allForwards {
-		if existing.LocalPort == newFwd.LocalPort && existing.ID() != oldID {
-			return fmt.Errorf("port %d is already in use by %s", newFwd.LocalPort, existing.String())
+		if existing.LocalPort != newFwd.LocalPort || existing.ID() == oldID {
+			continue
 		}
+		if !PortsCanConflict(existing.GetContext(), newContextName, active) {
+			continue
+		}
+		return fmt.Errorf("port %d is already in use by %s", newFwd.LocalPort, existing.String())
 	}
 
 	// Add the new forward
 	targetNamespace.Forwards = append(targetNamespace.Forwards, newFwd)
 
-	// Validate the new configuration
+	// Validate the whole configuration - including contexts that are not
+	// currently active - so nothing invalid is ever written to disk.
 	validator := NewValidator()
-	if errs := validator.ValidateConfig(cfg); len(errs) > 0 {
+	if errs := validator.ValidateConfigWithOpts(cfg, ValidateOptions{ActiveContexts: active}); len(errs) > 0 {
 		return fmt.Errorf("validation failed: %s", FormatValidationErrors(errs))
 	}
 

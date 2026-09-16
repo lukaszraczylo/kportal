@@ -51,11 +51,34 @@ type runOptions struct {
 	logFormat     string
 	convertInput  string
 	convertOutput string
+	contexts      []string
 	verbose       bool
 	headless      bool
 	check         bool
 	showVersion   bool
 	checkUpdate   bool
+}
+
+// contextListFlag collects repeated -context values. Each value may itself be a
+// comma-separated list, so "-context a -context b" and "-context a,b" are
+// equivalent.
+type contextListFlag []string
+
+func (c *contextListFlag) String() string {
+	if c == nil {
+		return ""
+	}
+	return strings.Join(*c, ",")
+}
+
+func (c *contextListFlag) Set(value string) error {
+	// Reject an empty value rather than silently forwarding every context -
+	// "-context=$UNSET_VAR" in a script should fail loudly.
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("context name cannot be empty")
+	}
+	*c = append(*c, value)
+	return nil
 }
 
 // fprintf is a small wrapper that suppresses the io.Writer write error. We
@@ -166,11 +189,29 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return code
 	}
 
-	// Validate configuration (allow empty for newly created files).
+	// Validate the whole configuration - including contexts that -context
+	// excludes - so problems anywhere in the file are still reported. Only the
+	// checks that depend on what actually runs (local ports, mDNS hostnames)
+	// are scoped to the selection.
 	validator := config.NewValidator()
-	if errs := validator.ValidateConfigWithOptions(cfg, configIsNew || cfg.IsEmpty()); len(errs) > 0 {
+	if errs := validator.ValidateConfigWithOpts(cfg, config.ValidateOptions{
+		AllowEmpty:     configIsNew || cfg.IsEmpty(),
+		ActiveContexts: opts.contexts,
+	}); len(errs) > 0 {
 		fprint(stderr, config.FormatValidationErrors(errs))
 		return 1
+	}
+
+	// Narrow the config to the selected contexts for everything downstream.
+	// Skipped for a config with no contexts at all (a file just created above),
+	// where reporting an unknown context would be unhelpful.
+	if len(opts.contexts) > 0 && len(cfg.Contexts) > 0 {
+		selected, err := cfg.SelectContexts(opts.contexts)
+		if err != nil {
+			fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+		cfg = selected
 	}
 
 	if opts.check {
@@ -192,9 +233,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 	switch {
 	case opts.headless:
-		return runHeadless(ctx, opts, cfg, deps, validator, stderr)
+		return runHeadless(ctx, opts, cfg, deps, stderr)
 	case opts.verbose:
-		return runVerboseTable(ctx, opts, cfg, deps, validator, stderr)
+		return runVerboseTable(ctx, opts, cfg, deps, stderr)
 	default:
 		return runInteractive(ctx, opts, cfg, deps, stderr)
 	}
@@ -208,6 +249,8 @@ func parseFlags(args []string, stderr io.Writer) (runOptions, int, bool) {
 	fs.SetOutput(stderr)
 
 	var opts runOptions
+	var contexts contextListFlag
+	fs.Var(&contexts, "context", "Only forward the named contexts from the config file (repeatable and comma-separated; default: all)")
 	fs.StringVar(&opts.configFile, "c", defaultConfigFile, "Path to configuration file")
 	fs.BoolVar(&opts.verbose, "v", false, "Enable verbose logging")
 	fs.BoolVar(&opts.headless, "headless", false, "Run in headless mode (no UI, for background/daemon use)")
@@ -224,6 +267,7 @@ func parseFlags(args []string, stderr io.Writer) (runOptions, int, bool) {
 		}
 		return opts, 2, true
 	}
+	opts.contexts = config.NormalizeContextSelection(contexts)
 	return opts, 0, false
 }
 
@@ -335,6 +379,30 @@ func loadOrCreateConfig(configFile string, stdin io.Reader, stdout, stderr io.Wr
 	return cfg, true, 0, false
 }
 
+// reloadFromSignal re-reads the config after SIGHUP and applies it to the
+// manager. Load, validation and the -context selection all live in
+// config.LoadForRuntime, shared with the file watcher, so no reload path can
+// forget the selection. Failures are logged and the previous config stays
+// active. onApplied, when non-nil, runs only after a successful Reload.
+func reloadFromSignal(opts runOptions, manager *forward.Manager, logIt bool, onApplied func(*config.Config)) {
+	newCfg, err := config.LoadForRuntime(opts.configFile, opts.contexts)
+	if err != nil {
+		if logIt {
+			log.Printf("Failed to reload config: %v", err)
+		}
+		return
+	}
+	if err := manager.Reload(newCfg); err != nil {
+		if logIt {
+			log.Printf("Failed to reload: %v", err)
+		}
+		return
+	}
+	if onApplied != nil {
+		onApplied(newCfg)
+	}
+}
+
 // runtimeDeps bundles the long-lived objects shared by all UI modes.
 type runtimeDeps struct {
 	manager   *forward.Manager
@@ -355,6 +423,7 @@ func buildRuntimeDeps(opts runOptions, cfg *config.Config, stderr io.Writer) (*r
 	}
 	discovery := k8s.NewDiscovery(pool)
 	mutator := config.NewMutator(opts.configFile)
+	mutator.SetActiveContexts(opts.contexts)
 
 	manager, err := forward.NewManager(opts.verbose)
 	if err != nil {
@@ -429,7 +498,7 @@ func runConvert(input, output string, stdout, stderr io.Writer) int {
 
 // runHeadless runs the daemon-style mode: no UI, signal-driven SIGHUP reloads,
 // graceful shutdown on ctx.Done() (which is cancelled by SIGINT/SIGTERM).
-func runHeadless(ctx context.Context, opts runOptions, cfg *config.Config, deps *runtimeDeps, validator *config.Validator, stderr io.Writer) int {
+func runHeadless(ctx context.Context, opts runOptions, cfg *config.Config, deps *runtimeDeps, stderr io.Writer) int {
 	if startErr := deps.manager.Start(cfg); startErr != nil {
 		fprintf(stderr, "Error starting forwards: %v\n", startErr)
 		return 1
@@ -442,7 +511,7 @@ func runHeadless(ctx context.Context, opts runOptions, cfg *config.Config, deps 
 
 	watcher, watcherErr := config.NewWatcher(opts.configFile, func(newCfg *config.Config) error {
 		return deps.manager.Reload(newCfg)
-	}, opts.verbose)
+	}, opts.verbose, config.WithContextSelection(opts.contexts))
 	watcherStarted := false
 	if watcherErr != nil {
 		if opts.verbose {
@@ -471,32 +540,14 @@ func runHeadless(ctx context.Context, opts runOptions, cfg *config.Config, deps 
 			if opts.verbose {
 				log.Printf("Received SIGHUP, reloading configuration...")
 			}
-			newCfg, loadErr := config.LoadConfig(opts.configFile)
-			if loadErr != nil {
-				if opts.verbose {
-					log.Printf("Failed to reload config: %v", loadErr)
-				}
-				continue
-			}
-			if errs := validator.ValidateConfig(newCfg); len(errs) > 0 {
-				if opts.verbose {
-					log.Printf("Config validation failed:")
-					log.Print(config.FormatValidationErrors(errs))
-				}
-				continue
-			}
-			if reloadErr := deps.manager.Reload(newCfg); reloadErr != nil {
-				if opts.verbose {
-					log.Printf("Failed to reload: %v", reloadErr)
-				}
-			}
+			reloadFromSignal(opts, deps.manager, opts.verbose, nil)
 		}
 	}
 }
 
 // runVerboseTable runs the simple table UI with periodic redraws and SIGHUP
 // reload, exiting cleanly when ctx is cancelled.
-func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, deps *runtimeDeps, validator *config.Validator, stderr io.Writer) int {
+func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, deps *runtimeDeps, stderr io.Writer) int {
 	tableUI := ui.NewTableUI(opts.verbose, cfg)
 	deps.manager.SetStatusUI(tableUI)
 
@@ -544,7 +595,7 @@ func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, d
 		}
 		tableUI.SetColumns(newCfg)
 		return nil
-	}, opts.verbose)
+	}, opts.verbose, config.WithContextSelection(opts.contexts))
 	watcherActive := false
 	if watchErr != nil {
 		log.Printf("Warning: Failed to setup config watcher: %v", watchErr)
@@ -568,21 +619,7 @@ func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, d
 			return shutdownManager(ctx, deps.manager, opts.verbose)
 		case <-sigChan:
 			log.Printf("Received SIGHUP, reloading configuration...")
-			newCfg, loadErr := config.LoadConfig(opts.configFile)
-			if loadErr != nil {
-				log.Printf("Failed to reload config: %v", loadErr)
-				continue
-			}
-			if errs := validator.ValidateConfig(newCfg); len(errs) > 0 {
-				log.Printf("Config validation failed:")
-				log.Print(config.FormatValidationErrors(errs))
-				continue
-			}
-			if reloadErr := deps.manager.Reload(newCfg); reloadErr != nil {
-				log.Printf("Failed to reload: %v", reloadErr)
-				continue
-			}
-			tableUI.SetColumns(newCfg)
+			reloadFromSignal(opts, deps.manager, true, tableUI.SetColumns)
 		}
 	}
 }
@@ -598,6 +635,7 @@ func runInteractive(ctx context.Context, opts runOptions, cfg *config.Config, de
 	}, appVersion)
 	bubbleTeaUI.SetColumns(cfg)
 	bubbleTeaUI.SetWizardDependencies(deps.discovery, deps.mutator, opts.configFile)
+	bubbleTeaUI.SetActiveContexts(opts.contexts)
 	bubbleTeaUI.SetHTTPLogSubscriber(makeHTTPLogSubscriber(deps.manager))
 
 	go func() {
@@ -623,7 +661,7 @@ func runInteractive(ctx context.Context, opts runOptions, cfg *config.Config, de
 		}
 		bubbleTeaUI.SetColumns(newCfg)
 		return nil
-	}, opts.verbose)
+	}, opts.verbose, config.WithContextSelection(opts.contexts))
 	if err == nil {
 		watcher.Start()
 	}

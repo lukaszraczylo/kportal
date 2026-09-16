@@ -69,33 +69,35 @@ type HTTPLogSubscriber func(forwardID string, callback func(entry HTTPLogEntry))
 
 // BubbleTeaUI is a bubbletea-based terminal UI
 type BubbleTeaUI struct {
-	discovery           *k8s.Discovery
-	program             *tea.Program
-	forwards            map[string]*ForwardStatus
-	columns             []ResolvedColumn
-	benchmarkState      *BenchmarkState
-	httpLogSubscriber   HTTPLogSubscriber
-	disabledMap         map[string]bool
-	toggleCallback      func(id string, enable bool)
-	httpLogCleanup      func()
-	httpLogState        *HTTPLogState
-	errors              map[string]string
-	mutator             *config.Mutator
-	removeWizard        *RemoveWizardState
-	addWizard           *AddWizardState
-	updateVersion       string
-	updateURL           string
-	configPath          string
-	deleteConfirmID     string
-	deleteConfirmAlias  string
-	version             string
-	forwardOrder        []string
-	viewMode            ViewMode
-	deleteConfirmCursor int
-	selectedIndex       int
-	mu                  sync.RWMutex
-	deleteConfirming    bool
-	updateAvailable     bool
+	discovery            *k8s.Discovery
+	program              *tea.Program
+	forwards             map[string]*ForwardStatus
+	benchmarkState       *BenchmarkState
+	httpLogSubscriber    HTTPLogSubscriber
+	disabledMap          map[string]bool
+	toggleCallback       func(id string, enable bool)
+	httpLogCleanup       func()
+	httpLogState         *HTTPLogState
+	errors               map[string]string
+	mutator              *config.Mutator
+	removeWizard         *RemoveWizardState
+	addWizard            *AddWizardState
+	updateVersion        string
+	updateURL            string
+	configPath           string
+	deleteConfirmID      string
+	deleteConfirmContext string
+	deleteConfirmAlias   string
+	version              string
+	forwardOrder         []string
+	columns              []ResolvedColumn
+	activeContexts       []string
+	viewMode             ViewMode
+	deleteConfirmCursor  int
+	selectedIndex        int
+	mu                   sync.RWMutex
+	deleteConfirming     bool
+	updateAvailable      bool
 }
 
 // bubbletea model
@@ -138,6 +140,16 @@ func (ui *BubbleTeaUI) SetWizardDependencies(discovery *k8s.Discovery, mutator *
 	ui.discovery = discovery
 	ui.mutator = mutator
 	ui.configPath = configPath
+}
+
+// SetActiveContexts records the contexts selected with --context so the add
+// and edit wizards only report local-port conflicts against forwards that
+// could actually be running. An empty selection means every context is active.
+func (ui *BubbleTeaUI) SetActiveContexts(names []string) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+
+	ui.activeContexts = names
 }
 
 // SetHTTPLogSubscriber sets the function to subscribe to HTTP logs
@@ -900,6 +912,7 @@ func (ui *BubbleTeaUI) moveSelection(delta int) {
 func (ui *BubbleTeaUI) resetDeleteConfirmation() {
 	ui.deleteConfirming = false
 	ui.deleteConfirmID = ""
+	ui.deleteConfirmContext = ""
 	ui.deleteConfirmAlias = ""
 	ui.deleteConfirmCursor = 0
 }

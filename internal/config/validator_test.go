@@ -526,7 +526,7 @@ func TestValidator_CheckDuplicatePorts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := validator.validateDuplicatePorts(tt.config)
+			errs := validator.validateDuplicatePorts(tt.config, nil)
 
 			if tt.expectErrors {
 				assert.NotEmpty(t, errs, "expected validation errors")
@@ -2183,4 +2183,177 @@ func TestValidator_ValidateTUI(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidator_DuplicatePortsScopedToActiveContexts covers the rule that makes
+// --context useful: forwards in contexts that are never running at the same
+// time may reuse a local port, while forwards that would genuinely collide are
+// still rejected.
+func TestValidator_DuplicatePortsScopedToActiveContexts(t *testing.T) {
+	validator := NewValidator()
+
+	buildConfig := func() *Config {
+		cfg, err := ParseConfig([]byte(`contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/rpc-server
+            protocol: tcp
+            port: 50051
+            localPort: 3004
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/rpc-server
+            protocol: tcp
+            port: 50051
+            localPort: 3004
+`))
+		if err != nil {
+			t.Fatalf("ParseConfig() failed: %v", err)
+		}
+		return cfg
+	}
+
+	tests := []struct {
+		name         string
+		active       []string
+		expectErrors bool
+	}{
+		{name: "no selection keeps the global check", active: nil, expectErrors: true},
+		{name: "one active context allows the shared port", active: []string{"team-a"}, expectErrors: false},
+		{name: "other active context allows it too", active: []string{"team-b"}, expectErrors: false},
+		{name: "both active reinstates the conflict", active: []string{"team-a", "team-b"}, expectErrors: true},
+		{name: "neither active leaves them isolated", active: []string{"team-c"}, expectErrors: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validator.ValidateConfigWithOpts(buildConfig(), ValidateOptions{ActiveContexts: tt.active})
+
+			var portErrs []ValidationError
+			for _, err := range errs {
+				if err.Field == "localPort" {
+					portErrs = append(portErrs, err)
+				}
+			}
+
+			if tt.expectErrors {
+				assert.NotEmpty(t, portErrs, "expected a duplicate local port error")
+			} else {
+				assert.Empty(t, portErrs, "shared port should be allowed: %v", portErrs)
+			}
+		})
+	}
+}
+
+// TestValidator_DuplicatePortsWithinContextAlwaysConflict guards the case a
+// scope key must never hide: two forwards in the SAME context always collide.
+func TestValidator_DuplicatePortsWithinContextAlwaysConflict(t *testing.T) {
+	cfg, err := ParseConfig([]byte(`contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/one
+            protocol: tcp
+            port: 80
+            localPort: 8080
+          - resource: pod/two
+            protocol: tcp
+            port: 81
+            localPort: 8080
+`))
+	if err != nil {
+		t.Fatalf("ParseConfig() failed: %v", err)
+	}
+
+	for _, active := range [][]string{nil, {"team-a"}, {"team-b"}} {
+		errs := NewValidator().ValidateConfigWithOpts(cfg, ValidateOptions{ActiveContexts: active})
+		found := false
+		for _, e := range errs {
+			if e.Field == "localPort" {
+				found = true
+			}
+		}
+		assert.True(t, found, "same-context duplicate must conflict (active=%v)", active)
+	}
+}
+
+// TestValidator_StructuralErrorsNotHiddenBySelection proves --check did not get
+// weaker: a problem in a context that is not being forwarded is still reported.
+func TestValidator_StructuralErrorsNotHiddenBySelection(t *testing.T) {
+	cfg, err := ParseConfig([]byte(`contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/ok
+            protocol: tcp
+            port: 80
+            localPort: 8080
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: ""
+            protocol: tcp
+            port: 80
+            localPort: 9090
+`))
+	if err != nil {
+		t.Fatalf("ParseConfig() failed: %v", err)
+	}
+
+	errs := NewValidator().ValidateConfigWithOpts(cfg, ValidateOptions{ActiveContexts: []string{"team-a"}})
+	assert.NotEmpty(t, errs, "an invalid forward in a non-selected context must still be reported")
+}
+
+// TestValidator_DuplicateMDNSAliasScopedToActiveContexts mirrors the local-port
+// rule for mDNS hostnames, which can only clash while forwards are running.
+func TestValidator_DuplicateMDNSAliasScopedToActiveContexts(t *testing.T) {
+	buildConfig := func() *Config {
+		cfg, err := ParseConfig([]byte(`mdns:
+  enabled: true
+contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            protocol: tcp
+            port: 80
+            localPort: 8080
+            alias: api
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: service/api
+            protocol: tcp
+            port: 80
+            localPort: 8080
+            alias: api
+`))
+		if err != nil {
+			t.Fatalf("ParseConfig() failed: %v", err)
+		}
+		return cfg
+	}
+
+	aliasErrs := func(active []string) []ValidationError {
+		var out []ValidationError
+		for _, e := range NewValidator().ValidateConfigWithOpts(buildConfig(), ValidateOptions{ActiveContexts: active}) {
+			if e.Field == "alias" {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	assert.NotEmpty(t, aliasErrs(nil), "duplicate hostname must conflict when everything runs")
+	assert.Empty(t, aliasErrs([]string{"team-a"}), "duplicate hostname is fine when only one context runs")
+	assert.NotEmpty(t, aliasErrs([]string{"team-a", "team-b"}), "both active means a real hostname clash")
 }

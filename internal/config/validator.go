@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -63,6 +64,20 @@ func NewValidator() *Validator {
 	return &Validator{}
 }
 
+// ValidateOptions tunes how a configuration is validated.
+type ValidateOptions struct {
+	// ActiveContexts names the contexts that will actually be forwarded, as
+	// selected with --context. Checks for resources that can only clash while
+	// running - local ports and mDNS hostnames - are scoped to these contexts,
+	// so contexts that are never started together may reuse the same values.
+	// An empty slice means every context is active, which is the default.
+	ActiveContexts []string
+
+	// AllowEmpty permits configurations with no contexts or forwards. Used for
+	// newly created config files where the user will add forwards via the TUI.
+	AllowEmpty bool
+}
+
 // ValidateConfig validates the entire configuration and returns all errors found.
 func (v *Validator) ValidateConfig(cfg *Config) []ValidationError {
 	return v.ValidateConfigWithOptions(cfg, false)
@@ -72,7 +87,13 @@ func (v *Validator) ValidateConfig(cfg *Config) []ValidationError {
 // When allowEmpty is true, empty configurations (no contexts/forwards) are allowed.
 // This is useful for newly created config files where the user will add forwards via the TUI.
 func (v *Validator) ValidateConfigWithOptions(cfg *Config, allowEmpty bool) []ValidationError {
+	return v.ValidateConfigWithOpts(cfg, ValidateOptions{AllowEmpty: allowEmpty})
+}
+
+// ValidateConfigWithOpts validates configuration against the given options.
+func (v *Validator) ValidateConfigWithOpts(cfg *Config, opts ValidateOptions) []ValidationError {
 	var errs []ValidationError
+	allowEmpty := opts.AllowEmpty
 
 	if cfg == nil {
 		return []ValidationError{{
@@ -102,11 +123,11 @@ func (v *Validator) ValidateConfigWithOptions(cfg *Config, allowEmpty bool) []Va
 	}
 
 	// Check for duplicate local ports
-	errs = append(errs, v.validateDuplicatePorts(cfg)...)
+	errs = append(errs, v.validateDuplicatePorts(cfg, opts.ActiveContexts)...)
 
 	// Validate mDNS configuration
 	if cfg.IsMDNSEnabled() {
-		errs = append(errs, v.validateMDNS(cfg)...)
+		errs = append(errs, v.validateMDNS(cfg, opts.ActiveContexts)...)
 	}
 
 	// Validate duration fields in specs
@@ -306,28 +327,58 @@ func (v *Validator) validateResource(fwd *Forward) []ValidationError {
 	return errs
 }
 
-// validateDuplicatePorts checks for duplicate local ports across all forwards.
-func (v *Validator) validateDuplicatePorts(cfg *Config) []ValidationError {
+// conflictScope returns the key that groups forwards which can run at the same
+// time. Active contexts all share one scope because they run together; each
+// inactive context gets its own, so it may reuse the ports and hostnames of
+// contexts it is never started alongside.
+func conflictScope(contextName string, activeContexts []string) string {
+	if contextIsActive(contextName, activeContexts) {
+		return "" // the shared "currently running" scope
+	}
+	return contextName
+}
+
+// validateDuplicatePorts checks for local ports claimed by more than one
+// forward that could be running simultaneously. Forwards in contexts that are
+// never active together are allowed to share a local port.
+func (v *Validator) validateDuplicatePorts(cfg *Config, activeContexts []string) []ValidationError {
 	var errs []ValidationError
 
-	portMap := make(map[int][]string) // port -> list of forward IDs
+	type portKey struct {
+		scope string
+		port  int
+	}
+	portMap := make(map[portKey][]string) // port within a scope -> list of forward IDs
 
 	for _, ctx := range cfg.Contexts {
 		for _, ns := range ctx.Namespaces {
 			for _, fwd := range ns.Forwards {
-				portMap[fwd.LocalPort] = append(portMap[fwd.LocalPort], fwd.ID())
+				key := portKey{scope: conflictScope(ctx.Name, activeContexts), port: fwd.LocalPort}
+				portMap[key] = append(portMap[key], fwd.ID())
 			}
 		}
 	}
 
-	// Find duplicates
-	for port, forwards := range portMap {
+	// Find duplicates. Sort the keys so the reported errors are deterministic.
+	keys := make([]portKey, 0, len(portMap))
+	for key := range portMap {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].port != keys[j].port {
+			return keys[i].port < keys[j].port
+		}
+		return keys[i].scope < keys[j].scope
+	})
+
+	for _, key := range keys {
+		forwards := portMap[key]
 		if len(forwards) > 1 {
 			errs = append(errs, ValidationError{
 				Field:   "localPort",
-				Message: fmt.Sprintf("Duplicate local port %d used by multiple forwards", port),
+				Message: fmt.Sprintf("Duplicate local port %d used by multiple forwards", key.port),
 				Context: map[string]string{
-					"port":     fmt.Sprintf("%d", port),
+					"port":     fmt.Sprintf("%d", key.port),
 					"forwards": strings.Join(forwards, ", "),
 				},
 			})
@@ -466,10 +517,14 @@ func FormatValidationErrors(errs []ValidationError) string {
 // validateMDNS validates mDNS configuration when enabled.
 // It checks that aliases used for mDNS hostnames are valid and unique.
 // This includes both explicit aliases and auto-generated ones from resource names.
-func (v *Validator) validateMDNS(cfg *Config) []ValidationError {
+func (v *Validator) validateMDNS(cfg *Config, activeContexts []string) []ValidationError {
 	var errs []ValidationError
 
-	aliasMap := make(map[string][]string) // alias -> list of forward IDs using it
+	type aliasKey struct {
+		scope string
+		alias string
+	}
+	aliasMap := make(map[aliasKey][]string) // alias within a scope -> list of forward IDs using it
 
 	for _, ctx := range cfg.Contexts {
 		for _, ns := range ctx.Namespaces {
@@ -489,19 +544,33 @@ func (v *Validator) validateMDNS(cfg *Config) []ValidationError {
 					})
 				}
 
-				aliasMap[mdnsAlias] = append(aliasMap[mdnsAlias], fwd.ID())
+				key := aliasKey{scope: conflictScope(ctx.Name, activeContexts), alias: mdnsAlias}
+				aliasMap[key] = append(aliasMap[key], fwd.ID())
 			}
 		}
 	}
 
-	// Check for duplicate aliases (would cause mDNS conflicts)
-	for alias, forwards := range aliasMap {
+	// Check for duplicate aliases among forwards that can run together (would
+	// cause mDNS conflicts). Sort the keys so reported errors are deterministic.
+	keys := make([]aliasKey, 0, len(aliasMap))
+	for key := range aliasMap {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].alias != keys[j].alias {
+			return keys[i].alias < keys[j].alias
+		}
+		return keys[i].scope < keys[j].scope
+	})
+
+	for _, key := range keys {
+		forwards := aliasMap[key]
 		if len(forwards) > 1 {
 			errs = append(errs, ValidationError{
 				Field:   "alias",
-				Message: fmt.Sprintf("Duplicate mDNS hostname '%s' used by multiple forwards (would cause conflict)", alias),
+				Message: fmt.Sprintf("Duplicate mDNS hostname '%s' used by multiple forwards (would cause conflict)", key.alias),
 				Context: map[string]string{
-					"alias":    alias,
+					"alias":    key.alias,
 					"forwards": strings.Join(forwards, ", "),
 				},
 			})
