@@ -12,10 +12,27 @@ jobs:
           go-version: ">=1.24"
           check-latest: true
           cache: true
-      - run: go version && go env GOTOOLCHAIN
+      - run: go version
+      - name: Update dependencies
+        shell: bash
+        run: |
+          # Indirect modules can move ahead of their parents (for example
+          # kube-openapi ahead of apimachinery), which breaks the build.
+          update_all() { go get -u ./... && go mod tidy && go build ./...; }
+          update_direct() {
+            local mods=()
+            while IFS= read -r m; do mods+=("$m"); done < <(go list -m -f '{{if and (not .Indirect) (not .Main)}}{{.Path}}@latest{{end}}' all)
+            if [ "${#mods[@]}" -gt 0 ]; then go get "${mods[@]}"; fi
+            go mod tidy
+          }
+          if ! update_all; then
+            echo "::warning title=Full update failed::Falling back to direct dependencies only"
+            git checkout -- go.mod go.sum
+            update_direct
+          fi
+
       - run: |
-          go get -u ./...
-          go mod tidy
-          git diff --stat go.mod go.sum | tail -3
-          grep -E '^go |^toolchain' go.mod
-      - run: go test -race ./... 2>&1 | grep -v "^ok\|no test files" | tail -10; echo test-done
+          grep -E '^go ' go.mod
+          git diff --stat go.mod go.sum | tail -1
+          go build ./... && echo BUILD-OK
+          go test -race ./... 2>&1 | grep -v "^ok\|no test files" ; echo TEST-EXIT-${PIPESTATUS[0]}
