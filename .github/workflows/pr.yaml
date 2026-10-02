@@ -17,6 +17,6 @@ permissions:
 
 jobs:
   pr-checks:
-    uses: lukaszraczylo/shared-actions/.github/workflows/go-pr.yaml@main
+    uses: lukaszraczylo/shared-actions/.github/workflows/go-pr.yaml@fix/runner-expr
     with:
       go-version: ">=1.24"
