@@ -8,81 +8,63 @@
   <a href="https://goreportcard.com/report/github.com/lukaszraczylo/kportal"><img src="https://goreportcard.com/badge/github.com/lukaszraczylo/kportal" alt="Go Report Card"></a>
 </p>
 
-<p align="center">
-  <strong>Kubernetes port-forward manager with interactive terminal UI</strong>
-</p>
+# kportal
 
-kportal manages multiple Kubernetes port-forwards with an interactive terminal interface. It provides real-time status updates, automatic reconnection, hot-reload configuration, and mDNS hostname publishing.
+kportal runs many Kubernetes port-forwards from one YAML file and shows their status in a terminal UI. It reconnects dropped forwards, reloads the file when it changes, and can run without the UI.
 
 ![kportal Screenshot](docs/kportal-screenshot.png)
 
-## ✨ Features
+Website: <https://lukaszraczylo.github.io/kportal>
 
-- **Interactive TUI** - Terminal interface with keyboard navigation
-- **Live management** - Add, edit, and delete port-forwards without restarting
-- **Auto-reconnect** - Exponential backoff retry on connection failures
-- **Hot-reload** - Configuration changes applied automatically
-- **Health monitoring** - Multiple check methods with stale connection detection
-- **Multi-context** - Support for multiple Kubernetes contexts and namespaces
-- **Pod restart handling** - Automatic reconnection when pods restart
-- **Label selectors** - Dynamic pod targeting using label selectors
-- **Port conflict detection** - Validates port availability with PID information
-- **mDNS hostnames** - Access forwards via `.local` hostnames
-- **HTTP traffic logging** - Real-time HTTP request/response logging for debugging
-- **Connection benchmarking** - Built-in HTTP benchmarking with latency statistics
-- **Headless mode** - Background operation for scripting and automation
+## Features
 
-## 🔄 Comparison with Other Tools
+| Area | What kportal does |
+|------|-------------------|
+| Forwards | Forwards to `service/<name>`, `pod/<name>` (exact name or name prefix), or `pod` with a label `selector`. Only TCP is supported. |
+| Terminal UI | Add (`n`), edit (`e`), delete (`d`) and toggle (`Space`) forwards without a restart. The add wizard writes the config file. |
+| Table columns | `tui.columns` sets which columns the forwards table shows, their order and their width. It applies to the UI and to the `-verbose` table. |
+| Add wizard | If the cluster does not allow listing namespaces, the wizard asks you to type the namespace. |
+| Reconnect | Retries with exponential backoff: 1s, 2s, 4s, 8s, then 10s, with 10% jitter. It does not stop retrying. |
+| Pod restarts | Forwards by pod prefix or selector connect to a new pod after a restart. |
+| Health checks | `tcp-dial` or `data-transfer` check every 3s by default. A connection is stale when it is older than `maxConnectionAge` and idle, or idle longer than `maxIdleTime`. |
+| Hot reload | The file watcher and `SIGHUP` reload the config. An invalid config is rejected and the previous one stays active. |
+| Contexts | Several Kubernetes contexts and namespaces in one file. |
+| Port conflicts | Startup and reload checks report a busy local port and the process that holds it. |
+| mDNS | With `mdns.enabled: true`, each forward is reachable as `<alias>.local`. Without an alias, the resource name is used. |
+| HTTP log | Per-forward request and response log in the UI, with detail view, filter, search, JSON formatting, gzip/deflate decoding and clipboard copy. Header values such as `Authorization` and `Cookie` are redacted. |
+| Benchmark | Press `b` to send HTTP requests through a forward. Reports success and failure counts, min/max/avg latency, P50/P95/P99, requests per second and status codes. |
+| Generate | `kportal generate` lists services in a cluster and appends the ones you pick to the config with consecutive local ports. |
+| Headless | `-headless` runs without the UI and logs to stderr. `-log-format json` switches the log format. |
+| Import | `--convert` turns a kftray JSON file into a kportal YAML file. |
+| Shell completion | `kportal completion` prints a bash, zsh or fish completion script, or installs it. |
+| Updates | `-update` checks for a newer release. `-version` prints the version. |
 
-| Feature | kportal | [k9s](https://k9scli.io/) | [Kube Forwarder](https://kube-forwarder.pixelpoint.io/) | [kftray](https://kftray.app/) |
-|---------|---------|------|----------------|--------|
-| **Interface** | Terminal TUI | Terminal TUI | Desktop GUI (Electron) | Desktop GUI + TUI |
-| **Persistent Config** | ✅ YAML file | ❌ Session only | ✅ JSON bookmarks | ✅ JSON + Git sync |
-| **Auto-reconnect** | ✅ Exponential backoff | ❌ Manual | ✅ Basic | ✅ Watch API |
-| **Hot-reload Config** | ✅ File watch + SIGHUP | ❌ | ❌ | ❌ |
-| **Health Checks** | ✅ TCP + data-transfer | ❌ | ❌ | ❌ |
-| **Stale Connection Detection** | ✅ Age + idle tracking | ❌ | ❌ | ❌ |
-| **HTTP Traffic Logging** | ✅ Built-in viewer | ❌ | ❌ | ✅ |
-| **Connection Benchmarking** | ✅ Built-in | ✅ Via Hey | ❌ | ❌ |
-| **mDNS Hostnames** | ✅ `.local` domains | ❌ | ❌ | ❌ |
-| **Label Selectors** | ✅ | ✅ | ❌ | ✅ |
-| **Multi-context** | ✅ | ✅ | ✅ | ✅ |
-| **Headless Mode** | ✅ | ❌ | ❌ | ❌ |
-| **System Tray** | ❌ | ❌ | ❌ | ✅ |
-| **UDP Support** | ❌ | ❌ | ❌ | ✅ Proxy relay |
-| **Dependencies** | Single binary | Single binary | Electron | Tauri + kubectl |
+## Install
 
-## 📦 Installation
-
-### Homebrew (macOS)
+Homebrew (macOS):
 
 ```bash
 brew install --cask lukaszraczylo/taps/kportal
 ```
 
-> **Note**: If you previously installed via `brew install lukaszraczylo/taps/kportal` (formula), uninstall first:
-> ```bash
-> brew uninstall kportal
-> ```
+If you installed the formula (`brew install lukaszraczylo/taps/kportal`) earlier, run `brew uninstall kportal` first.
 
-### Quick Install
+Install script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash
 ```
 
-The installer downloads `kportal-<version>-checksums.txt` from the same release and verifies the archive's SHA-256 before installing. If [`cosign`](https://github.com/sigstore/cosign) is on your `PATH`, the checksums file's keyless cosign signature is also verified against the shared-actions reusable workflow identity.
+The script downloads `kportal-<version>-checksums.txt` from the same release and verifies the archive SHA-256. If [`cosign`](https://github.com/sigstore/cosign) is on `PATH`, it also verifies the keyless signature of the checksums file.
 
 | Variable | Effect |
 |----------|--------|
-| `DRY_RUN=1` | Download and verify only; do not install |
-| `SKIP_COSIGN=1` | Skip cosign signature verification (SHA-256 is still enforced) |
+| `DRY_RUN=1` | Download and verify only. Do not install. |
+| `SKIP_COSIGN=1` | Skip the cosign check. The SHA-256 check still runs. |
 
-### Manual Download
+Manual download: the [releases page](https://github.com/lukaszraczylo/kportal/releases) has archives for Linux, macOS and Windows on amd64 and arm64.
 
-Download binaries from the [releases page](https://github.com/lukaszraczylo/kportal/releases).
-
-### Build from Source
+Build from source (Go 1.26 or later, see `go.mod`):
 
 ```bash
 git clone https://github.com/lukaszraczylo/kportal.git
@@ -90,12 +72,10 @@ cd kportal
 make build && make install
 ```
 
-### Verifying Release Signatures
-
-All release checksums are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing. To verify:
+### Verify a release signature
 
 ```bash
-# Download the checksum file and its sigstore bundle from the release
+# Download the checksums file and its sigstore bundle from the release
 cosign verify-blob \
   --certificate-identity-regexp "^https://github\.com/lukaszraczylo/shared-actions/\.github/workflows/go-release\.yaml@refs/heads/main$" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
@@ -103,7 +83,7 @@ cosign verify-blob \
   kportal-<version>-checksums.txt
 ```
 
-## 🚀 Quick Start
+## Quick start
 
 Create `.kportal.yaml`:
 
@@ -124,7 +104,7 @@ contexts:
             port: 8080
             localPort: 8080
             alias: api
-            httpLog: true  # Enable HTTP traffic logging
+            httpLog: true
 ```
 
 Run:
@@ -133,209 +113,55 @@ Run:
 kportal
 ```
 
-### Keyboard Controls
+## CLI
 
-| Key | Action |
-|-----|--------|
-| `↑↓` / `j/k` | Navigate |
-| `Space` / `Enter` | Toggle forward |
-| `n` | Add new forward |
-| `e` | Edit forward |
-| `d` | Delete forward |
-| `b` | Benchmark connection |
-| `l` | View HTTP logs |
-| `q` | Quit |
+| Command or flag | Effect |
+|-----------------|--------|
+| `kportal` | Start the terminal UI. |
+| `-c <file>` | Config file. Default `.kportal.yaml`. |
+| `-v` | Verbose logging. In headless mode it sets the log level only. |
+| `-headless` | No UI. Logs go to stderr. |
+| `-check` | Validate the config and exit. |
+| `-context <name>` | Forward only the named contexts. See [Select contexts](#select-contexts). |
+| `-log-format text\|json` | Log format. Default `text`. |
+| `-convert <file>` | Convert a kftray JSON file to kportal YAML. |
+| `-convert-output <file>` | Output of `-convert`. Default `.kportal.yaml`. |
+| `-update` | Check for updates and exit. |
+| `-version` | Print the version and exit. |
+| `kportal generate` | Add forwards from a cluster. See [Generate](#generate-forwards-from-a-cluster). |
+| `kportal completion` | Print a shell completion script. |
 
-## 📖 Configuration
+Each flag also accepts the double-dash form, for example `--check`.
 
-### Basic Structure
-
-```yaml
-contexts:
-  - name: <context-name>
-    namespaces:
-      - name: <namespace-name>
-        forwards:
-          - resource: <type>/<name>
-            protocol: tcp
-            port: <remote-port>
-            localPort: <local-port>
-            alias: <display-name>      # optional
-            selector: <label-selector> # optional
-            httpLog: true              # optional - enable HTTP logging
-```
-
-### Forward Options
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `resource` | Yes | Resource type and name (e.g., `service/postgres`, `pod/my-app`) |
-| `protocol` | Yes | Protocol (`tcp`) |
-| `port` | Yes | Remote port |
-| `localPort` | Yes | Local port |
-| `alias` | No | Display name and mDNS hostname |
-| `selector` | No | Label selector for pod resolution |
-| `httpLog` | No | Enable HTTP traffic logging (`true`/`false`) |
-
-### Resource Formats
-
-| Format | Description |
-|--------|-------------|
-| `service/name` | Service forwarding |
-| `pod/name` | Direct pod by name |
-| `pod/prefix` | Pod by prefix (matches `prefix-*`) |
-| `pod` + `selector` | Pod by label selector |
-| `deployment/name` | Deployment |
-
-### Health Check Configuration
-
-```yaml
-healthCheck:
-  interval: "3s"           # Check frequency
-  timeout: "2s"            # Check timeout
-  method: "data-transfer"  # tcp-dial or data-transfer
-  maxConnectionAge: "25m"  # Reconnect before k8s timeout
-  maxIdleTime: "10m"       # Detect idle connections
-
-reliability:
-  tcpKeepalive: "30s"
-  dialTimeout: "30s"
-  retryOnStale: true
-```
-
-Health check methods:
-- `tcp-dial` - Fast TCP connection test
-- `data-transfer` - Verifies tunnel functionality by attempting data read
-
-Connection age reconnection only triggers when the connection is also idle, preventing interruption of active transfers like database dumps.
-
-### mDNS Hostnames
-
-Enable mDNS to access forwards via `.local` hostnames:
-
-```yaml
-mdns:
-  enabled: true
-
-contexts:
-  - name: production
-    namespaces:
-      - name: default
-        forwards:
-          - resource: service/postgres
-            port: 5432
-            localPort: 5432
-            alias: prod-db  # Accessible via prod-db.local:5432
-```
-
-- Explicit `alias` becomes `<alias>.local`
-- Without alias, hostname is generated from resource name (`service/redis` → `redis.local`)
-- Works on macOS (Bonjour) and Linux (avahi-daemon)
-
-Verify registration:
-```bash
-dns-sd -B _kportal._tcp local       # macOS
-avahi-browse -t _kportal._tcp       # Linux
-```
-
-### Table Columns
-
-Choose which columns the forwards table shows, and in what order. The setting applies to the interactive UI and the `-verbose` table:
-
-```yaml
-tui:
-  columns:
-    - name: alias
-      width: 30      # optional, 1-200
-    - name: resource
-    - name: local
-    - name: status
-```
-
-- Valid names: `context`, `namespace`, `alias`, `type`, `resource`, `remote`, `local`, `status`
-- The list order is the render order, and unlisted columns are hidden
-- `width` is the maximum text width, from 1 to 200. If you omit it, the column keeps its default width
-- If you omit `tui`, the table keeps its default columns and order
-- Changes apply on hot-reload
-
-## Usage
-
-### Interactive Mode
-
-```bash
-kportal
-```
-
-### Verbose Mode
-
-```bash
-kportal -v
-```
-
-### Headless Mode
-
-Run without TUI for scripting and automation:
-
-```bash
-kportal -headless
-```
-
-Headless mode emits both structured and standard-library logs to stderr by default
-(suitable for redirecting to a log file or systemd journal). The `-v` flag controls
-log level (debug vs info), not destination.
-
-Combines well with verbose mode for background operation:
+Headless example:
 
 ```bash
 kportal -headless -v 2>kportal.log &
 ```
 
-### Validate Configuration
+Completion:
 
 ```bash
-kportal --check
+kportal completion --shell zsh            # print the script
+kportal completion --shell zsh --install  # install it
+kportal completion --uninstall            # remove it
 ```
 
-### Custom Config File
+Without `--shell`, kportal detects the shell.
 
-```bash
-kportal -c /path/to/config.yaml
-```
+### Select contexts
 
-### Select Contexts
-
-By default every context in the config file is forwarded. `--context` limits the
-run to the contexts you name, which is useful when the file describes several
-clusters but you only work against one at a time:
+By default kportal forwards every context in the file. `--context` limits the run to the contexts you name:
 
 ```bash
 kportal --context development-team-a
-```
-
-The flag is repeatable and accepts comma-separated values, so these are
-equivalent:
-
-```bash
 kportal --context team-a --context team-b
 kportal --context team-a,team-b
 ```
 
-It composes with the other modes, and works well as a per-cluster shell alias:
+An unknown name is an error that lists the contexts in the file. Those are the `contexts[].name` values in `.kportal.yaml`, not every context in your kubeconfig.
 
-```bash
-alias kp-a='kportal --context development-team-a'
-kportal --context development-team-a -headless
-```
-
-An unknown context name is an error that lists the contexts the file defines, so
-a typo fails loudly instead of silently forwarding nothing.
-
-#### Reusing local ports across contexts
-
-Local-port conflicts are only reported between forwards that could run at the
-same time. Contexts that are never selected together may therefore reuse the
-same `localPort`, so the same service keeps the same local port in every
-cluster and the app you are developing never needs reconfiguring:
+Local-port conflicts are only reported between forwards that can run together. With `--context`, contexts you never select together can reuse a `localPort`:
 
 ```yaml
 contexts:
@@ -357,15 +183,9 @@ contexts:
           - <<: *rate-service   # same local port, no conflict
 ```
 
-This requires passing `--context`. Without it every context is active, so the
-duplicate ports above would genuinely collide and are still reported as an
-error - as is naming both contexts at once (`--context team-a,team-b`).
+Without `--context`, or with both contexts named, the duplicate port is an error.
 
-### Generate Forwards from a Cluster
-
-The `generate` subcommand discovers services in a Kubernetes context and lets you
-interactively pick which ones to forward. Selected entries are appended to the
-config file with consecutive local ports starting from a value you choose.
+### Generate forwards from a cluster
 
 ```bash
 kportal generate --context=my-cluster
@@ -375,97 +195,137 @@ kportal generate --context=my-cluster --dry-run
 
 | Flag | Description |
 |------|-------------|
-| `--context` | (required) Kubernetes context to scan |
-| `--config` | Path to kportal config file (default: `.kportal.yaml`) |
-| `--dry-run` | Print the planned forwards but do not modify the config |
+| `--context` | Required. Kubernetes context to scan. |
+| `--config` | Config file to append to. Default `.kportal.yaml`. |
+| `--dry-run` | Print the planned forwards. Do not change the config. |
 
-The interactive flow has three steps:
+Steps:
 
-1. **Namespaces** — multi-select with `space`, toggle-all with `a`, filter with `/`.
-2. **Services** — same controls; rows already present in the config are locked off, and non-TCP ports are skipped (UDP is not supported by kportal's forward layer).
-3. **Port assignment** — choose a starting local port (default `10000`, must be ≥ `1024`). Local ports are assigned consecutively in stable order, skipping any already in use.
+1. Namespaces: select with `space`, toggle all with `a`, filter with `/`.
+2. Services: same keys. Services already in the config are locked. Non-TCP ports are skipped.
+3. Port assignment: choose a first local port (default `10000`, minimum `1024`). Ports are assigned in order and skip ports in use.
 
-Press `enter` on the final step to save (or to print and exit when `--dry-run` is set), `b` to go back, or `esc` to cancel.
+Press `enter` on the last step to save (or print, with `--dry-run`), `b` to go back, `esc` to cancel.
 
-## Status Indicators
+## Keys
 
-| Indicator | Description |
-|-----------|-------------|
+Forwards list:
+
+| Key | Action |
+|-----|--------|
+| `Up` `Down` / `j` `k` | Move the selection |
+| `PgUp` `PgDn` / `Ctrl+u` `Ctrl+d` | Move by 10 rows |
+| `Space` / `Enter` | Toggle the forward |
+| `n` | Add a forward |
+| `e` | Edit the forward |
+| `d` | Delete the forward (asks to confirm) |
+| `b` | Benchmark the forward |
+| `l` | Open the HTTP log |
+| `q` / `Ctrl+c` | Quit |
+
+In the add and edit wizard, `h` on the confirmation step toggles `httpLog`. Advanced `httpLog` keys you set in YAML stay unchanged.
+
+Status values:
+
+| Indicator | Meaning |
+|-----------|---------|
 | `● Active` | Connection healthy |
-| `○ Starting` | Initial connection (10s grace period) |
-| `◐ Reconnecting` | Reconnecting after failure |
+| `○ Starting` | First connection. Failed health checks show Starting for the first 10s. |
+| `◐ Reconnecting` | Reconnecting after a failure |
 | `✗ Error` | Connection failed |
-| `○ Disabled` | Manually disabled |
+| `○ Disabled` | Turned off in the UI |
 
-## Advanced Features
+## Configuration
 
-### HTTP Traffic Logging
+### Forwards
 
-Press `l` in the TUI to view real-time HTTP traffic for a selected forward. The log viewer shows:
+```yaml
+contexts:
+  - name: <context-name>
+    namespaces:
+      - name: <namespace-name>
+        forwards:
+          - resource: <type>/<name>
+            protocol: tcp
+            port: <remote-port>
+            localPort: <local-port>
+            alias: <display-name>      # optional
+            selector: <label-selector> # optional
+            httpLog: true              # optional
+```
 
-| Column | Description |
-|--------|-------------|
-| TIME | Request timestamp |
-| METHOD | HTTP method (GET, POST, etc.) |
-| STATUS | Response status code |
-| LATENCY | Request duration |
-| PATH | Request path |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `resource` | Yes | `service/<name>`, `pod/<name>`, or `pod` with `selector` |
+| `protocol` | No | `tcp`. No other value is accepted. |
+| `port` | Yes | Remote port |
+| `localPort` | Yes | Local port |
+| `alias` | No | Display name and mDNS hostname |
+| `selector` | With bare `pod` | Label selector. Not allowed with `pod/<name>`. |
+| `httpLog` | No | `true`, or a map of options (see [HTTP log](#http-log)) |
 
-**List view shortcuts:**
+### Health checks and reliability
 
-| Key | Action |
-|-----|--------|
-| `↑/↓` | Navigate entries |
-| `Enter` | View request details |
-| `g/G` | Jump to top/bottom |
-| `a` | Toggle auto-scroll |
-| `f` | Cycle filter mode (All → Non-2xx → Errors) |
-| `/` | Search by path or method |
-| `c` | Clear all filters |
-| `q` | Close log viewer |
+```yaml
+healthCheck:
+  interval: "3s"
+  timeout: "2s"
+  method: "data-transfer"  # or tcp-dial
+  maxConnectionAge: "25m"
+  maxIdleTime: "10m"
 
-**Detail view:**
+reliability:
+  tcpKeepalive: "30s"
+  dialTimeout: "30s"
+  retryOnStale: true
+  watchdogPeriod: "30s"
+```
 
-Press `Enter` on any entry to see full request/response details including:
-- Request and response headers (alphabetically sorted)
-- Request and response bodies
-- Timing information and status codes
+The values above are the defaults from `.kportal.yaml`.
 
-| Key | Action |
-|-----|--------|
-| `↑/↓` | Scroll content |
-| `PgUp/PgDn` | Scroll by page |
-| `g` | Jump to top |
-| `c` | Copy response body to clipboard |
-| `Esc/q` | Return to list |
+- `tcp-dial` opens a TCP connection to the local port.
+- `data-transfer` also tries to read data through the tunnel. It is the default.
+- A connection past `maxConnectionAge` reconnects only when it is also idle, so a running transfer is not cut.
 
-**Body display features:**
-- **JSON formatting** - JSON bodies are pretty-printed with syntax highlighting
-- **Compression handling** - gzip/deflate content is automatically decompressed
-- **Binary detection** - Binary content shows a placeholder instead of garbled data
+### mDNS
 
-**Filter modes:**
-- **All** - Show all entries
-- **Non-2xx** - Hide successful (2xx) responses
-- **Errors** - Show only 4xx and 5xx responses
+```yaml
+mdns:
+  enabled: true
+```
 
-**Toggling per-forward logging:**
+- `alias: prod-db` publishes `prod-db.local`.
+- Without an alias, `service/redis` publishes `redis.local`.
+- A bare `pod` with a selector and no alias is not published.
 
-In the add/edit wizard, press `h` on the confirmation step to toggle `httpLog` on or
-off for the current forward. The wizard preserves any advanced `httpLog` keys
-(`logFile`, `includeHeaders`, `maxBodySize`, `filterPath`) you set in YAML.
+Check registration:
 
-**Header redaction:**
+```bash
+dns-sd -B _kportal._tcp local       # macOS
+avahi-browse -t _kportal._tcp       # Linux
+```
 
-When `httpLog.includeHeaders: true` is set, sensitive header values are
-automatically replaced with `[REDACTED]`. The header name is preserved so you can
-see that an `Authorization` header was present without exposing its value. Redacted
-headers include `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`,
-`X-Auth-Token`, `X-Csrf-Token`, `Proxy-Authorization`, `X-Access-Token`, and any
-header whose name contains `token`, `secret`, `password`, or `apikey`. This is
-always on and cannot be disabled.
+### Table columns
 
-**Advanced configuration:**
+```yaml
+tui:
+  columns:
+    - name: alias
+      width: 30      # optional, 1-200
+    - name: resource
+    - name: local
+    - name: status
+```
+
+- Valid names: `context`, `namespace`, `alias`, `type`, `resource`, `remote`, `local`, `status`.
+- List order is render order. Unlisted columns are hidden.
+- `width` is the maximum text width, 1 to 200. Without it, the column keeps its default width.
+- Without `tui`, the table keeps its default columns and order.
+- The setting applies to the UI and to the `-verbose` table, and reloads with the file.
+
+### HTTP log
+
+Press `l` on a forward that has `httpLog` set.
 
 ```yaml
 forwards:
@@ -474,137 +334,98 @@ forwards:
     localPort: 8080
     httpLog:
       enabled: true
-      includeHeaders: true   # values of sensitive headers are redacted
-      maxBodySize: 65536     # bytes; 0 = unlimited
-      filterPath: "/api/"    # only log paths matching this substring
-      logFile: "api.log"     # append entries to a file in addition to the in-memory ring
+      includeHeaders: true   # sensitive values are redacted
+      maxBodySize: 65536     # bytes, 0 = unlimited
+      filterPath: "/api/"    # log only paths containing this text
+      logFile: "api.log"     # also append entries to this file
 ```
 
-### Connection Benchmarking
+List view columns: TIME, METHOD, STATUS, LATENCY, PATH.
 
-Press `b` in the TUI to benchmark a selected forward. Configure:
+| Key | Action |
+|-----|--------|
+| `Up` `Down` | Move |
+| `Enter` | Open details |
+| `g` / `G` | Top / bottom |
+| `a` | Toggle auto-scroll |
+| `f` | Cycle filter: All, Non-2xx, Errors |
+| `/` | Search path or method |
+| `c` | Clear filters |
+| `q` | Close |
 
-- **URL Path** - Target endpoint (default: `/`)
-- **Method** - HTTP method (GET, POST, etc.)
-- **Concurrency** - Number of parallel workers
-- **Requests** - Total number of requests
+Detail view shows sorted request and response headers, bodies and timing. JSON bodies are pretty-printed, gzip and deflate bodies are decoded, and binary bodies show a placeholder.
 
-Results include:
-- Success/failure counts
-- Min/Max/Avg latency
-- P50/P95/P99 percentiles
-- Throughput (requests/sec)
-- Status code distribution
+| Key | Action |
+|-----|--------|
+| `Up` `Down` / `PgUp` `PgDn` | Scroll |
+| `g` | Top |
+| `c` | Copy response body |
+| `Esc` / `q` / `Enter` | Back to the list |
 
-### Hot-Reload
+With `includeHeaders: true`, kportal replaces these header values with `[REDACTED]` and keeps the name: `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, `X-Auth-Token`, `X-Csrf-Token`, `Proxy-Authorization`, `X-Access-Token`, and any name containing `token`, `secret`, `password` or `apikey`. This cannot be turned off.
 
-Configuration changes are applied automatically. Manual reload:
+### Benchmark
+
+Press `b` on a forward. Set the URL path (default `/`), HTTP method, concurrency and request count.
+
+### Reload
+
+kportal reloads when the config file changes. To reload by hand:
 
 ```bash
 kill -HUP $(pgrep kportal)
 ```
 
-### Port Conflict Detection
+`Ctrl+C` and `SIGTERM` shut down cleanly.
 
-kportal validates port availability at startup and during hot-reload, showing which process is using conflicting ports.
-
-Conflicts are only reported between forwards that could be running together.
-With `--context`, forwards in contexts outside the selection are ignored, which
-is what lets each context reuse the same `localPort` values - see
-[Reusing local ports across contexts](#reusing-local-ports-across-contexts).
-
-### Retry Strategy
-
-Exponential backoff: 1s → 2s → 4s → 8s → 10s (max). Retries continue indefinitely until connection succeeds.
-
-## Migration from kftray
+### Import from kftray
 
 ```bash
 kportal --convert configs.json --convert-output .kportal.yaml
 ```
 
-## Signal Handling
+## Troubleshooting
 
-- `Ctrl+C` / `SIGTERM` - Graceful shutdown
-- `SIGHUP` - Reload configuration
-
-## 🐛 Troubleshooting
-
-### Port Already in Use
+Port already in use:
 
 ```bash
 lsof -i :<port>
 kill <pid>
 ```
 
-### Connection Refused
+Connection refused:
 
-1. Verify pod is running: `kubectl get pods -n <namespace>`
-2. Verify port is correct: `kubectl describe pod <pod>`
-3. Check service endpoints: `kubectl get endpoints <service>`
+1. Check the pod: `kubectl get pods -n <namespace>`
+2. Check the port: `kubectl describe pod <pod>`
+3. Check the service endpoints: `kubectl get endpoints <service>`
 
-### Context Not Found
+Context not found: list your contexts with `kubectl config get-contexts`. Names with `@`, `.`, `:` or `/` (for example `admin@home` or an EKS ARN) are valid. If `--context` reports `unknown context "..."`, the name is missing from `contexts[].name` in the config file.
 
-```bash
-kubectl config get-contexts
-```
+The add wizard shows a namespace prompt instead of a list: the cluster refused or returned an empty namespace list. Type the namespace name.
 
-Context names containing `@`, `.`, `:`, or `/` (e.g. `admin@home`,
-`user@cluster.example.com`, GKE dotted names, EKS ARNs) are accepted by the
-config validator.
+## Development
 
-If `--context` reports `unknown context "..."`, the name does not match any
-`contexts[].name` in the config file. The error lists the names that are
-defined - note these are the contexts in your `.kportal.yaml`, which need not be
-every context in your kubeconfig.
-
-## 🔧 Development
-
-### Prerequisites
-
-- Go 1.23+
-- Kubernetes cluster access
-- kubectl configured
-
-### Build
+Requires Go 1.26 or later, kubectl and access to a cluster.
 
 ```bash
-make build    # Build binary
-make test     # Run tests
+make build    # build the binary
+make test     # run tests
 make all      # fmt, vet, staticcheck, test
-make install  # Install locally
+make install  # install locally
 ```
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Telemetry
 
-On startup this binary sends a single anonymous adoption ping — project name,
-version, timestamp; no identifiers, no command output, no payload contents.
-Fire-and-forget with a 2-second timeout; cannot block startup or panic.
+On startup kportal sends one anonymous adoption ping: project name, version and timestamp. It has a 2-second timeout and cannot block startup.
 
-See **[oss-telemetry — Disabling telemetry](https://github.com/lukaszraczylo/oss-telemetry#disabling-telemetry)**
-for the exact wire format, source, and full opt-out documentation.
-
-Quick opt-out: set any of `DO_NOT_TRACK=1`, `OSS_TELEMETRY_DISABLED=1`,
-or `KPORTAL_DISABLE_TELEMETRY=1`.
+To opt out, set `DO_NOT_TRACK=1`, `OSS_TELEMETRY_DISABLED=1` or `KPORTAL_DISABLE_TELEMETRY=1`. See [oss-telemetry](https://github.com/lukaszraczylo/oss-telemetry#disabling-telemetry) for the wire format and source.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
-## Acknowledgments
+## Credits
 
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) - Terminal UI framework
-- [Lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling
-- [client-go](https://github.com/kubernetes/client-go) - Kubernetes client
-- [kftray](https://github.com/hcavarsan/kftray) - Inspiration
-
-## Links
-
-- [Website](https://lukaszraczylo.github.io/kportal)
-- [Issues](https://github.com/lukaszraczylo/kportal/issues)
-- [Releases](https://github.com/lukaszraczylo/kportal/releases)
-- [Changelog](CHANGELOG.md)
+[Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lipgloss](https://github.com/charmbracelet/lipgloss), [client-go](https://github.com/kubernetes/client-go). [kftray](https://github.com/hcavarsan/kftray) was the inspiration.
