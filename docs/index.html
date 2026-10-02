@@ -1,417 +1,1215 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kportal: run Kubernetes port-forwards from one YAML file</title>
-<meta name="description" content="kportal runs many Kubernetes port-forwards from one YAML file, shows their status in a terminal UI, reconnects dropped forwards and reloads the config when it changes.">
-<meta name="color-scheme" content="light dark">
-<style>
-:root {
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #565656;
-  --line: #d4d4d4;
-  --code-bg: #f3f3f3;
-  --accent: #0a58ca;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+<meta name="description" content="kportal runs many Kubernetes port-forwards from one YAML file. Terminal UI with live status, automatic reconnect, hot reload, health checks, HTTP request log, benchmark and mDNS hostnames.">
+<link rel="canonical" href="https://kportal.raczylo.com/">
+<meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="kportal">
+<meta property="og:title" content="kportal: run Kubernetes port-forwards from one YAML file">
+<meta property="og:description" content="Terminal UI, automatic reconnect, hot reload, health checks, HTTP request log, benchmark and mDNS hostnames. MIT licence.">
+<meta property="og:url" content="https://kportal.raczylo.com/">
+<meta property="og:image" content="https://kportal.raczylo.com/kportal-screenshot.png">
+<meta property="og:image:alt" content="kportal terminal UI listing port-forwards with their status">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="kportal: run Kubernetes port-forwards from one YAML file">
+<meta name="twitter:description" content="Terminal UI, automatic reconnect, hot reload, health checks, HTTP request log, benchmark and mDNS hostnames.">
+<meta name="twitter:image" content="https://kportal.raczylo.com/kportal-screenshot.png">
+<link rel="icon" href="kportal-logo-dark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "kportal",
+  "description": "Kubernetes port-forward manager. Runs many port-forwards from one YAML file with a terminal UI, automatic reconnect and hot reload.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "programmingLanguage": "Go",
+  "url": "https://kportal.raczylo.com/",
+  "downloadUrl": "https://github.com/lukaszraczylo/kportal/releases",
+  "codeRepository": "https://github.com/lukaszraczylo/kportal",
+  "license": "https://github.com/lukaszraczylo/kportal/blob/main/LICENSE",
+  "isAccessibleForFree": true,
+  "image": "https://kportal.raczylo.com/kportal-screenshot.png",
+  "author": { "@type": "Person", "name": "Lukasz Raczylo" }
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141414;
-    --fg: #e8e8e8;
-    --muted: #a6a6a6;
-    --line: #3a3a3a;
-    --code-bg: #1f1f1f;
-    --accent: #6ea8fe;
-  }
-}
-:root[data-theme="light"] { --bg:#ffffff; --fg:#1a1a1a; --muted:#565656; --line:#d4d4d4; --code-bg:#f3f3f3; --accent:#0a58ca; }
-:root[data-theme="dark"] { --bg:#141414; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3a3a; --code-bg:#1f1f1f; --accent:#6ea8fe; }
-
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 16px/1.55 var(--sans);
-  overflow-wrap: break-word;
-}
-a { color: var(--accent); }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-img { max-width: 100%; height: auto; }
-
-.wrap { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
-
-header { border-bottom: 1px solid var(--line); }
-header .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; padding-top: 0.75rem; padding-bottom: 0.75rem; }
-header img { height: 2rem; width: auto; display: block; }
-nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; flex: 1; }
-nav a { color: var(--muted); text-decoration: none; padding: 0.25rem 0; }
-nav a:hover { color: var(--fg); text-decoration: underline; }
-#theme { font: inherit; background: none; color: var(--muted); border: 1px solid var(--line); padding: 0.25rem 0.6rem; cursor: pointer; }
-#theme:hover { color: var(--fg); }
-
-.logo-dark { display: none; }
-@media (prefers-color-scheme: dark) { .logo-light { display: none; } .logo-dark { display: block; } }
-:root[data-theme="light"] .logo-light { display: block; }
-:root[data-theme="light"] .logo-dark { display: none; }
-:root[data-theme="dark"] .logo-light { display: none; }
-:root[data-theme="dark"] .logo-dark { display: block; }
-
-h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.15; margin: 2.5rem 0 1rem; max-width: 22ch; }
-h2 { font-size: 1.4rem; margin: 0 0 1rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
-h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
-section { padding: 2rem 0 0.5rem; }
-p { margin: 0 0 1rem; max-width: 42rem; }
-.lead { font-size: 1.1rem; color: var(--muted); }
-ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; max-width: 42rem; }
-
-code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
-code, kbd { background: var(--code-bg); border: 1px solid var(--line); padding: 0.05em 0.35em; }
-pre {
-  background: var(--code-bg);
-  border: 1px solid var(--line);
-  padding: 0.75rem 1rem;
-  margin: 0 0 1rem;
-  overflow-x: auto;
-  line-height: 1.45;
-}
-pre code { background: none; border: 0; padding: 0; font-size: 1em; }
-.cmd { position: relative; }
-.cmd button { position: absolute; top: 0.4rem; right: 0.4rem; font: 0.8rem var(--sans); background: var(--bg); color: var(--muted); border: 1px solid var(--line); padding: 0.15rem 0.5rem; cursor: pointer; }
-.cmd pre { padding-right: 4.5rem; }
-
-.tablewrap { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); }
-table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
-th, td { text-align: left; vertical-align: top; padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--line); }
-tr:last-child td { border-bottom: 0; }
-th { font-weight: 600; background: var(--code-bg); white-space: nowrap; }
-td:first-child { white-space: nowrap; }
-.tablewrap.wrapfirst td:first-child { white-space: normal; }
-
-.shot { margin: 1.5rem 0 0; border: 1px solid var(--line); display: block; }
-.cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 2rem; }
-@media (min-width: 48rem) { .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-
-footer { margin-top: 3rem; border-top: 1px solid var(--line); padding: 1.25rem 0 2rem; color: var(--muted); font-size: 0.9rem; }
-footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; }
-.badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.5rem; }
-.badges img { height: 20px; width: auto; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-</style>
+</script>
 <script>
 (function () {
-  try { var t = localStorage.getItem("theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  var d = document.documentElement;
+  d.classList.add("js");
+  try { var t = localStorage.getItem("kportal-theme"); if (t === "light" || t === "dark") d.setAttribute("data-theme", t); } catch (e) {}
 })();
 </script>
+<style>
+:root {
+  --bg: #0d0e10;
+  --surface: #14161a;
+  --surface-2: #1b1e23;
+  --line: #2a2e35;
+  --fg: #e8eaed;
+  --fg-dim: #c4c9d0;
+  --muted: #9aa2ad;
+  --accent: #7cb7ff;
+  --on-accent: #0d0e10;
+  --code-str: #d6dae0;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #ffffff; --surface: #f6f7f8; --surface-2: #eceef1; --line: #d3d8de;
+    --fg: #14171a; --fg-dim: #343b43; --muted: #555f6a; --accent: #0b5bd3; --on-accent: #ffffff; --code-str: #2b3138;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --surface: #f6f7f8; --surface-2: #eceef1; --line: #d3d8de;
+  --fg: #14171a; --fg-dim: #343b43; --muted: #555f6a; --accent: #0b5bd3; --on-accent: #ffffff; --code-str: #2b3138;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 1rem/1.6 var(--sans); overflow-wrap: break-word; }
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent); text-underline-offset: 0.2em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd, pre { font-family: var(--mono); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+p code, li code, td code, dd code, th code, summary code { background: var(--surface-2); border: 1px solid var(--line); padding: 0.05em 0.35em; font-size: 0.88em; overflow-wrap: anywhere; }
+kbd { background: var(--surface-2); border: 1px solid var(--line); border-bottom-width: 2px; padding: 0.05em 0.4em; font-size: 0.85em; white-space: nowrap; }
+.wrap { width: 100%; max-width: 74rem; margin: 0 auto; padding: 0 1.25rem; }
+.skip { position: absolute; left: 0.5rem; top: -4rem; background: var(--accent); color: var(--on-accent); padding: 0.5rem 0.9rem; z-index: 100; font-weight: 600; }
+.skip:focus { top: 0.5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* header */
+.site-header { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--line); }
+.site-header .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; }
+.brand { display: flex; align-items: center; padding: 0.4rem 0; }
+.brand img { height: 3.1rem; width: auto; }
+.logo-dark { display: block; }
+.logo-light { display: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) .logo-dark { display: none; } :root:not([data-theme]) .logo-light { display: block; } }
+:root[data-theme="light"] .logo-dark { display: none; }
+:root[data-theme="light"] .logo-light { display: block; }
+.head-actions { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+.head-actions a { color: var(--fg-dim); text-decoration: none; font-size: 0.92rem; font-weight: 500; padding: 0.5rem 0.25rem; }
+.head-actions a:hover { color: var(--fg); text-decoration: underline; }
+.icon-btn { font: 500 0.85rem var(--sans); color: var(--fg-dim); background: transparent; border: 1px solid var(--line); padding: 0.4rem 0.75rem; min-height: 2.25rem; cursor: pointer; }
+.icon-btn:hover { color: var(--fg); border-color: var(--muted); }
+.primary-nav { order: 3; width: 100%; display: flex; gap: 0.25rem 1.1rem; overflow-x: auto; white-space: nowrap; padding-bottom: 0.1rem; scrollbar-width: thin; }
+.primary-nav a { color: var(--muted); text-decoration: none; font-size: 0.92rem; font-weight: 500; padding: 0.55rem 0; border-bottom: 2px solid transparent; }
+.primary-nav a:hover { color: var(--fg); border-bottom-color: var(--accent); }
+@media (min-width: 62rem) {
+  .primary-nav { order: 1; width: auto; flex: 1; padding: 0; overflow: visible; }
+  .primary-nav a { padding: 1.05rem 0; }
+  .head-actions { order: 2; margin-left: 0; }
+}
+
+/* sections */
+section[id], .scroll-target { scroll-margin-top: 7rem; }
+.section { padding: 4rem 0; border-top: 1px solid var(--line); }
+.section-head { max-width: 46rem; margin-bottom: 2rem; }
+.eyebrow { font: 500 0.78rem var(--mono); color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 0.75rem; }
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.7rem, 4.2vw, 2.4rem); font-weight: 650; }
+h3 { font-size: 1.3rem; font-weight: 600; }
+h4 { font-size: 1.02rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+.section-head p:not(.eyebrow) { color: var(--muted); font-size: 1.08rem; margin: 0.9rem 0 0; }
+p { margin: 0 0 1rem; }
+ul, ol { margin: 0 0 1rem; padding-left: 1.2rem; }
+li { margin: 0.3rem 0; }
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+
+/* hero */
+.hero { padding: 3rem 0 3.5rem; }
+.hero-grid { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 62rem) { .hero-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 3rem; } .hero { padding: 4.5rem 0 4.5rem; } }
+h1 { font-size: clamp(2.1rem, 6.4vw, 3.4rem); font-weight: 700; letter-spacing: -0.025em; line-height: 1.08; }
+.lead { font-size: 1.12rem; color: var(--fg-dim); margin: 1.25rem 0 1.75rem; max-width: 36rem; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0 1.75rem; }
+.btn { display: inline-block; font: 600 0.95rem var(--sans); padding: 0.7rem 1.25rem; border: 1px solid var(--accent); text-decoration: none; min-height: 2.75rem; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { text-decoration: underline; }
+.btn-secondary { background: transparent; color: var(--accent); }
+.btn-secondary:hover { background: var(--surface-2); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; border: 1px solid var(--line); max-width: 36rem; }
+.facts div { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); }
+.facts div:nth-child(odd) { border-right: 1px solid var(--line); }
+.facts div:nth-last-child(-n+2) { border-bottom: 0; }
+.facts dt { font: 500 0.72rem var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.facts dd { margin: 0.15rem 0 0; font-size: 0.95rem; font-weight: 500; }
+
+/* code + terminal */
+.code { position: relative; background: var(--surface); border: 1px solid var(--line); margin: 0 0 1rem; min-width: 0; }
+.code-head { font: 500 0.78rem var(--mono); color: var(--muted); padding: 0.55rem 5rem 0.55rem 1rem; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.code pre, .term pre { margin: 0; padding: 1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.6; tab-size: 2; }
+.code[data-copy] pre { padding-right: 5rem; }
+.code[data-copy] .code-head + pre { padding-right: 1rem; }
+.code code { color: var(--code-str); }
+.k { color: var(--accent); }
+.c { color: var(--muted); font-style: italic; }
+.copy { position: absolute; top: 0.45rem; right: 0.45rem; font: 500 0.75rem var(--sans); color: var(--fg-dim); background: var(--bg); border: 1px solid var(--line); padding: 0.25rem 0.6rem; min-height: 1.75rem; cursor: pointer; z-index: 2; }
+.copy:hover { color: var(--fg); border-color: var(--muted); }
+.copy.done { color: var(--accent); border-color: var(--accent); }
+.term { --t-bg: #0b0c0e; --t-fg: #d9dce1; --t-mut: #8d949e; --t-acc: #7cb7ff; background: var(--t-bg); border: 1px solid var(--line); margin: 0 0 1rem; min-width: 0; color: var(--t-fg); }
+.term-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.9rem; border-bottom: 1px solid #262a30; }
+.term-bar i { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: #3a3f47; display: block; }
+.term-bar span { margin-left: 0.5rem; font: 500 0.75rem var(--mono); color: var(--t-mut); }
+.term code { color: var(--t-fg); }
+.term .h { color: var(--t-acc); font-weight: 600; }
+.term .m { color: var(--t-mut); }
+.term .a { color: var(--t-acc); }
+.term .sel { background: #23272e; display: inline-block; min-width: 100%; }
+.term .b { font-weight: 600; }
+.hero .term pre { font-size: 0.8rem; }
+.shot-frame { border: 1px solid var(--line); background: #0b0c0e; margin: 0; }
+.shot-frame img { width: 100%; }
+figcaption { font-size: 0.88rem; color: var(--muted); padding: 0.7rem 1rem; border-top: 1px solid var(--line); background: var(--surface); }
+
+/* feature rows */
+.feature { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); padding: 2.75rem 0; border-top: 1px solid var(--line); align-items: start; }
+.feature:first-of-type { border-top: 0; padding-top: 0.5rem; }
+.feature .text p, .feature .text li { color: var(--fg-dim); }
+.feature .text h3 { margin-bottom: 0.9rem; }
+.feature .text .tag { font: 500 0.75rem var(--mono); color: var(--accent); margin: 0 0 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.feature .demo > :last-child { margin-bottom: 0; }
+.feature .demo .caption { font-size: 0.85rem; color: var(--muted); margin: -0.35rem 0 1rem; }
+@media (min-width: 62rem) {
+  .feature { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+  .feature.rev .text { order: 2; }
+  .feature.rev .demo { order: 1; }
+}
+
+/* tables */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); margin: 0 0 1rem; background: var(--bg); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+thead th { background: var(--surface); font-weight: 600; white-space: nowrap; position: relative; }
+tbody th { font-weight: 500; background: var(--bg); }
+.tablewrap.wrap-cells td, .tablewrap.wrap-cells th { white-space: normal; }
+.cmp { min-width: 54rem; }
+.cmp thead th:first-child, .cmp tbody th { position: sticky; left: 0; z-index: 1; border-right: 1px solid var(--line); min-width: 11.5rem; max-width: 14rem; }
+.cmp thead th:first-child { z-index: 2; background: var(--surface); }
+.cmp td { min-width: 9.5rem; }
+.cmp thead th.us, .cmp td.us { background: var(--surface); }
+.y { color: var(--accent); font-weight: 600; }
+.p { color: var(--fg); font-weight: 500; }
+.nd { color: var(--muted); font-style: italic; }
+.no { color: var(--fg); }
+.cell-note { display: block; font-size: 0.78rem; color: var(--muted); font-weight: 400; font-style: normal; margin-top: 0.15rem; }
+.cmp-meta { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); margin-top: 2rem; }
+@media (min-width: 52rem) { .cmp-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.note { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); padding: 0.8rem 1rem; margin: 0 0 1.5rem; font-size: 0.95rem; }
+.note p:last-child { margin-bottom: 0; }
+
+/* install tabs */
+.tablist { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem; overflow-x: auto; }
+.tablist button { font: 500 0.92rem var(--sans); color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 0.75rem 1.1rem; margin-bottom: -1px; cursor: pointer; white-space: nowrap; min-height: 2.75rem; }
+.tablist button:hover { color: var(--fg); }
+.tablist button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabpanel { margin-bottom: 2rem; }
+.js .tabpanel { margin-bottom: 0; }
+.js .tabpanel > h3 { display: none; }
+.tabpanel > h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.tabpanel p { color: var(--fg-dim); max-width: 46rem; }
+.tabpanel .code, .tabpanel .term { max-width: 52rem; }
+
+/* misc layouts */
+.two { display: grid; gap: 1.5rem 3rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 52rem) { .two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.steps li { counter-increment: s; position: relative; padding: 0.15rem 0 0.9rem 2.75rem; color: var(--fg-dim); }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0.1rem; width: 1.9rem; height: 1.9rem; border: 1px solid var(--line); font: 500 0.82rem/1.8rem var(--mono); text-align: center; color: var(--accent); background: var(--surface); }
+details { border-top: 1px solid var(--line); padding: 0.9rem 0; }
+details:last-of-type { border-bottom: 1px solid var(--line); }
+summary { cursor: pointer; font-weight: 600; list-style: none; padding-right: 1.5rem; position: relative; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; position: absolute; right: 0; top: 0; font-family: var(--mono); color: var(--accent); }
+details[open] summary::after { content: "\2212"; }
+details p, details ul { color: var(--fg-dim); margin-top: 0.75rem; max-width: 46rem; }
+.status-dot { font-family: var(--mono); white-space: nowrap; }
+.inline-list { list-style: none; padding: 0; margin: 0 0 1rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+.inline-list li { margin: 0; }
+.inline-list code { display: inline-block; }
+
+/* footer */
+.site-footer { border-top: 1px solid var(--line); padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+.foot-grid { display: grid; gap: 1.75rem 3rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 52rem) { .foot-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.site-footer h2 { font: 600 0.8rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg); margin: 0 0 0.75rem; }
+.site-footer ul { list-style: none; padding: 0; margin: 0; }
+.site-footer li { margin: 0.35rem 0; }
+.site-footer a { color: var(--fg-dim); }
+.foot-brand { grid-column: 1 / -1; }
+@media (min-width: 52rem) { .foot-brand { grid-column: auto; } }
+.foot-bottom { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1.25rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (max-width: 40rem) {
+  .section { padding: 3rem 0; }
+  .feature { padding: 2rem 0; }
+  .code pre, .term pre { font-size: 0.78rem; }
+}
+</style>
 </head>
 <body>
-<header>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
   <div class="wrap">
-    <a href="#" aria-label="kportal home">
-      <img class="logo-light" src="kportal-logo-light.svg" alt="kportal">
-      <img class="logo-dark" src="kportal-logo-dark.svg" alt="kportal">
+    <a class="brand" href="#top" aria-label="kportal home">
+      <img class="logo-dark" src="kportal-logo-dark.svg" alt="kportal" width="310" height="150">
+      <img class="logo-light" src="kportal-logo-light.svg" alt="" width="310" height="150">
     </a>
-    <nav aria-label="Sections">
-      <a href="#features">Features</a>
-      <a href="#install">Install</a>
-      <a href="#usage">Usage</a>
-      <a href="#keys">Keys</a>
-      <a href="#config">Configuration</a>
-      <a href="#http-log">HTTP log</a>
+    <div class="head-actions">
       <a href="https://github.com/lukaszraczylo/kportal">GitHub</a>
+      <button type="button" class="icon-btn" id="theme-toggle" hidden aria-label="Switch colour theme">Theme</button>
+    </div>
+    <nav class="primary-nav" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#compare">Comparison</a>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#reference">Reference</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#faq">FAQ</a>
     </nav>
-    <button id="theme" type="button" aria-label="Switch between light and dark theme">Theme</button>
   </div>
 </header>
 
-<main class="wrap">
-  <h1>Run Kubernetes port-forwards from one YAML file</h1>
-  <p class="lead">kportal starts every forward listed in <code>.kportal.yaml</code>, shows their status in a terminal UI, reconnects dropped forwards and reloads the file when it changes. It also runs without the UI.</p>
+<main id="main">
 
-  <div class="cmd"><pre><code>brew install --cask lukaszraczylo/taps/kportal</code></pre><button type="button" data-copy="brew install --cask lukaszraczylo/taps/kportal">Copy</button></div>
+<!-- hero -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Kubernetes port-forward manager</p>
+      <h1>Run all your Kubernetes port-forwards from one YAML file</h1>
+      <p class="lead">kportal starts every forward listed in <code>.kportal.yaml</code>, shows live status in a terminal UI, reconnects dropped forwards and reloads the file when it changes. It also runs without the UI.</p>
+      <div class="code" data-copy><div class="code-head">Homebrew, macOS</div><pre tabindex="0"><code>brew install <span class="k">--cask</span> lukaszraczylo/taps/kportal</code></pre></div>
+      <p class="small muted">Linux, Windows and other install methods: <a href="#install">Install</a>.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="https://github.com/lukaszraczylo/kportal">View on GitHub</a>
+        <a class="btn btn-secondary" href="#reference">Documentation</a>
+      </div>
+      <dl class="facts">
+        <div><dt>Licence</dt><dd>MIT</dd></div>
+        <div><dt>Language</dt><dd>Go</dd></div>
+        <div><dt>Platforms</dt><dd>Linux, macOS, Windows</dd></div>
+        <div><dt>Architectures</dt><dd>amd64, arm64</dd></div>
+      </dl>
+    </div>
+    <div>
+      <div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>kportal</span></div><pre tabindex="0"><code><span class="h">kportal v0.11.2 - Port Forwarding Status</span>
 
-  <div class="badges">
-    <a href="https://github.com/lukaszraczylo/kportal/releases"><img src="https://img.shields.io/github/v/release/lukaszraczylo/kportal" alt="Release"></a>
-    <a href="https://github.com/lukaszraczylo/kportal/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lukaszraczylo/kportal" alt="License"></a>
-    <a href="https://goreportcard.com/report/github.com/lukaszraczylo/kportal"><img src="https://goreportcard.com/badge/github.com/lukaszraczylo/kportal" alt="Go Report Card"></a>
+<span class="h">ALIAS         RESOURCE          REMOTE  LOCAL  STATUS</span>
+<span class="sel">&gt; prod-api     service/api         8080   8080  <span class="a">●</span> Active        </span>
+  prod-db      service/postgres    5432   5432  <span class="a">●</span> Active
+  prometheus   pod                 9090   9090  ○ Starting
+  staging-http pod/myapp           8080   8081  ◐ Reconnecting
+  staging-met… pod/myapp           9090   9091  <span class="a">●</span> Active
+
+<span class="m">↑↓/jk: Navigate  PgUp/Dn: Page  Space: Toggle  n: New  e: Edit</span>
+<span class="m">d: Delete  b: Bench  l: Logs  q: Quit</span></code></pre></div>
+      <p class="small muted">Example data. Column set from <code>tui.columns</code>: alias, resource, remote, local, status. Status strings and key bar match the source.</p>
+    </div>
   </div>
+</section>
 
-  <img class="shot" src="kportal-screenshot.png" alt="kportal terminal UI listing port-forwards with their status">
+<!-- screenshot -->
+<section class="section" id="interface" aria-labelledby="interface-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Interface</p>
+      <h2 id="interface-h">One table for every forward</h2>
+      <p>Each row is one forward. Move with the arrow keys or <kbd>j</kbd> and <kbd>k</kbd>, toggle with <kbd>Space</kbd>, and add, edit or delete forwards without a restart.</p>
+    </div>
+    <figure class="shot-frame">
+      <img src="kportal-screenshot.png" width="953" height="355" alt="kportal terminal UI with a table of ten port-forwards in the home context, all showing the Active status">
+      <figcaption>Screenshot from kportal v0.2.17. The current key bar also lists <kbd>PgUp</kbd>/<kbd>PgDn</kbd>, <kbd>b</kbd> (Bench) and <kbd>l</kbd> (Logs).</figcaption>
+    </figure>
+  </div>
+</section>
 
-  <section id="features">
-    <h2>Features</h2>
-    <div class="tablewrap wrapfirst">
-      <table>
+<!-- features -->
+<section class="section" id="features" aria-labelledby="features-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Features</p>
+      <h2 id="features-h">What kportal does</h2>
+      <p>Every snippet below comes from the repository: <code>.kportal.yaml</code>, the UI source or the install script.</p>
+    </div>
+
+    <!-- 1 config -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Configuration</p>
+        <h3>Many forwards, one file</h3>
+        <p>Group forwards by context and namespace. Each forward names a resource, a remote port and a local port.</p>
+        <ul>
+          <li><code>service/&lt;name&gt;</code> forwards to a service.</li>
+          <li><code>pod/&lt;name&gt;</code> matches an exact pod name or a name prefix.</li>
+          <li><code>pod</code> with <code>selector</code> picks a pod by label.</li>
+          <li><code>protocol</code> is optional. Only <code>tcp</code> is accepted.</li>
+        </ul>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">contexts</span>:
+  - <span class="k">name</span>: production
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: default
+        <span class="k">forwards</span>:
+          - <span class="k">resource</span>: service/api
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 8080
+            <span class="k">localPort</span>: 8080
+            <span class="k">alias</span>: prod-api
+            <span class="k">httpLog</span>: true
+
+          - <span class="k">resource</span>: service/postgres
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 5432
+            <span class="k">localPort</span>: 5432
+            <span class="k">alias</span>: prod-db
+
+      - <span class="k">name</span>: monitoring
+        <span class="k">forwards</span>:
+          - <span class="k">resource</span>: pod
+            <span class="k">selector</span>: app=prometheus
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 9090
+            <span class="k">localPort</span>: 9090
+            <span class="k">alias</span>: prometheus
+
+  - <span class="k">name</span>: staging
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: default
+        <span class="k">forwards</span>:
+          - <span class="k">resource</span>: pod/myapp   <span class="c"># prefix match survives pod restarts</span>
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 8080
+            <span class="k">localPort</span>: 8081
+            <span class="k">alias</span>: staging-http</code></pre></div>
+      </div>
+    </article>
+
+    <!-- 2 TUI -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Terminal UI</p>
+        <h3>Add, edit and delete forwards in the UI</h3>
+        <p>Press <kbd>n</kbd> to add, <kbd>e</kbd> to edit, <kbd>d</kbd> to delete and <kbd>Space</kbd> to toggle a forward. The add wizard writes the change to the config file.</p>
+        <p>If the cluster does not let you list namespaces, the wizard asks you to type the namespace instead.</p>
+        <p>On the confirmation step, <kbd>h</kbd> toggles <code>httpLog</code>. Advanced <code>httpLog</code> keys that you set in YAML stay unchanged.</p>
+      </div>
+      <div class="demo">
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>add wizard, namespace step</span></div><pre tabindex="0"><code><span class="b">Enter Namespace:</span>
+
+<span class="m">Could not list namespaces (&lt;error from the cluster&gt;).</span>
+<span class="m">Type the namespace name instead.</span>
+
+Namespace: backend<span class="a">█</span></code></pre></div>
+        <p class="caption">Text from <code>internal/ui/wizard_views.go</code>. The error in parentheses comes from the cluster.</p>
+      </div>
+    </article>
+
+    <!-- 3 columns -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Terminal UI</p>
+        <h3>Choose the table columns</h3>
+        <p><code>tui.columns</code> sets which columns the table shows, their order and their width. List order is render order. Unlisted columns are hidden.</p>
+        <p>Valid names: <code>context</code>, <code>namespace</code>, <code>alias</code>, <code>type</code>, <code>resource</code>, <code>remote</code>, <code>local</code>, <code>status</code>. <code>width</code> is the maximum text width, 1 to 200.</p>
+        <p>The setting applies to the UI and to the <code>-v</code> table, and it reloads with the file.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">tui</span>:
+  <span class="k">columns</span>:
+    - <span class="k">name</span>: alias
+      <span class="k">width</span>: 30      <span class="c"># optional, 1-200</span>
+    - <span class="k">name</span>: resource
+    - <span class="k">name</span>: local
+    - <span class="k">name</span>: status</code></pre></div>
+      </div>
+    </article>
+
+    <!-- 4 reconnect -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Reliability</p>
+        <h3>Reconnect with backoff</h3>
+        <p>When a forward drops, kportal retries with exponential backoff. The delay starts at 1 second, doubles up to a 10 second cap and carries 10% jitter. Retries do not stop.</p>
+        <p>Forwards by pod prefix or label selector connect to the new pod after a restart.</p>
+      </div>
+      <div class="demo">
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>retry delays (internal/retry/backoff.go)</span></div><pre tabindex="0"><code><span class="m">attempt   delay (plus or minus 10% jitter)</span>
+1         1s
+2         2s
+3         4s
+4         8s
+5+        10s   <span class="m">(cap)</span></code></pre></div>
+      </div>
+    </article>
+
+    <!-- 5 health -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Reliability</p>
+        <h3>Health checks find stale connections</h3>
+        <p><code>tcp-dial</code> opens a TCP connection to the local port. <code>data-transfer</code> also tries to read data through the tunnel, and is the default.</p>
+        <p>A connection older than <code>maxConnectionAge</code> reconnects only when it is also idle, so a running transfer is not cut. A connection idle longer than <code>maxIdleTime</code> counts as stale.</p>
+        <p>The values shown are the defaults.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">healthCheck</span>:
+  <span class="k">interval</span>: "3s"
+  <span class="k">timeout</span>: "2s"
+  <span class="k">method</span>: "data-transfer"  <span class="c"># or tcp-dial</span>
+  <span class="k">maxConnectionAge</span>: "25m"
+  <span class="k">maxIdleTime</span>: "10m"
+
+<span class="k">reliability</span>:
+  <span class="k">tcpKeepalive</span>: "30s"
+  <span class="k">dialTimeout</span>: "30s"
+  <span class="k">retryOnStale</span>: true
+  <span class="k">watchdogPeriod</span>: "30s"</code></pre></div>
+      </div>
+    </article>
+
+    <!-- 6 hot reload -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Operations</p>
+        <h3>Hot reload and port-conflict checks</h3>
+        <p>kportal reloads when the config file changes. <code>SIGHUP</code> reloads by hand. New forwards start, removed forwards stop and unchanged forwards keep running.</p>
+        <p>An invalid config is rejected and the previous one stays active. A reload that would bind a busy local port is rejected too.</p>
+        <p>The conflict report names the process that holds the port (found with <code>lsof</code> on Linux and macOS, <code>tasklist</code> on Windows).</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">manual reload</div><pre tabindex="0"><code>kill <span class="k">-HUP</span> $(pgrep kportal)</code></pre></div>
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>log lines (example counts), internal/forward/manager.go</span></div><pre tabindex="0"><code><span class="m">Configuration diff: 1 to add, 0 to remove, 4 to keep</span>
+
+<span class="m">Config change rejected due to port conflicts:</span>
+<span class="m">  ...</span>
+<span class="m">Keeping previous configuration active</span></code></pre></div>
+      </div>
+    </article>
+
+    <!-- 7 contexts -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Contexts</p>
+        <h3>Forward only the contexts you name</h3>
+        <p>By default kportal forwards every context in the file. <code>--context</code> limits the run. Repeat the flag or separate names with commas.</p>
+        <p>Port conflicts are only reported between forwards that can run together. Contexts that you never select together can reuse a <code>localPort</code>.</p>
+        <p>An unknown name is an error that lists the contexts in the file. Those are the <code>contexts[].name</code> values, not every context in your kubeconfig.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">shell</div><pre tabindex="0"><code>kportal <span class="k">--context</span> development-team-a
+kportal <span class="k">--context</span> team-a <span class="k">--context</span> team-b
+kportal <span class="k">--context</span> team-a,team-b</code></pre></div>
+<div class="code" data-copy><div class="code-head">.kportal.yaml: same local port in two clusters</div><pre tabindex="0"><code><span class="k">contexts</span>:
+  - <span class="k">name</span>: development-team-a
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: rate-service
+        <span class="k">forwards</span>:
+          - &amp;rate-service
+            <span class="k">resource</span>: pod/rpc-server
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 50051
+            <span class="k">localPort</span>: 3004
+            <span class="k">alias</span>: rate-service
+
+  - <span class="k">name</span>: development-team-b
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: rate-service
+        <span class="k">forwards</span>:
+          - <span class="k">&lt;&lt;</span>: *rate-service   <span class="c"># same local port, no conflict</span></code></pre></div>
+        <p class="caption">With no <code>--context</code>, or with both contexts named, the duplicate port is an error.</p>
+      </div>
+    </article>
+
+    <!-- 8 generate -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Bulk setup</p>
+        <h3>Generate forwards from a cluster</h3>
+        <p><code>kportal generate</code> lists the services in a context and appends the ones you pick to the config file.</p>
+        <ol class="steps">
+          <li>Select namespaces: <kbd>Space</kbd> toggles, <kbd>a</kbd> toggles all, <kbd>/</kbd> filters.</li>
+          <li>Select services. Services already in the config are locked and non-TCP ports are skipped.</li>
+          <li>Pick the first local port. The default is <code>10000</code> and the minimum is <code>1024</code>. Ports are assigned in order and skip ports in use.</li>
+        </ol>
+        <p><kbd>Enter</kbd> on the last step saves. <kbd>b</kbd> goes back and <kbd>Esc</kbd> cancels.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">shell</div><pre tabindex="0"><code>kportal generate <span class="k">--context=my-cluster</span>
+kportal generate <span class="k">--context=my-cluster</span> <span class="k">--config=/path/to/.kportal.yaml</span>
+kportal generate <span class="k">--context=my-cluster</span> <span class="k">--dry-run</span></code></pre></div>
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>--dry-run output format (example values)</span></div><pre tabindex="0"><code><span class="m">[dry-run] Would add 2 forwards to .kportal.yaml</span>
+<span class="m">  10000 → my-cluster/default/service/api:8080</span>
+<span class="m">  10001 → my-cluster/default/service/postgres:5432</span></code></pre></div>
+      </div>
+    </article>
+
+    <!-- 9 http log -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Debugging</p>
+        <h3>HTTP request log per forward</h3>
+        <p>Set <code>httpLog</code> on a forward and press <kbd>l</kbd> to see its requests and responses. Open an entry with <kbd>Enter</kbd> to read headers, bodies and timing.</p>
+        <p>JSON bodies are pretty-printed, gzip and deflate bodies are decoded and binary bodies show a placeholder. <kbd>f</kbd> cycles the filter (All, Non-2xx, Errors), <kbd>/</kbd> searches path or method and <kbd>c</kbd> in the detail view copies the response body.</p>
+        <p><code>maxBodySize</code> defaults to 1 MB when you omit it or set a value of 0 or less.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">forwards</span>:
+  - <span class="k">resource</span>: service/api
+    <span class="k">port</span>: 8080
+    <span class="k">localPort</span>: 8080
+    <span class="k">httpLog</span>:
+      <span class="k">enabled</span>: true
+      <span class="k">includeHeaders</span>: true   <span class="c"># sensitive values are redacted</span>
+      <span class="k">maxBodySize</span>: 65536     <span class="c"># bytes</span>
+      <span class="k">filterPath</span>: "/api/"    <span class="c"># log only paths containing this text</span>
+      <span class="k">logFile</span>: "api.log"     <span class="c"># also append entries to this file</span></code></pre></div>
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>log list, example rows</span></div><pre tabindex="0"><code><span class="m">  TIME        METHOD   STATUS  LATENCY   PATH</span>
+<span class="m">  ────────────────────────────────────────────────</span>
+  14:02:11    GET      200     12ms      /api/users
+  14:02:12    POST     201     48ms      /api/users
+  14:02:15    GET      404     9ms       /api/users/42</code></pre></div>
+      </div>
+    </article>
+
+    <!-- 10 redaction -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Security</p>
+        <h3>Sensitive header values are redacted</h3>
+        <p>With <code>includeHeaders: true</code>, kportal replaces the value of sensitive headers with <code>[REDACTED]</code> and keeps the header name. You cannot turn this off.</p>
+        <p>You see that an <code>Authorization</code> header was present without seeing its value.</p>
+      </div>
+      <div class="demo">
+        <p>Redacted by name:</p>
+        <ul class="inline-list">
+          <li><code>Authorization</code></li><li><code>Proxy-Authorization</code></li><li><code>Cookie</code></li><li><code>Set-Cookie</code></li><li><code>X-Api-Key</code></li><li><code>X-Auth-Token</code></li><li><code>X-Csrf-Token</code></li><li><code>X-Access-Token</code></li>
+        </ul>
+        <p>Redacted when the name contains (any case):</p>
+        <ul class="inline-list">
+          <li><code>token</code></li><li><code>secret</code></li><li><code>password</code></li><li><code>apikey</code></li>
+        </ul>
+        <p class="caption">Source: <code>internal/httplog/proxy.go</code>.</p>
+      </div>
+    </article>
+
+    <!-- 11 benchmark -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Debugging</p>
+        <h3>Benchmark a forward</h3>
+        <p>Press <kbd>b</kbd> on a forward. Set the URL path (default <code>/</code>), the HTTP method, the concurrency and the request count. The wizard starts at 10 workers and 100 requests.</p>
+        <p>The results screen reports totals, latency in milliseconds, requests per second, bytes read and the status code distribution. Only 2xx responses count as successful.</p>
+      </div>
+      <div class="demo">
+<div class="term"><div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>results layout (x.xx marks a measured value)</span></div><pre tabindex="0"><code>Total Requests:  100
+Successful:      100 (100.0%)
+Failed:          0
+
+<span class="b">Latency (ms)</span>
+  Min:    x.xx
+  Max:    x.xx
+  Avg:    x.xx
+  P50:    x.xx
+  P95:    x.xx
+  P99:    x.xx
+
+<span class="b">Throughput</span>
+  Requests/sec:  x.xx
+  Bytes read:    n
+
+<span class="b">Status Codes</span>
+  200: n</code></pre></div>
+        <p class="caption">Layout from <code>internal/ui/wizard_views.go</code>. The page shows no measured numbers.</p>
+      </div>
+    </article>
+
+    <!-- 12 mdns -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Networking</p>
+        <h3>mDNS hostnames</h3>
+        <p>With <code>mdns.enabled: true</code>, each forward is reachable as <code>&lt;alias&gt;.local</code>. Without an alias, the resource name is used: <code>service/redis</code> becomes <code>redis.local</code>.</p>
+        <p>A bare <code>pod</code> with a selector and no alias is not published. Services register as <code>_kportal._tcp</code>.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">mdns</span>:
+  <span class="k">enabled</span>: true
+
+<span class="k">contexts</span>:
+  - <span class="k">name</span>: production
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: default
+        <span class="k">forwards</span>:
+          - <span class="k">resource</span>: service/postgres
+            <span class="k">port</span>: 5432
+            <span class="k">localPort</span>: 5432
+            <span class="k">alias</span>: prod-db   <span class="c"># reachable as prod-db.local:5432</span></code></pre></div>
+<div class="code" data-copy><div class="code-head">check registration</div><pre tabindex="0"><code>dns-sd <span class="k">-B</span> _kportal._tcp local       <span class="c"># macOS</span>
+avahi-browse <span class="k">-t</span> _kportal._tcp       <span class="c"># Linux</span></code></pre></div>
+      </div>
+    </article>
+
+    <!-- 13 headless -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Automation</p>
+        <h3>Headless mode and config validation</h3>
+        <p><code>-headless</code> runs without the UI and writes logs to stderr. <code>-v</code> sets the log level, and <code>-log-format json</code> switches the format from <code>text</code>.</p>
+        <p><code>-check</code> validates the config and exits. <code>Ctrl+C</code> and <code>SIGTERM</code> shut down cleanly.</p>
+        <p>Without <code>-headless</code>, <code>-v</code> prints a plain-text table that redraws.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">shell</div><pre tabindex="0"><code>kportal <span class="k">-headless</span> <span class="k">-v</span> 2&gt;kportal.log &amp;
+kportal <span class="k">-headless</span> <span class="k">-log-format</span> json
+kportal <span class="k">-check</span>
+kportal <span class="k">-c</span> /path/to/config.yaml</code></pre></div>
+      </div>
+    </article>
+
+    <!-- 14 import + completion -->
+    <article class="feature rev">
+      <div class="text">
+        <p class="tag">Tooling</p>
+        <h3>Import from kftray, shell completion, updates</h3>
+        <p><code>-convert</code> turns a kftray JSON file into kportal YAML. <code>-convert-output</code> sets the output file (default <code>.kportal.yaml</code>).</p>
+        <p><code>kportal completion</code> prints a bash, zsh or fish script, or installs it. Without <code>--shell</code>, kportal detects the shell.</p>
+        <p><code>-update</code> checks for a newer release and <code>-version</code> prints the version.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">shell</div><pre tabindex="0"><code>kportal <span class="k">--convert</span> configs.json <span class="k">--convert-output</span> .kportal.yaml
+
+kportal completion <span class="k">--shell</span> zsh            <span class="c"># print the script</span>
+kportal completion <span class="k">--shell</span> zsh <span class="k">--install</span>  <span class="c"># install it</span>
+kportal completion <span class="k">--uninstall</span>            <span class="c"># remove it</span>
+
+kportal <span class="k">-update</span>
+kportal <span class="k">-version</span></code></pre></div>
+      </div>
+    </article>
+
+    <!-- 15 verified installer -->
+    <article class="feature">
+      <div class="text">
+        <p class="tag">Supply chain</p>
+        <h3>Installer that checks what it downloads</h3>
+        <p>The install script downloads <code>kportal-&lt;version&gt;-checksums.txt</code> from the same release and verifies the archive SHA-256. It refuses to install on a mismatch.</p>
+        <p>If <a href="https://github.com/sigstore/cosign">cosign</a> is on <code>PATH</code>, it also verifies the keyless signature of the checksums file. <a href="#install">Install options</a> list the steps to verify a release by hand.</p>
+      </div>
+      <div class="demo">
+<div class="code" data-copy><div class="code-head">shell</div><pre tabindex="0"><code>curl <span class="k">-fsSL</span> https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash
+
+<span class="c"># download and verify only</span>
+curl <span class="k">-fsSL</span> https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | <span class="k">DRY_RUN</span>=1 bash</code></pre></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- comparison -->
+<section class="section" id="compare" aria-labelledby="compare-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Comparison</p>
+      <h2 id="compare-h">kportal next to other port-forward tools</h2>
+      <p>The table lists what each project documents. A cell reads "Not documented" when the project's README and docs do not say.</p>
+    </div>
+    <div class="note">
+      <p>Compared on 2026-10-02 against each project's README and docs. Check their repositories for changes. The kportal column comes from this repository's code.</p>
+    </div>
+
+    <div class="tablewrap" role="region" aria-label="Comparison table, scrolls horizontally" tabindex="0">
+      <table class="cmp">
+        <caption class="sr-only">Feature comparison of kportal, kubectl port-forward, k9s, kubefwd and kftray</caption>
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col" class="us">kportal</th>
+            <th scope="col">kubectl port-forward</th>
+            <th scope="col">k9s</th>
+            <th scope="col">kubefwd</th>
+            <th scope="col">kftray</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><th scope="row">Forwards</th><td><code>service/&lt;name&gt;</code>, <code>pod/&lt;name&gt;</code> (exact name or prefix), or <code>pod</code> with a label <code>selector</code>. TCP only.</td></tr>
-          <tr><th scope="row">Terminal UI</th><td>Add, edit, delete and toggle forwards without a restart. The add wizard writes the config file.</td></tr>
-          <tr><th scope="row">Table columns</th><td><code>tui.columns</code> sets which columns the forwards table shows, their order and width. It applies to the UI and the <code>-verbose</code> table.</td></tr>
-          <tr><th scope="row">Add wizard</th><td>If the cluster does not allow listing namespaces, the wizard asks you to type the namespace.</td></tr>
-          <tr><th scope="row">Reconnect</th><td>Exponential backoff: 1s, 2s, 4s, 8s, then 10s, with 10% jitter. It does not stop retrying.</td></tr>
-          <tr><th scope="row">Pod restarts</th><td>Forwards by pod prefix or selector connect to the new pod.</td></tr>
-          <tr><th scope="row">Health checks</th><td><code>tcp-dial</code> or <code>data-transfer</code>, every 3s by default. Stale connections are reconnected by age and idle time.</td></tr>
-          <tr><th scope="row">Hot reload</th><td>File watcher and <code>SIGHUP</code>. An invalid config is rejected and the previous one stays active.</td></tr>
-          <tr><th scope="row">Contexts</th><td>Several contexts and namespaces in one file. <code>--context</code> selects which contexts run.</td></tr>
-          <tr><th scope="row">Port conflicts</th><td>Startup and reload checks report a busy local port and the process that holds it.</td></tr>
-          <tr><th scope="row">mDNS</th><td>With <code>mdns.enabled: true</code>, each forward is reachable as <code>&lt;alias&gt;.local</code>.</td></tr>
-          <tr><th scope="row">HTTP log</th><td>Per-forward request log with details, filter, search, JSON formatting, gzip decoding and body copy. Sensitive header values are redacted.</td></tr>
-          <tr><th scope="row">Benchmark</th><td>HTTP requests through a forward. Reports min, max and average latency, P50, P95, P99, requests per second and status codes.</td></tr>
-          <tr><th scope="row">Generate</th><td><code>kportal generate</code> lists cluster services and appends the ones you pick, with consecutive local ports.</td></tr>
-          <tr><th scope="row">Headless</th><td><code>-headless</code> runs without the UI and logs to stderr. <code>-log-format json</code> switches the log format.</td></tr>
-          <tr><th scope="row">Import</th><td><code>--convert</code> turns a kftray JSON file into kportal YAML.</td></tr>
-          <tr><th scope="row">Shell completion</th><td><code>kportal completion</code> prints or installs bash, zsh and fish completions.</td></tr>
+          <tr><th scope="row">Many forwards in one config file</th><td class="us"><span class="y">Yes</span></td><td><span class="no">No</span></td><td><span class="p">Partial</span><span class="cell-note">annotations configure forwards; no forward list file</span></td><td><span class="p">Partial</span><span class="cell-note">example.fwdconf.yml exists</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">Automatic reconnect</th><td class="us"><span class="y">Yes</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">Follows pod restarts by label or name prefix</th><td class="us"><span class="y">Yes</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td><td><span class="y">Yes</span><span class="cell-note">label filter</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">Terminal UI of all forwards</th><td class="us"><span class="y">Yes</span></td><td><span class="no">No</span></td><td><span class="y">Yes</span><span class="cell-note">PortForward view, alias pf; forwards last for the session</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">GUI</th><td class="us"><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">Config hot reload</th><td class="us"><span class="y">Yes</span><span class="cell-note">file watcher and SIGHUP</span></td><td><span class="no">No</span></td><td><span class="p">Partial</span><span class="cell-note">benchmarks.yaml only</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td></tr>
+          <tr><th scope="row">HTTP request and response logging</th><td class="us"><span class="y">Yes</span></td><td><span class="no">No</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><th scope="row">Health checks</th><td class="us"><span class="y">Yes</span><span class="cell-note">tcp-dial or data-transfer</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td><td><span class="p">Partial</span><span class="cell-note">README says it tracks pod health</span></td></tr>
+          <tr><th scope="row">mDNS or friendly hostnames</th><td class="us"><span class="y">Yes</span><span class="cell-note">mDNS, <code>&lt;alias&gt;.local</code></span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="p">Partial</span><span class="cell-note">edits /etc/hosts, not mDNS; needs root</span></td><td><span class="nd">Not documented</span></td></tr>
+          <tr><th scope="row">Built-in benchmark</th><td class="us"><span class="y">Yes</span></td><td><span class="no">No</span></td><td><span class="y">Yes</span><span class="cell-note">hey, key b</span></td><td><span class="nd">Not documented</span></td><td><span class="nd">Not documented</span></td></tr>
+          <tr><th scope="row">Imports another tool's config</th><td class="us"><span class="y">Yes</span><span class="cell-note">kftray JSON</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="nd">Not documented</span></td><td><span class="p">Partial</span><span class="cell-note">JSON, GitHub repos, service annotations; not other tools' formats</span></td></tr>
+          <tr><th scope="row">Several contexts in one config</th><td class="us"><span class="y">Yes</span></td><td><span class="no">No</span></td><td><span class="p">Partial</span></td><td><span class="p">Partial</span></td><td><span class="nd">Not documented</span></td></tr>
+          <tr><th scope="row">Local port conflict detection</th><td class="us"><span class="y">Yes</span><span class="cell-note">reports the holding process</span></td><td><span class="p">Partial</span><span class="cell-note">:remotePort picks a free port</span></td><td><span class="nd">Not documented</span></td><td><span class="y">Yes</span></td><td><span class="nd">Not documented</span></td></tr>
+          <tr><th scope="row">Platforms</th><td class="us">Linux, macOS, Windows</td><td><span class="nd">Not documented</span></td><td>macOS, Linux, Windows</td><td>macOS, Linux, Windows</td><td>macOS, Linux, Windows</td></tr>
+          <tr><th scope="row">Licence</th><td class="us">MIT</td><td><span class="nd">Not documented</span></td><td>Apache-2.0</td><td>Apache-2.0</td><td>GPL-3.0</td></tr>
+          <tr><th scope="row">Language</th><td class="us">Go</td><td><span class="nd">Not documented</span></td><td>Go</td><td>Go</td><td>Rust (Tauri, Ratatui)</td></tr>
+          <tr><th scope="row">Latest release (2026-10-02)</th><td class="us"><a href="https://github.com/lukaszraczylo/kportal/releases">Releases page</a></td><td><span class="nd">Not documented</span></td><td>v0.51.0 (2026-06-06)</td><td>v1.25.16 (2026-06-20)</td><td>v0.29.2 (2026-09-29)</td></tr>
         </tbody>
       </table>
     </div>
-  </section>
+    <p class="small muted">On narrow screens, scroll the table sideways. The first column stays in place.</p>
 
-  <section id="install">
-    <h2>Install</h2>
-    <h3>Homebrew (macOS)</h3>
-    <div class="cmd"><pre><code>brew install --cask lukaszraczylo/taps/kportal</code></pre><button type="button" data-copy="brew install --cask lukaszraczylo/taps/kportal">Copy</button></div>
-    <h3>Install script</h3>
-    <div class="cmd"><pre><code>curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash</code></pre><button type="button" data-copy="curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash">Copy</button></div>
-    <p>The script verifies the archive SHA-256 against the release checksums file. If <code>cosign</code> is on <code>PATH</code>, it also verifies the keyless signature. Set <code>DRY_RUN=1</code> to download and verify without installing. Set <code>SKIP_COSIGN=1</code> to skip the cosign check.</p>
-    <h3>Manual download</h3>
-    <p>The <a href="https://github.com/lukaszraczylo/kportal/releases">releases page</a> has archives for Linux, macOS and Windows on amd64 and arm64.</p>
-    <h3>Build from source</h3>
-    <pre><code>git clone https://github.com/lukaszraczylo/kportal.git
+    <div class="cmp-meta">
+      <div>
+        <h3>When another tool fits better</h3>
+        <ul>
+          <li><strong>kubectl port-forward</strong> for a one-off forward. It needs no config file and ships with kubectl.</li>
+          <li><strong>k9s</strong> for general cluster browsing and its built-in benchmark.</li>
+          <li><strong>kubefwd</strong> to forward every service in a namespace with local DNS names.</li>
+          <li><strong>kftray</strong> for a tray GUI, shared JSON configs and UDP.</li>
+        </ul>
+        <p class="small muted">Kube Forwarder is a GUI-only forwarder. Its last release was 2019-08-14.</p>
+      </div>
+      <div>
+        <h3>Sources</h3>
+        <ul>
+          <li>kubectl: <a href="https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/">Use Port Forwarding to Access Applications in a Cluster</a></li>
+          <li>k9s: <a href="https://github.com/derailed/k9s">github.com/derailed/k9s</a> and <a href="https://k9scli.io/topics/bench/">k9scli.io/topics/bench</a></li>
+          <li>kubefwd: <a href="https://github.com/txn2/kubefwd">github.com/txn2/kubefwd</a></li>
+          <li>kftray: <a href="https://github.com/hcavarsan/kftray">github.com/hcavarsan/kftray</a></li>
+          <li>kportal: <a href="https://github.com/lukaszraczylo/kportal">github.com/lukaszraczylo/kportal</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- install -->
+<section class="section" id="install" aria-labelledby="install-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Install</p>
+      <h2 id="install-h">Install kportal</h2>
+      <p>Pick one method. Release archives cover Linux, macOS and Windows on amd64 and arm64.</p>
+    </div>
+
+    <div data-tabs>
+      <div class="tabpanel" id="tab-brew" data-tab-title="Homebrew">
+        <h3>Homebrew (macOS)</h3>
+        <div class="code" data-copy><pre tabindex="0"><code>brew install <span class="k">--cask</span> lukaszraczylo/taps/kportal</code></pre></div>
+        <p>If you installed the formula (<code>brew install lukaszraczylo/taps/kportal</code>) earlier, run <code>brew uninstall kportal</code> first.</p>
+      </div>
+
+      <div class="tabpanel" id="tab-script" data-tab-title="Install script">
+        <h3>Install script</h3>
+        <div class="code" data-copy><pre tabindex="0"><code>curl <span class="k">-fsSL</span> https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | bash</code></pre></div>
+        <p>The script downloads <code>kportal-&lt;version&gt;-checksums.txt</code> from the same release and verifies the archive SHA-256. If <a href="https://github.com/sigstore/cosign">cosign</a> is on <code>PATH</code>, it also verifies the keyless signature of the checksums file.</p>
+        <div class="tablewrap wrap-cells">
+          <table>
+            <thead><tr><th scope="col">Variable</th><th scope="col">Effect</th></tr></thead>
+            <tbody>
+              <tr><td><code>DRY_RUN=1</code></td><td>Download and verify only. Do not install.</td></tr>
+              <tr><td><code>SKIP_COSIGN=1</code></td><td>Skip the cosign check. The SHA-256 check still runs.</td></tr>
+              <tr><td><code>INSTALL_DIR</code></td><td>Target directory. Default <code>/usr/local/bin</code>.</td></tr>
+              <tr><td><code>KPORTAL_VERSION</code></td><td>Install a specific version, for example <code>1.2.3</code>, instead of the latest.</td></tr>
+              <tr><td><code>COSIGN_CERT_IDENTITY_REGEXP</code></td><td>Certificate identity to accept. Set it if you fork the release pipeline.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-copy><div class="code-head">example</div><pre tabindex="0"><code>curl <span class="k">-fsSL</span> https://raw.githubusercontent.com/lukaszraczylo/kportal/main/install.sh | <span class="k">DRY_RUN</span>=1 bash</code></pre></div>
+      </div>
+
+      <div class="tabpanel" id="tab-manual" data-tab-title="Manual download">
+        <h3>Manual download</h3>
+        <p>The <a href="https://github.com/lukaszraczylo/kportal/releases">releases page</a> has one archive per platform. Archives are named <code>kportal-&lt;version&gt;-&lt;os&gt;-&lt;arch&gt;.tar.gz</code>, and <code>.zip</code> on Windows. Each release also has a <code>kportal-&lt;version&gt;-checksums.txt</code> file.</p>
+      </div>
+
+      <div class="tabpanel" id="tab-source" data-tab-title="Build from source">
+        <h3>Build from source</h3>
+        <div class="code" data-copy><pre tabindex="0"><code>git clone https://github.com/lukaszraczylo/kportal.git
 cd kportal
-make build &amp;&amp; make install</code></pre>
-    <p>The build needs Go 1.26 or later.</p>
-  </section>
+make build &amp;&amp; make install</code></pre></div>
+        <p>The build needs Go 1.26 or later (see <code>go.mod</code>). <code>make install</code> copies the binary to <code>/opt/homebrew/bin</code> if that directory exists, otherwise to <code>~/.local/bin</code> on macOS and Linux.</p>
+      </div>
 
-  <section id="usage">
-    <h2>Usage</h2>
-    <h3>Quick start</h3>
-    <p>Create <code>.kportal.yaml</code>, then run <code>kportal</code>.</p>
-    <pre><code>contexts:
-  - name: production
-    namespaces:
-      - name: backend
-        forwards:
-          - resource: service/postgres
-            protocol: tcp
-            port: 5432
-            localPort: 5432
-            alias: prod-db
+      <div class="tabpanel" id="tab-verify" data-tab-title="Verify signatures">
+        <h3>Verify a release signature</h3>
+        <p>Release checksums are signed with <a href="https://github.com/sigstore/cosign">cosign</a> using keyless signing. Download the checksums file and its sigstore bundle from the release, then run:</p>
+        <div class="code" data-copy><pre tabindex="0"><code>cosign verify-blob \
+  <span class="k">--certificate-identity-regexp</span> "^https://github\.com/lukaszraczylo/shared-actions/\.github/workflows/go-release\.yaml@refs/heads/main$" \
+  <span class="k">--certificate-oidc-issuer</span> "https://token.actions.githubusercontent.com" \
+  <span class="k">--bundle</span> "kportal-&lt;version&gt;-checksums.txt.sigstore.json" \
+  kportal-&lt;version&gt;-checksums.txt</code></pre></div>
+        <p>Replace <code>&lt;version&gt;</code> with the release version, for example <code>1.2.3</code>. Then check the archive against the verified checksums file with <code>shasum -a 256</code> or <code>sha256sum</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-          - resource: service/api
-            protocol: tcp
-            port: 8080
-            localPort: 8080
-            alias: api
-            httpLog: true</code></pre>
+<!-- quick start -->
+<section class="section" id="quickstart" aria-labelledby="quickstart-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Quick start</p>
+      <h2 id="quickstart-h">From install to first forward</h2>
+      <p>Create <code>.kportal.yaml</code> in the directory where you run kportal, then start it.</p>
+    </div>
+    <div class="two">
+      <div>
+<div class="code" data-copy><div class="code-head">.kportal.yaml</div><pre tabindex="0"><code><span class="k">contexts</span>:
+  - <span class="k">name</span>: production
+    <span class="k">namespaces</span>:
+      - <span class="k">name</span>: backend
+        <span class="k">forwards</span>:
+          - <span class="k">resource</span>: service/postgres
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 5432
+            <span class="k">localPort</span>: 5432
+            <span class="k">alias</span>: prod-db
 
-    <h3>Commands and flags</h3>
-    <div class="tablewrap">
+          - <span class="k">resource</span>: service/api
+            <span class="k">protocol</span>: tcp
+            <span class="k">port</span>: 8080
+            <span class="k">localPort</span>: 8080
+            <span class="k">alias</span>: api
+            <span class="k">httpLog</span>: true</code></pre></div>
+<div class="code" data-copy><div class="code-head">run</div><pre tabindex="0"><code>kportal</code></pre></div>
+        <p class="small muted">Each <code>name</code> under <code>contexts</code> must exist in your kubeconfig. List them with <code>kubectl config get-contexts</code>.</p>
+      </div>
+      <div>
+        <h3>Keyboard shortcuts</h3>
+        <h4>Forwards list</h4>
+        <div class="tablewrap wrap-cells"><table>
+          <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> / <kbd>j</kbd> <kbd>k</kbd></td><td>Move the selection</td></tr>
+            <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd> / <kbd>Ctrl+u</kbd> <kbd>Ctrl+d</kbd></td><td>Move by 10 rows</td></tr>
+            <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Toggle the forward</td></tr>
+            <tr><td><kbd>n</kbd></td><td>Add a forward</td></tr>
+            <tr><td><kbd>e</kbd></td><td>Edit the forward</td></tr>
+            <tr><td><kbd>d</kbd></td><td>Delete the forward (asks to confirm)</td></tr>
+            <tr><td><kbd>b</kbd></td><td>Benchmark the forward</td></tr>
+            <tr><td><kbd>l</kbd></td><td>Open the HTTP log</td></tr>
+            <tr><td><kbd>q</kbd> / <kbd>Ctrl+c</kbd></td><td>Quit</td></tr>
+          </tbody>
+        </table></div>
+        <h4>HTTP log, list view</h4>
+        <div class="tablewrap wrap-cells"><table>
+          <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Open details</td></tr>
+            <tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Top / bottom</td></tr>
+            <tr><td><kbd>a</kbd></td><td>Toggle auto-scroll</td></tr>
+            <tr><td><kbd>f</kbd></td><td>Cycle filter: All, Non-2xx, Errors</td></tr>
+            <tr><td><kbd>/</kbd></td><td>Search path or method</td></tr>
+            <tr><td><kbd>c</kbd></td><td>Clear filters</td></tr>
+            <tr><td><kbd>q</kbd></td><td>Close</td></tr>
+          </tbody>
+        </table></div>
+        <h4>HTTP log, detail view</h4>
+        <div class="tablewrap wrap-cells"><table>
+          <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> / <kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Scroll</td></tr>
+            <tr><td><kbd>g</kbd></td><td>Top</td></tr>
+            <tr><td><kbd>c</kbd></td><td>Copy the response body</td></tr>
+            <tr><td><kbd>Esc</kbd> / <kbd>q</kbd> / <kbd>Enter</kbd></td><td>Back to the list</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- reference -->
+<section class="section" id="reference" aria-labelledby="reference-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Documentation</p>
+      <h2 id="reference-h">Reference</h2>
+      <p>Command line, config keys and status values.</p>
+    </div>
+
+    <h3 id="cli">Command line</h3>
+    <div class="tablewrap wrap-cells">
       <table>
-        <thead><tr><th>Command or flag</th><th>Effect</th></tr></thead>
+        <thead><tr><th scope="col">Command or flag</th><th scope="col">Effect</th></tr></thead>
         <tbody>
           <tr><td><code>kportal</code></td><td>Start the terminal UI.</td></tr>
           <tr><td><code>-c &lt;file&gt;</code></td><td>Config file. Default <code>.kportal.yaml</code>.</td></tr>
-          <tr><td><code>-v</code></td><td>Verbose logging.</td></tr>
+          <tr><td><code>-v</code></td><td>Verbose logging. In headless mode it sets the log level only.</td></tr>
           <tr><td><code>-headless</code></td><td>No UI. Logs go to stderr.</td></tr>
           <tr><td><code>-check</code></td><td>Validate the config and exit.</td></tr>
-          <tr><td><code>-context &lt;name&gt;</code></td><td>Forward only the named contexts. Repeatable, or comma-separated.</td></tr>
+          <tr><td><code>-context &lt;name&gt;</code></td><td>Forward only the named contexts. Repeatable and comma-separated.</td></tr>
           <tr><td><code>-log-format text|json</code></td><td>Log format. Default <code>text</code>.</td></tr>
-          <tr><td><code>-convert &lt;file&gt;</code></td><td>Convert a kftray JSON file. <code>-convert-output</code> sets the output, default <code>.kportal.yaml</code>.</td></tr>
+          <tr><td><code>-convert &lt;file&gt;</code></td><td>Convert a kftray JSON file to kportal YAML.</td></tr>
+          <tr><td><code>-convert-output &lt;file&gt;</code></td><td>Output of <code>-convert</code>. Default <code>.kportal.yaml</code>.</td></tr>
           <tr><td><code>-update</code></td><td>Check for updates and exit.</td></tr>
           <tr><td><code>-version</code></td><td>Print the version and exit.</td></tr>
-          <tr><td><code>kportal generate</code></td><td>Add forwards from a cluster. Needs <code>--context</code>. <code>--config</code> picks the file and <code>--dry-run</code> only prints.</td></tr>
-          <tr><td><code>kportal completion</code></td><td>Print a completion script. <code>--shell bash|zsh|fish</code>, <code>--install</code>, <code>--uninstall</code>.</td></tr>
+          <tr><td><code>kportal generate</code></td><td>Add forwards from a cluster. Flags: <code>--context</code> (required), <code>--config</code>, <code>--dry-run</code>.</td></tr>
+          <tr><td><code>kportal completion</code></td><td>Print or install a shell completion script. Flags: <code>--shell</code>, <code>--install</code>, <code>--uninstall</code>.</td></tr>
         </tbody>
       </table>
     </div>
+    <p class="small muted">Each flag also accepts the double-dash form, for example <code>--check</code>.</p>
 
-    <h3>Examples</h3>
-    <pre><code>kportal -check
-kportal -c /path/to/config.yaml
-kportal --context development-team-a
-kportal -headless -v 2&gt;kportal.log &amp;
-kportal generate --context=my-cluster --dry-run
-kportal completion --shell zsh --install</code></pre>
-    <p>With <code>--context</code>, contexts you never select together can reuse a <code>localPort</code>. Without it, a duplicate local port is an error.</p>
-  </section>
-
-  <section id="keys">
-    <h2>Keys</h2>
-    <div class="cols">
-      <div>
-        <h3>Forwards list</h3>
-        <div class="tablewrap">
-          <table>
-            <tbody>
-              <tr><td><kbd>Up</kbd> <kbd>Down</kbd> / <kbd>j</kbd> <kbd>k</kbd></td><td>Move</td></tr>
-              <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Move by 10 rows</td></tr>
-              <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Toggle forward</td></tr>
-              <tr><td><kbd>n</kbd></td><td>Add forward</td></tr>
-              <tr><td><kbd>e</kbd></td><td>Edit forward</td></tr>
-              <tr><td><kbd>d</kbd></td><td>Delete forward</td></tr>
-              <tr><td><kbd>b</kbd></td><td>Benchmark</td></tr>
-              <tr><td><kbd>l</kbd></td><td>HTTP log</td></tr>
-              <tr><td><kbd>q</kbd></td><td>Quit</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p>In the add and edit wizard, <kbd>h</kbd> on the confirmation step toggles <code>httpLog</code>.</p>
-      </div>
-      <div>
-        <h3>Status</h3>
-        <div class="tablewrap">
-          <table>
-            <tbody>
-              <tr><td>● Active</td><td>Connection healthy</td></tr>
-              <tr><td>○ Starting</td><td>First connection. Failed checks show Starting for 10s.</td></tr>
-              <tr><td>◐ Reconnecting</td><td>Reconnecting after a failure</td></tr>
-              <tr><td>✗ Error</td><td>Connection failed</td></tr>
-              <tr><td>○ Disabled</td><td>Turned off in the UI</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="config">
-    <h2>Configuration</h2>
-    <h3>Forward fields</h3>
-    <div class="tablewrap">
+    <h3 id="config-ref" style="margin-top:2.5rem">Forward options</h3>
+    <div class="tablewrap wrap-cells">
       <table>
-        <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
+        <thead><tr><th scope="col">Key</th><th scope="col">Required</th><th scope="col">Description</th></tr></thead>
         <tbody>
-          <tr><td><code>resource</code></td><td>Yes</td><td><code>service/&lt;name&gt;</code>, <code>pod/&lt;name&gt;</code>, or <code>pod</code> with <code>selector</code></td></tr>
+          <tr><td><code>resource</code></td><td>Yes</td><td><code>service/&lt;name&gt;</code>, <code>pod/&lt;name&gt;</code> (exact name or prefix), or <code>pod</code> with <code>selector</code></td></tr>
           <tr><td><code>protocol</code></td><td>No</td><td><code>tcp</code>. No other value is accepted.</td></tr>
           <tr><td><code>port</code></td><td>Yes</td><td>Remote port</td></tr>
           <tr><td><code>localPort</code></td><td>Yes</td><td>Local port</td></tr>
           <tr><td><code>alias</code></td><td>No</td><td>Display name and mDNS hostname</td></tr>
-          <tr><td><code>selector</code></td><td>With bare <code>pod</code></td><td>Label selector, for example <code>app=nginx</code>. Not allowed with <code>pod/&lt;name&gt;</code>.</td></tr>
-          <tr><td><code>httpLog</code></td><td>No</td><td><code>true</code>, or a map of options</td></tr>
+          <tr><td><code>selector</code></td><td>With bare <code>pod</code></td><td>Label selector. Not allowed with <code>pod/&lt;name&gt;</code>.</td></tr>
+          <tr><td><code>httpLog</code></td><td>No</td><td><code>true</code>, or a map with <code>enabled</code>, <code>includeHeaders</code>, <code>maxBodySize</code>, <code>filterPath</code>, <code>logFile</code></td></tr>
         </tbody>
       </table>
     </div>
 
-    <div class="cols">
-      <div>
-        <h3>Health checks and reliability</h3>
-        <pre><code>healthCheck:
-  interval: "3s"
-  timeout: "2s"
-  method: "data-transfer"
-  maxConnectionAge: "25m"
-  maxIdleTime: "10m"
-
-reliability:
-  tcpKeepalive: "30s"
-  dialTimeout: "30s"
-  retryOnStale: true
-  watchdogPeriod: "30s"</code></pre>
-        <p>These are the defaults. <code>method</code> is <code>tcp-dial</code> or <code>data-transfer</code>. A connection past <code>maxConnectionAge</code> reconnects only when it is also idle.</p>
-      </div>
-      <div>
-        <h3>mDNS</h3>
-        <pre><code>mdns:
-  enabled: true
-
-contexts:
-  - name: production
-    namespaces:
-      - name: default
-        forwards:
-          - resource: service/postgres
-            port: 5432
-            localPort: 5432
-            alias: db   # db.local</code></pre>
-        <p>Without an alias, <code>service/redis</code> publishes <code>redis.local</code>.</p>
-      </div>
+    <h3 style="margin-top:2.5rem">Top-level keys</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>healthCheck.interval</code></td><td><code>3s</code></td><td>Time between checks</td></tr>
+          <tr><td><code>healthCheck.timeout</code></td><td><code>2s</code></td><td>Timeout of one check</td></tr>
+          <tr><td><code>healthCheck.method</code></td><td><code>data-transfer</code></td><td><code>tcp-dial</code> or <code>data-transfer</code></td></tr>
+          <tr><td><code>healthCheck.maxConnectionAge</code></td><td><code>25m</code></td><td>Reconnect an idle connection older than this</td></tr>
+          <tr><td><code>healthCheck.maxIdleTime</code></td><td><code>10m</code></td><td>A connection idle longer than this is stale</td></tr>
+          <tr><td><code>reliability.tcpKeepalive</code></td><td><code>30s</code></td><td>TCP keepalive interval</td></tr>
+          <tr><td><code>reliability.dialTimeout</code></td><td><code>30s</code></td><td>Connection dial timeout</td></tr>
+          <tr><td><code>reliability.retryOnStale</code></td><td><code>true</code></td><td>Reconnect when a stale connection is detected</td></tr>
+          <tr><td><code>reliability.watchdogPeriod</code></td><td><code>30s</code></td><td>Interval of the check for hung workers</td></tr>
+          <tr><td><code>mdns.enabled</code></td><td>off</td><td>Publish <code>&lt;alias&gt;.local</code> for each forward</td></tr>
+          <tr><td><code>tui.columns</code></td><td>all columns</td><td>List of <code>name</code> and optional <code>width</code></td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <h3>Table columns</h3>
-    <pre><code>tui:
-  columns:
-    - name: alias
-      width: 30      # optional, 1-200
-    - name: resource
-    - name: local
-    - name: status</code></pre>
-    <p>Valid names: <code>context</code>, <code>namespace</code>, <code>alias</code>, <code>type</code>, <code>resource</code>, <code>remote</code>, <code>local</code>, <code>status</code>. List order is render order and unlisted columns are hidden. Without <code>tui</code>, the table keeps its default columns. The setting applies to the UI and the <code>-verbose</code> table.</p>
+    <h3 id="status" style="margin-top:2.5rem">Status indicators</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Indicator</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="status-dot">● Active</td><td>Connection healthy</td></tr>
+          <tr><td class="status-dot">○ Starting</td><td>First connection. Failed health checks show Starting for the first 10 seconds.</td></tr>
+          <tr><td class="status-dot">◐ Reconnecting</td><td>Reconnecting after a failure</td></tr>
+          <tr><td class="status-dot">✗ Error</td><td>Connection failed</td></tr>
+          <tr><td class="status-dot">○ Disabled</td><td>Turned off in the UI</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">The <code>-v</code> table uses the same words. When stdout is not a terminal, it draws <code>✓ Active</code>, <code>⋯ Starting</code>, <code>↻ Reconnecting</code> and <code>✗ Error</code>.</p>
 
-    <h3>Reload</h3>
-    <p>kportal reloads when the file changes. To reload by hand, run <code>kill -HUP $(pgrep kportal)</code>.</p>
-  </section>
+    <h3 id="migrate" style="margin-top:2.5rem">Migrate from kftray</h3>
+    <p>Convert a kftray JSON export to kportal YAML:</p>
+<div class="code" data-copy><pre tabindex="0"><code>kportal <span class="k">--convert</span> configs.json <span class="k">--convert-output</span> .kportal.yaml</code></pre></div>
 
-  <section id="http-log">
-    <h2>HTTP log and benchmark</h2>
-    <p>Press <kbd>l</kbd> on a forward that has <code>httpLog</code> set. The list shows TIME, METHOD, STATUS, LATENCY and PATH.</p>
-    <pre><code>httpLog:
-  enabled: true
-  includeHeaders: true   # sensitive values are redacted
-  maxBodySize: 65536     # bytes, 0 = unlimited
-  filterPath: "/api/"    # log only paths containing this text
-  logFile: "api.log"     # also append entries to this file</code></pre>
-    <div class="cols">
+    <h3 style="margin-top:2.5rem">Signals</h3>
+    <div class="tablewrap wrap-cells">
+      <table>
+        <thead><tr><th scope="col">Signal</th><th scope="col">Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>Ctrl+C</code>, <code>SIGTERM</code></td><td>Graceful shutdown</td></tr>
+          <tr><td><code>SIGHUP</code></td><td>Reload the configuration</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- troubleshooting -->
+<section class="section" id="troubleshooting" aria-labelledby="trouble-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Troubleshooting</p>
+      <h2 id="trouble-h">Common failures</h2>
+    </div>
+    <div class="two">
       <div>
-        <h3>List view</h3>
-        <ul>
-          <li><kbd>Enter</kbd> opens details</li>
-          <li><kbd>g</kbd> / <kbd>G</kbd> jump to top or bottom</li>
-          <li><kbd>a</kbd> toggles auto-scroll</li>
-          <li><kbd>f</kbd> cycles the filter: All, Non-2xx, Errors</li>
-          <li><kbd>/</kbd> searches path or method</li>
-          <li><kbd>c</kbd> clears filters, <kbd>q</kbd> closes</li>
-        </ul>
+        <h3>Port already in use</h3>
+<div class="code" data-copy><pre tabindex="0"><code>lsof <span class="k">-i</span> :&lt;port&gt;
+kill &lt;pid&gt;</code></pre></div>
+        <h3 style="margin-top:2rem">Connection refused</h3>
+        <ol>
+          <li>Check the pod: <code>kubectl get pods -n &lt;namespace&gt;</code></li>
+          <li>Check the port: <code>kubectl describe pod &lt;pod&gt;</code></li>
+          <li>Check the service endpoints: <code>kubectl get endpoints &lt;service&gt;</code></li>
+        </ol>
       </div>
       <div>
-        <h3>Detail view</h3>
-        <ul>
-          <li>Headers, bodies and timing</li>
-          <li>JSON is pretty-printed, gzip and deflate are decoded</li>
-          <li><kbd>c</kbd> copies the response body</li>
-          <li><kbd>Esc</kbd>, <kbd>q</kbd> or <kbd>Enter</kbd> returns to the list</li>
-        </ul>
+        <h3>Context not found</h3>
+<div class="code" data-copy><pre tabindex="0"><code>kubectl config get-contexts</code></pre></div>
+        <p>kportal reports <code>context &lt;name&gt; not found in kubeconfig</code> when a <code>contexts[].name</code> value is not in your kubeconfig. Names with <code>@</code>, <code>.</code>, <code>:</code> or <code>/</code> (for example <code>admin@home</code> or an EKS ARN) are valid. If <code>--context</code> reports <code>unknown context</code>, the name is missing from <code>contexts[].name</code> in the config file.</p>
+        <h3 style="margin-top:2rem">Namespace prompt instead of a list</h3>
+        <p>The cluster refused the namespace list or returned an empty one. Type the namespace name.</p>
       </div>
     </div>
-    <p>With <code>includeHeaders: true</code>, values of <code>Authorization</code>, <code>Cookie</code>, <code>Set-Cookie</code>, <code>X-Api-Key</code>, <code>X-Auth-Token</code>, <code>X-Csrf-Token</code>, <code>Proxy-Authorization</code>, <code>X-Access-Token</code> and any header whose name contains <code>token</code>, <code>secret</code>, <code>password</code> or <code>apikey</code> become <code>[REDACTED]</code>. This cannot be turned off.</p>
-    <h3>Benchmark</h3>
-    <p>Press <kbd>b</kbd> on a forward. Set the URL path (default <code>/</code>), method, concurrency and request count.</p>
-  </section>
+  </div>
+</section>
 
-  <section id="more">
-    <h2>More</h2>
-    <p>The <a href="https://github.com/lukaszraczylo/kportal#troubleshooting">README</a> covers troubleshooting, kftray import and telemetry opt-out. Release history is in the <a href="https://github.com/lukaszraczylo/kportal/blob/main/CHANGELOG.md">changelog</a>.</p>
-  </section>
+<!-- faq -->
+<section class="section" id="faq" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">FAQ</p>
+      <h2 id="faq-h">Questions and answers</h2>
+    </div>
+    <div style="max-width:52rem">
+      <details><summary>Does kportal support UDP?</summary><p>No. Only <code>tcp</code> is accepted for <code>protocol</code>, and <code>kportal generate</code> skips non-TCP service ports.</p></details>
+      <details><summary>Can kportal forward to a deployment?</summary><p>No. Valid resource types are <code>pod</code> and <code>service</code>. To reach a deployment, use <code>pod</code> with a label <code>selector</code>.</p></details>
+      <details><summary>Does a config edit need a restart?</summary><p>No. kportal reloads when the file changes. An invalid file is rejected and the previous config stays active.</p></details>
+      <details><summary>How do I run kportal on a server or in a script?</summary><p>Use <code>-headless</code>. Add <code>-log-format json</code> for structured logs and <code>-check</code> in CI to validate the file.</p></details>
+      <details><summary>Does the HTTP log expose my tokens?</summary><p>No. The value of <code>Authorization</code>, <code>Cookie</code> and other sensitive headers is replaced with <code>[REDACTED]</code>. See <a href="#features">Features</a> for the full list.</p></details>
+      <details><summary>Does kportal collect data?</summary><p>On startup it sends one anonymous adoption ping with the project name, version and timestamp. The timeout is 2 seconds. Set <code>DO_NOT_TRACK=1</code>, <code>OSS_TELEMETRY_DISABLED=1</code> or <code>KPORTAL_DISABLE_TELEMETRY=1</code> to opt out. Details: <a href="https://github.com/lukaszraczylo/oss-telemetry#disabling-telemetry">oss-telemetry</a>.</p></details>
+    </div>
+  </div>
+</section>
+
 </main>
 
-<footer>
+<footer class="site-footer">
   <div class="wrap">
-    <span>MIT License. By <a href="https://github.com/lukaszraczylo">Lukasz Raczylo</a>.</span>
-    <a href="https://github.com/lukaszraczylo/kportal">GitHub</a>
-    <a href="https://github.com/lukaszraczylo/kportal/issues">Issues</a>
-    <a href="https://github.com/lukaszraczylo/kportal/releases">Releases</a>
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <p style="color:var(--fg);font-weight:600;margin-bottom:0.5rem">kportal</p>
+        <p>Kubernetes port-forward manager. MIT licence.</p>
+      </div>
+      <div>
+        <h2>Project</h2>
+        <ul>
+          <li><a href="https://github.com/lukaszraczylo/kportal">GitHub</a></li>
+          <li><a href="https://github.com/lukaszraczylo/kportal/releases">Releases</a></li>
+          <li><a href="https://github.com/lukaszraczylo/kportal/issues">Issues</a></li>
+          <li><a href="https://github.com/lukaszraczylo/kportal/blob/main/CHANGELOG.md">Changelog</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Docs</h2>
+        <ul>
+          <li><a href="#quickstart">Quick start</a></li>
+          <li><a href="#reference">Reference</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="https://github.com/lukaszraczylo/kportal/blob/main/CONTRIBUTING.md">Contributing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="https://github.com/lukaszraczylo/kportal/blob/main/LICENSE">MIT licence</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>Made by Lukasz Raczylo. Built with <a href="https://github.com/charmbracelet/bubbletea">Bubble Tea</a>, <a href="https://github.com/charmbracelet/lipgloss">Lipgloss</a> and <a href="https://github.com/kubernetes/client-go">client-go</a>. <a href="https://github.com/hcavarsan/kftray">kftray</a> was the inspiration.</p>
+    </div>
   </div>
 </footer>
 
 <script>
-document.querySelectorAll("[data-copy]").forEach(function (b) {
-  b.addEventListener("click", function () {
-    var text = b.getAttribute("data-copy");
-    var done = function (ok) { b.textContent = ok ? "Copied" : "Failed"; setTimeout(function () { b.textContent = "Copy"; }, 1500); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
-    } else { done(false); }
-  });
-});
-document.getElementById("theme").addEventListener("click", function () {
+(function () {
   var root = document.documentElement;
-  var cur = root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  var next = cur === "dark" ? "light" : "dark";
-  root.setAttribute("data-theme", next);
-  try { localStorage.setItem("theme", next); } catch (e) {}
-});
+
+  // Theme toggle
+  var tbtn = document.getElementById("theme-toggle");
+  if (tbtn) {
+    tbtn.hidden = false;
+    var current = function () {
+      var t = root.getAttribute("data-theme");
+      if (t) return t;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    };
+    var label = function () { tbtn.textContent = current() === "dark" ? "Light theme" : "Dark theme"; };
+    label();
+    tbtn.addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("kportal-theme", next); } catch (e) {}
+      label();
+    });
+  }
+
+  // Copy buttons
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy") ? resolve() : reject(); } catch (e) { reject(e); } finally { document.body.removeChild(ta); }
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".code[data-copy]"), function (box) {
+    var code = box.querySelector("pre code");
+    if (!code) return;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+    b.setAttribute("aria-label", "Copy code to clipboard");
+    b.addEventListener("click", function () {
+      copyText(code.textContent).then(function () {
+        b.textContent = "Copied"; b.classList.add("done");
+        setTimeout(function () { b.textContent = "Copy"; b.classList.remove("done"); }, 1600);
+      }, function () { b.textContent = "Press Ctrl+C"; setTimeout(function () { b.textContent = "Copy"; }, 1600); });
+    });
+    box.appendChild(b);
+  });
+
+  // Install tabs
+  Array.prototype.forEach.call(document.querySelectorAll("[data-tabs]"), function (group) {
+    var panels = Array.prototype.slice.call(group.querySelectorAll(".tabpanel"));
+    if (!panels.length) return;
+    var list = document.createElement("div");
+    list.className = "tablist"; list.setAttribute("role", "tablist"); list.setAttribute("aria-label", "Install methods");
+    var tabs = panels.map(function (p, i) {
+      var t = document.createElement("button");
+      t.type = "button"; t.setAttribute("role", "tab"); t.id = "t-" + p.id;
+      t.setAttribute("aria-controls", p.id); t.textContent = p.getAttribute("data-tab-title");
+      p.setAttribute("role", "tabpanel"); p.setAttribute("aria-labelledby", t.id);
+      t.addEventListener("click", function () { select(i, true); });
+      t.addEventListener("keydown", function (e) {
+        var n = null;
+        if (e.key === "ArrowRight") n = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") n = 0;
+        else if (e.key === "End") n = tabs.length - 1;
+        if (n !== null) { e.preventDefault(); select(n, true); }
+      });
+      list.appendChild(t);
+      return t;
+    });
+    function select(idx, focus) {
+      tabs.forEach(function (t, i) {
+        var on = i === idx;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+      });
+      if (focus) tabs[idx].focus();
+    }
+    group.insertBefore(list, group.firstChild);
+    var start = 0;
+    var h = location.hash.replace("#", "");
+    panels.forEach(function (p, i) { if (p.id === h) start = i; });
+    select(start, false);
+  });
+})();
 </script>
 </body>
 </html>
