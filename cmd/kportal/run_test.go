@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/forward"
 	"github.com/lukaszraczylo/kportal/internal/ui"
 	"github.com/lukaszraczylo/kportal/internal/version"
@@ -800,4 +801,41 @@ func TestRun_CheckValidatesNonSelectedContexts(t *testing.T) {
 	code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-a"}, strings.NewReader(""), &stdout, &stderr)
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr.String(), "localPort")
+}
+// ---- reloadFromSignal ----
+
+func TestReloadFromSignal_OnAppliedRunsAfterSuccessfulReload(t *testing.T) {
+	mgr, err := forward.NewManager(false)
+	require.NoError(t, err)
+	t.Cleanup(mgr.Stop)
+	cfgPath := writeYAML(t, "r.yaml", `tui:
+  columns:
+    - name: alias
+contexts:
+  - name: dev
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 38080
+`)
+
+	var got *config.Config
+	reloadFromSignal(runOptions{configFile: cfgPath}, mgr, false, func(c *config.Config) { got = c })
+
+	require.NotNil(t, got)
+	require.Len(t, got.GetTableColumns(), 1)
+	assert.Equal(t, "alias", got.GetTableColumns()[0].Name)
+}
+
+func TestReloadFromSignal_OnAppliedSkippedWhenConfigInvalid(t *testing.T) {
+	mgr, err := forward.NewManager(false)
+	require.NoError(t, err)
+	cfgPath := writeYAML(t, "bad.yaml", "tui:\n  columns:\n    - name: bogus\ncontexts: []\n")
+
+	called := false
+	reloadFromSignal(runOptions{configFile: cfgPath}, mgr, false, func(*config.Config) { called = true })
+
+	assert.False(t, called)
 }
