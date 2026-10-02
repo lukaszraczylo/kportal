@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/forward"
 	"github.com/lukaszraczylo/kportal/internal/ui"
 	"github.com/lukaszraczylo/kportal/internal/version"
@@ -545,6 +546,7 @@ func TestParseFlags_Defaults(t *testing.T) {
 	assert.False(t, opts.verbose)
 	assert.False(t, opts.headless)
 	assert.Equal(t, "text", opts.logFormat)
+	assert.Empty(t, opts.contexts, "no -context means every context is forwarded")
 }
 
 func TestParseFlags_AllSet(t *testing.T) {
@@ -650,4 +652,191 @@ func TestLoadOrCreateConfig_NotFound_AcceptCreates(t *testing.T) {
 	assert.True(t, isNew)
 	require.NotNil(t, cfg)
 	assert.FileExists(t, cfgPath)
+}
+
+// ---- -context selection ----
+
+func TestParseFlags_ContextSelection(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "single", args: []string{"-context", "team-a"}, want: []string{"team-a"}},
+		{name: "repeated", args: []string{"-context", "team-a", "-context", "team-b"}, want: []string{"team-a", "team-b"}},
+		{name: "comma separated", args: []string{"-context", "team-a,team-b"}, want: []string{"team-a", "team-b"}},
+		{name: "equals form", args: []string{"-context=team-a,team-b"}, want: []string{"team-a", "team-b"}},
+		{name: "double dash", args: []string{"--context", "team-a"}, want: []string{"team-a"}},
+		{
+			name: "repeated and comma mixed, de-duplicated",
+			args: []string{"-context", "team-a,team-b", "-context", "team-a", "-context", " team-c "},
+			want: []string{"team-a", "team-b", "team-c"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			opts, code, handled := parseFlags(tt.args, &stderr)
+			require.False(t, handled)
+			assert.Equal(t, 0, code)
+			assert.Equal(t, tt.want, opts.contexts)
+		})
+	}
+}
+
+// TestParseFlags_EmptyContextRejected keeps "-context=$UNSET_VAR" in a script
+// from silently degrading to "forward everything".
+func TestParseFlags_EmptyContextRejected(t *testing.T) {
+	var stderr bytes.Buffer
+	_, code, handled := parseFlags([]string{"-context="}, &stderr)
+	assert.True(t, handled)
+	assert.Equal(t, 2, code)
+}
+
+// sharedPortConfigBody is the layout from issue #80: the same service on the
+// same local port in two per-team clusters.
+const sharedPortConfigBody = `contexts:
+  - name: team-a
+    namespaces:
+      - name: rate-service
+        forwards:
+          - resource: pod/rpc-server
+            protocol: tcp
+            port: 50051
+            localPort: 3004
+  - name: team-b
+    namespaces:
+      - name: rate-service
+        forwards:
+          - resource: pod/rpc-server
+            protocol: tcp
+            port: 50051
+            localPort: 3004
+`
+
+func writeSharedPortConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), ".kportal.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(sharedPortConfigBody), 0600))
+	return path
+}
+
+// TestRun_CheckWithContextSelection is the end-to-end proof of issue #80:
+// selecting a single context makes a config that reuses local ports valid.
+func TestRun_CheckWithContextSelection(t *testing.T) {
+	path := writeSharedPortConfig(t)
+
+	t.Run("without selection the shared port is a conflict", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"-c", path, "-check"}, strings.NewReader(""), &stdout, &stderr)
+		assert.Equal(t, 1, code)
+		assert.Contains(t, stderr.String(), "Duplicate local port 3004")
+	})
+
+	t.Run("selecting one context is valid", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-a"}, strings.NewReader(""), &stdout, &stderr)
+		assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+		assert.Contains(t, stdout.String(), "Configuration is valid")
+	})
+
+	t.Run("selecting both brings the conflict back", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-a,team-b"}, strings.NewReader(""), &stdout, &stderr)
+		assert.Equal(t, 1, code)
+		assert.Contains(t, stderr.String(), "Duplicate local port 3004")
+	})
+}
+
+// TestRun_CheckUnknownContext verifies the typo guard.
+func TestRun_CheckUnknownContext(t *testing.T) {
+	path := writeSharedPortConfig(t)
+
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-z"}, strings.NewReader(""), &stdout, &stderr)
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr.String(), `unknown context "team-z"`)
+	// The message should point at what does exist.
+	assert.Contains(t, stderr.String(), "team-a")
+	assert.Contains(t, stderr.String(), "team-b")
+}
+
+// TestRun_CheckContextWithNewlyCreatedConfig makes sure -context does not turn
+// the create-on-missing flow into an "unknown context" dead end.
+func TestRun_CheckContextWithNewlyCreatedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".kportal.yaml")
+
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-a"}, strings.NewReader("y\n"), &stdout, &stderr)
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Contains(t, stdout.String(), "Configuration is valid")
+}
+
+// TestRun_CheckValidatesNonSelectedContexts proves -check did not get weaker:
+// a broken forward outside the selection is still reported.
+func TestRun_CheckValidatesNonSelectedContexts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".kportal.yaml")
+	body := `contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/ok
+            protocol: tcp
+            port: 80
+            localPort: 8080
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/bad
+            protocol: tcp
+            port: 80
+            localPort: 999999
+`
+	require.NoError(t, os.WriteFile(path, []byte(body), 0600))
+
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{"-c", path, "-check", "-context", "team-a"}, strings.NewReader(""), &stdout, &stderr)
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr.String(), "localPort")
+}
+
+// ---- reloadFromSignal ----
+
+func TestReloadFromSignal_OnAppliedRunsAfterSuccessfulReload(t *testing.T) {
+	mgr, err := forward.NewManager(false)
+	require.NoError(t, err)
+	t.Cleanup(mgr.Stop)
+	cfgPath := writeYAML(t, "r.yaml", `tui:
+  columns:
+    - name: alias
+contexts:
+  - name: dev
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 38080
+`)
+
+	var got *config.Config
+	reloadFromSignal(runOptions{configFile: cfgPath}, mgr, false, func(c *config.Config) { got = c })
+
+	require.NotNil(t, got)
+	require.Len(t, got.GetTableColumns(), 1)
+	assert.Equal(t, "alias", got.GetTableColumns()[0].Name)
+}
+
+func TestReloadFromSignal_OnAppliedSkippedWhenConfigInvalid(t *testing.T) {
+	mgr, err := forward.NewManager(false)
+	require.NoError(t, err)
+	cfgPath := writeYAML(t, "bad.yaml", "tui:\n  columns:\n    - name: bogus\ncontexts: []\n")
+
+	called := false
+	reloadFromSignal(runOptions{configFile: cfgPath}, mgr, false, func(*config.Config) { called = true })
+
+	assert.False(t, called)
 }

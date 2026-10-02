@@ -302,6 +302,65 @@ kportal --check
 kportal -c /path/to/config.yaml
 ```
 
+### Select Contexts
+
+By default every context in the config file is forwarded. `--context` limits the
+run to the contexts you name, which is useful when the file describes several
+clusters but you only work against one at a time:
+
+```bash
+kportal --context development-team-a
+```
+
+The flag is repeatable and accepts comma-separated values, so these are
+equivalent:
+
+```bash
+kportal --context team-a --context team-b
+kportal --context team-a,team-b
+```
+
+It composes with the other modes, and works well as a per-cluster shell alias:
+
+```bash
+alias kp-a='kportal --context development-team-a'
+kportal --context development-team-a -headless
+```
+
+An unknown context name is an error that lists the contexts the file defines, so
+a typo fails loudly instead of silently forwarding nothing.
+
+#### Reusing local ports across contexts
+
+Local-port conflicts are only reported between forwards that could run at the
+same time. Contexts that are never selected together may therefore reuse the
+same `localPort`, so the same service keeps the same local port in every
+cluster and the app you are developing never needs reconfiguring:
+
+```yaml
+contexts:
+  - name: development-team-a
+    namespaces:
+      - name: rate-service
+        forwards:
+          - &rate-service
+            resource: pod/rpc-server
+            protocol: tcp
+            port: 50051
+            localPort: 3004
+            alias: rate-service
+
+  - name: development-team-b
+    namespaces:
+      - name: rate-service
+        forwards:
+          - <<: *rate-service   # same local port, no conflict
+```
+
+This requires passing `--context`. Without it every context is active, so the
+duplicate ports above would genuinely collide and are still reported as an
+error - as is naming both contexts at once (`--context team-a,team-b`).
+
 ### Generate Forwards from a Cluster
 
 The `generate` subcommand discovers services in a Kubernetes context and lets you
@@ -449,6 +508,11 @@ kill -HUP $(pgrep kportal)
 
 kportal validates port availability at startup and during hot-reload, showing which process is using conflicting ports.
 
+Conflicts are only reported between forwards that could be running together.
+With `--context`, forwards in contexts outside the selection are ignored, which
+is what lets each context reuse the same `localPort` values - see
+[Reusing local ports across contexts](#reusing-local-ports-across-contexts).
+
 ### Retry Strategy
 
 Exponential backoff: 1s → 2s → 4s → 8s → 10s (max). Retries continue indefinitely until connection succeeds.
@@ -488,6 +552,11 @@ kubectl config get-contexts
 Context names containing `@`, `.`, `:`, or `/` (e.g. `admin@home`,
 `user@cluster.example.com`, GKE dotted names, EKS ARNs) are accepted by the
 config validator.
+
+If `--context` reports `unknown context "..."`, the name does not match any
+`contexts[].name` in the config file. The error lists the names that are
+defined - note these are the contexts in your `.kportal.yaml`, which need not be
+every context in your kubeconfig.
 
 ## 🔧 Development
 

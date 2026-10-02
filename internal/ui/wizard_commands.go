@@ -149,7 +149,11 @@ func validateSelectorCmd(discovery *k8s.Discovery, contextName, namespace, selec
 // excludeID, when non-empty, is the ID of a forward to ignore during the
 // in-config conflict scan. Used in edit mode so the wizard does not flag the
 // forward being edited as conflicting with itself.
-func checkPortCmd(port int, configPath, excludeID string) tea.Cmd {
+// targetContext is the context the forward is being added to or edited in, and
+// activeContexts the --context selection; together they decide which existing
+// forwards could actually compete for the port. A forward in a context that is
+// never running alongside targetContext does not conflict.
+func checkPortCmd(port int, configPath, excludeID, targetContext string, activeContexts []string) tea.Cmd {
 	return func() tea.Msg {
 		// First check if port is already in the configuration
 		cfg, err := config.LoadConfig(configPath)
@@ -161,6 +165,9 @@ func checkPortCmd(port int, configPath, excludeID string) tea.Cmd {
 					continue
 				}
 				if excludeID != "" && fwd.ID() == excludeID {
+					continue
+				}
+				if !config.PortsCanConflict(fwd.GetContext(), targetContext, activeContexts) {
 					continue
 				}
 				return PortCheckedMsg{
@@ -203,9 +210,9 @@ func saveForwardCmd(mutator *config.Mutator, contextName, namespace string, fwd 
 }
 
 // updateForwardCmd atomically updates an existing forward (used in edit mode)
-func updateForwardCmd(mutator *config.Mutator, oldID, contextName, namespace string, fwd config.Forward) tea.Cmd {
+func updateForwardCmd(mutator *config.Mutator, oldContextName, oldID, contextName, namespace string, fwd config.Forward) tea.Cmd {
 	return func() tea.Msg {
-		err := mutator.UpdateForward(oldID, contextName, namespace, fwd)
+		err := mutator.UpdateForwardInContext(oldContextName, oldID, contextName, namespace, fwd)
 		return ForwardSavedMsg{
 			success: err == nil,
 			err:     err,
@@ -216,15 +223,18 @@ func updateForwardCmd(mutator *config.Mutator, oldID, contextName, namespace str
 // removeForwardsCmd removes selected forwards from the configuration file
 func removeForwardsCmd(mutator *config.Mutator, forwards []RemovableForward) tea.Cmd {
 	return func() tea.Msg {
-		// Create a map of IDs to remove
-		idsToRemove := make(map[string]bool)
+		// Key on context as well as ID: Forward.ID() is only "alias:localPort"
+		// when an alias is set, which is not unique across contexts once they
+		// are allowed to reuse local ports.
+		type forwardKey struct{ contextName, id string }
+		idsToRemove := make(map[forwardKey]bool)
 		for _, fwd := range forwards {
-			idsToRemove[fwd.ID] = true
+			idsToRemove[forwardKey{contextName: fwd.Context, id: fwd.ID}] = true
 		}
 
 		// Remove forwards matching the IDs
 		err := mutator.RemoveForwards(func(ctx, ns string, fwd config.Forward) bool {
-			return idsToRemove[fwd.ID()]
+			return idsToRemove[forwardKey{contextName: ctx, id: fwd.ID()}]
 		})
 
 		return ForwardsRemovedMsg{
@@ -236,9 +246,9 @@ func removeForwardsCmd(mutator *config.Mutator, forwards []RemovableForward) tea
 }
 
 // removeForwardByIDCmd removes a single forward by its ID
-func removeForwardByIDCmd(mutator *config.Mutator, id string) tea.Cmd {
+func removeForwardByIDCmd(mutator *config.Mutator, contextName, id string) tea.Cmd {
 	return func() tea.Msg {
-		err := mutator.RemoveForwardByID(id)
+		err := mutator.RemoveForwardByIDInContext(contextName, id)
 		return ForwardsRemovedMsg{
 			success: err == nil,
 			count:   1,

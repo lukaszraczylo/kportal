@@ -251,6 +251,7 @@ func TestAllFlagsPresent(t *testing.T) {
 		"--version",
 		"--update",
 		"--check",
+		"--context",
 		"--headless",
 		"--log-format",
 		"--convert",

@@ -24,7 +24,9 @@ type MutatorInterface interface {
 	AddForward(contextName, namespaceName string, fwd config.Forward) error
 	RemoveForwards(predicate func(ctx, ns string, fwd config.Forward) bool) error
 	RemoveForwardByID(id string) error
+	RemoveForwardByIDInContext(contextName, id string) error
 	UpdateForward(oldID, newContextName, newNamespaceName string, newFwd config.Forward) error
+	UpdateForwardInContext(oldContextName, oldID, newContextName, newNamespaceName string, newFwd config.Forward) error
 }
 
 // Compile-time checks to ensure real types implement interfaces

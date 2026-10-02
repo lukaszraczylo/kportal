@@ -16,17 +16,30 @@ type ReloadCallback func(*Config) error
 
 // Watcher watches a configuration file for changes and triggers hot-reload.
 type Watcher struct {
-	callback   ReloadCallback
-	watcher    *fsnotify.Watcher
-	done       chan struct{}
-	configPath string
-	wg         sync.WaitGroup
-	stopOnce   sync.Once
-	verbose    bool
+	callback       ReloadCallback
+	watcher        *fsnotify.Watcher
+	done           chan struct{}
+	configPath     string
+	activeContexts []string
+	wg             sync.WaitGroup
+	stopOnce       sync.Once
+	verbose        bool
+}
+
+// WatcherOption configures a Watcher at construction time.
+type WatcherOption func(*Watcher)
+
+// WithContextSelection restricts hot-reload to the given contexts, matching the
+// --context selection the process started with. Without it a reload would
+// resurrect every context in the file.
+func WithContextSelection(names []string) WatcherOption {
+	return func(w *Watcher) {
+		w.activeContexts = names
+	}
 }
 
 // NewWatcher creates a new file watcher for the given config file.
-func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watcher, error) {
+func NewWatcher(configPath string, callback ReloadCallback, verbose bool, opts ...WatcherOption) (*Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
@@ -46,13 +59,17 @@ func NewWatcher(configPath string, callback ReloadCallback, verbose bool) (*Watc
 		return nil, fmt.Errorf("failed to watch directory %s: %w", dir, err)
 	}
 
-	return &Watcher{
+	w := &Watcher{
 		configPath: absPath,
 		callback:   callback,
 		watcher:    watcher,
 		done:       make(chan struct{}),
 		verbose:    verbose,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w, nil
 }
 
 // Start begins watching the configuration file for changes.
@@ -121,23 +138,13 @@ func (w *Watcher) watch() {
 
 // handleReload loads and validates the new configuration, then calls the callback.
 func (w *Watcher) handleReload() {
-	// Load new configuration
-	newCfg, err := LoadConfig(w.configPath)
+	// Load, validate and apply the --context selection in one step, so the
+	// selection cannot drift from the other reload paths.
+	newCfg, err := LoadForRuntime(w.configPath, w.activeContexts)
 	if err != nil {
 		logger.Error("Failed to load configuration during hot-reload", map[string]interface{}{
 			"config_path": w.configPath,
 			"error":       err.Error(),
-		})
-		logger.Info("Keeping previous configuration active", nil)
-		return
-	}
-
-	// Validate new configuration
-	validator := NewValidator()
-	if errs := validator.ValidateConfig(newCfg); len(errs) > 0 {
-		logger.Error("Configuration validation failed during hot-reload", map[string]interface{}{
-			"config_path":       w.configPath,
-			"validation_errors": len(errs),
 		})
 		logger.Info("Keeping previous configuration active", nil)
 		return

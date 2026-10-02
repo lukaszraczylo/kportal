@@ -162,7 +162,7 @@ func TestCheckPortCmd_PortAvailability(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test checking a random high port that should be available
-	cmd := checkPortCmd(59999, configPath, "")
+	cmd := checkPortCmd(59999, configPath, "", "test-ctx", nil)
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -192,7 +192,7 @@ func TestCheckPortCmd_ConfigConflict(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test checking port that's already in config
-	cmd := checkPortCmd(8080, configPath, "")
+	cmd := checkPortCmd(8080, configPath, "", "test-ctx", nil)
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -224,7 +224,7 @@ func TestCheckPortCmd_ExcludeID_AllowsKeepingOwnPort(t *testing.T) {
 	// The forward's ID format is "<context>/<namespace>/<resource>:<port>".
 	excludeID := "test-ctx/default/pod/my-app:8080"
 
-	cmd := checkPortCmd(8080, configPath, excludeID)
+	cmd := checkPortCmd(8080, configPath, excludeID, "test-ctx", nil)
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -241,7 +241,7 @@ func TestCheckPortCmd_ExcludeID_AllowsKeepingOwnPort(t *testing.T) {
 // TestCheckPortCmd_InvalidConfig tests behavior with invalid config file
 func TestCheckPortCmd_InvalidConfig(t *testing.T) {
 	// Use a non-existent config path
-	cmd := checkPortCmd(59998, "/nonexistent/path/.kportal.yaml", "")
+	cmd := checkPortCmd(59998, "/nonexistent/path/.kportal.yaml", "", "test-ctx", nil)
 	msg := cmd()
 
 	portMsg, ok := msg.(PortCheckedMsg)
@@ -419,4 +419,77 @@ func TestHTTPLogSubscriberType(t *testing.T) {
 	// Clean up
 	cleanup()
 	assert.Equal(t, 1, mock.CleanupCalls)
+}
+
+// TestCheckPortCmd_ContextScoping verifies the add/edit wizard does not report a
+// port as taken when the only forward using it lives in a context that is not
+// being forwarded.
+func TestCheckPortCmd_ContextScoping(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	configContent := `contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/my-app
+            port: 80
+            localPort: 8080
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/other-app
+            port: 80
+            localPort: 9090
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0600))
+
+	tests := []struct {
+		name            string
+		targetContext   string
+		activeContexts  []string
+		port            int
+		wantAssignedMsg bool
+	}{
+		{
+			name: "port used only by a non-active context is free",
+			port: 9090, targetContext: "team-a", activeContexts: []string{"team-a"},
+			wantAssignedMsg: false,
+		},
+		{
+			name: "port used by the target context is taken",
+			port: 8080, targetContext: "team-a", activeContexts: []string{"team-a"},
+			wantAssignedMsg: true,
+		},
+		{
+			name: "both contexts active means the port is taken",
+			port: 9090, targetContext: "team-a", activeContexts: []string{"team-a", "team-b"},
+			wantAssignedMsg: true,
+		},
+		{
+			name: "no selection keeps the global check",
+			port: 9090, targetContext: "team-a", activeContexts: nil,
+			wantAssignedMsg: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := checkPortCmd(tt.port, configPath, "", tt.targetContext, tt.activeContexts)()
+
+			portMsg, ok := msg.(PortCheckedMsg)
+			require.True(t, ok, "Expected PortCheckedMsg")
+			assert.Equal(t, tt.port, portMsg.port)
+
+			if tt.wantAssignedMsg {
+				assert.Contains(t, portMsg.message, "already assigned")
+			} else {
+				// The OS-level check still runs, so only assert that the
+				// in-config conflict path did not fire.
+				assert.NotContains(t, portMsg.message, "already assigned")
+			}
+		})
+	}
 }

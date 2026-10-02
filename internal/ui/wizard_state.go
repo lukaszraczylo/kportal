@@ -115,6 +115,7 @@ type AddWizardState struct {
 	httpLogOriginal      *config.HTTPLogSpec
 	resourceValue        string
 	originalID           string
+	originalContext      string
 	portCheckMsg         string
 	alias                string
 	textInput            string

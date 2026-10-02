@@ -135,6 +135,7 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Mark as edit mode and store original ID
 		m.ui.addWizard.isEditing = true
 		m.ui.addWizard.originalID = selectedID
+		m.ui.addWizard.originalContext = selectedForward.Context
 
 		// Start at the remote port step (skip context/namespace/resource selection)
 		m.ui.addWizard.step = StepEnterRemotePort
@@ -187,6 +188,7 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Show confirmation dialog
 		m.ui.deleteConfirming = true
 		m.ui.deleteConfirmID = selectedID
+		m.ui.deleteConfirmContext = selectedForward.Context
 		m.ui.deleteConfirmAlias = selectedForward.Alias
 		m.ui.deleteConfirmCursor = 1 // Default to "No" for safety
 
@@ -312,9 +314,10 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Confirm deletion (either Enter on Yes or pressing 'y')
 		if m.ui.deleteConfirmCursor == 0 || msg.String() == "y" {
 			id := m.ui.deleteConfirmID
+			contextName := m.ui.deleteConfirmContext
 			m.ui.resetDeleteConfirmation()
 			m.ui.mu.Unlock()
-			return m, removeForwardByIDCmd(m.ui.mutator, id)
+			return m, removeForwardByIDCmd(m.ui.mutator, contextName, id)
 		}
 		// Enter on No = cancel
 		m.ui.resetDeleteConfirmation()
@@ -691,7 +694,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			if wizard.isEditing {
 				excludeID = wizard.originalID
 			}
-			return m, checkPortCmd(port, m.ui.configPath, excludeID)
+			return m, checkPortCmd(port, m.ui.configPath, excludeID, wizard.selectedContext, m.ui.activeContexts)
 		}
 
 	case StepConfirmation:
@@ -749,7 +752,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 
 			// If editing, use atomic update operation
 			if wizard.isEditing {
-				return m, updateForwardCmd(m.ui.mutator, wizard.originalID, wizard.selectedContext, wizard.selectedNamespace, fwd)
+				return m, updateForwardCmd(m.ui.mutator, wizard.originalContext, wizard.originalID, wizard.selectedContext, wizard.selectedNamespace, fwd)
 			}
 
 			return m, saveForwardCmd(m.ui.mutator, wizard.selectedContext, wizard.selectedNamespace, fwd)

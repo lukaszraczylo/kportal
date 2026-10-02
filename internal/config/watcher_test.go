@@ -504,3 +504,124 @@ func TestWatcher_StopWithoutStart(t *testing.T) {
 		t.Fatal("Stop without start timed out")
 	}
 }
+
+// TestWatcher_WithContextSelection verifies that hot-reload honours the
+// --context selection: a config whose non-selected contexts reuse local ports
+// must reload cleanly, and the callback must only receive the selection.
+func TestWatcher_WithContextSelection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	initial := `contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 3004
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 3004
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(initial), 0600))
+
+	var mu sync.Mutex
+	var receivedConfig *Config
+
+	callback := func(cfg *Config) error {
+		mu.Lock()
+		defer mu.Unlock()
+		receivedConfig = cfg
+		return nil
+	}
+
+	watcher, err := NewWatcher(configPath, callback, false, WithContextSelection([]string{"team-a"}))
+	require.NoError(t, err)
+	defer watcher.Stop()
+
+	watcher.Start()
+	time.Sleep(100 * time.Millisecond)
+
+	updated := `contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 3004
+          - resource: pod/extra
+            port: 9090
+            localPort: 3005
+  - name: team-b
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 3004
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(updated), 0600))
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return receivedConfig != nil
+	}, 3*time.Second, 50*time.Millisecond, "watcher should reload a config with ports shared across non-selected contexts")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, receivedConfig.Contexts, 1, "callback should only see the selected context")
+	assert.Equal(t, "team-a", receivedConfig.Contexts[0].Name)
+	assert.Len(t, receivedConfig.GetAllForwards(), 2)
+}
+
+// TestWatcher_WithContextSelection_UnknownNameDoesNotFreezeReload covers a
+// context renamed in the file: reload must keep working for the rest.
+func TestWatcher_WithContextSelection_UnknownNameDoesNotFreezeReload(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".kportal.yaml")
+
+	initial := `contexts:
+  - name: team-a
+    namespaces:
+      - name: default
+        forwards:
+          - resource: pod/app
+            port: 8080
+            localPort: 3004
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(initial), 0600))
+
+	var mu sync.Mutex
+	var called bool
+
+	watcher, err := NewWatcher(configPath, func(cfg *Config) error {
+		mu.Lock()
+		defer mu.Unlock()
+		called = true
+		return nil
+	}, false, WithContextSelection([]string{"team-a", "since-renamed"}))
+	require.NoError(t, err)
+	defer watcher.Stop()
+
+	watcher.Start()
+	time.Sleep(100 * time.Millisecond)
+
+	updated := initial + `          - resource: pod/extra
+            port: 9090
+            localPort: 3005
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(updated), 0600))
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return called
+	}, 3*time.Second, 50*time.Millisecond, "an unknown selected context must not freeze hot-reload")
+}

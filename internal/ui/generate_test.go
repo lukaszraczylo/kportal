@@ -36,6 +36,12 @@ func (f *fakeMutator) RemoveForwards(predicate func(ctx, ns string, fwd config.F
 	return nil
 }
 func (f *fakeMutator) RemoveForwardByID(id string) error { return nil }
+func (f *fakeMutator) RemoveForwardByIDInContext(contextName, id string) error {
+	return nil
+}
+func (f *fakeMutator) UpdateForwardInContext(oldCtx, oldID, newCtx, newNS string, newFwd config.Forward) error {
+	return nil
+}
 func (f *fakeMutator) UpdateForward(oldID, newCtx, newNS string, newFwd config.Forward) error {
 	return nil
 }

@@ -231,7 +231,7 @@ _kportal()
 
     # Top-level options
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W "-c -v --check --headless --log-format --version --update --convert --convert-output" -- "$cur") )
+        COMPREPLY=( $(compgen -W "-c -v --check --context --headless --log-format --version --update --convert --convert-output" -- "$cur") )
         return
     fi
 
@@ -258,6 +258,7 @@ func generateZsh() (string, error) {
 	// these are literals (single source of truth — keep in sync with the CLI flags).
 	flagDescs := []string{
 		`'-c[Path to configuration file]:config file:_files -g "*.yaml"'`,
+		`'*--context[Only forward the named contexts from the config file]:context:($(kubectl config get-contexts -o name 2>/dev/null))'`,
 		`'-v[Enable verbose logging]'`,
 		`'--version[Show version and exit]'`,
 		`'--update[Check for updates]'`,
@@ -355,6 +356,7 @@ complete -c kportal -s v -d 'Enable verbose logging'
 complete -c kportal -l version -d 'Show version and exit'
 complete -c kportal -l update -d 'Check for updates'
 complete -c kportal -l check -d 'Validate configuration'
+complete -c kportal -n 'not __fish_seen_subcommand_from generate completion' -l context -r -d 'Only forward the named contexts' -a '(kubectl config get-contexts -o name 2>/dev/null)' -f
 complete -c kportal -l headless -d 'Run without UI'
 complete -c kportal -l log-format -d 'Log format' -a 'text json' -f
 complete -c kportal -l convert -r -f -a '( __fish_complete_suffix .json )' -d 'Convert kftray config'

@@ -105,6 +105,8 @@ type MockMutator struct {
 	LastOldID            string
 	LastNamespaceName    string
 	LastRemovedID        string
+	LastRemovedContext   string
+	LastOldContext       string
 	Forwards             []struct {
 		Context   string
 		Namespace string
@@ -155,6 +157,22 @@ func (m *MockMutator) RemoveForwardByID(id string) error {
 	m.RemoveForwardByIDCalls++
 	m.LastRemovedID = id
 	return m.RemoveForwardByIDErr
+}
+
+func (m *MockMutator) RemoveForwardByIDInContext(contextName, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.RemoveForwardByIDCalls++
+	m.LastRemovedContext = contextName
+	m.LastRemovedID = id
+	return m.RemoveForwardByIDErr
+}
+
+func (m *MockMutator) UpdateForwardInContext(oldContextName, oldID, newContextName, newNamespaceName string, newFwd config.Forward) error {
+	m.mu.Lock()
+	m.LastOldContext = oldContextName
+	m.mu.Unlock()
+	return m.UpdateForward(oldID, newContextName, newNamespaceName, newFwd)
 }
 
 func (m *MockMutator) UpdateForward(oldID, newContextName, newNamespaceName string, newFwd config.Forward) error {
