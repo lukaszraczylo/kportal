@@ -168,6 +168,12 @@ func LoadForRuntime(path string, activeContexts []string) (*Config, error) {
 	}
 
 	selected, missing := cfg.selectContextsLenient(activeContexts)
+	// Keep the running config when every selected context vanished: an empty
+	// result would stop all forwards after a single rename in the file.
+	if len(selected.Contexts) == 0 && len(missing) > 0 {
+		return nil, fmt.Errorf("none of the selected contexts %s exist in the config file (available: %s)",
+			quoteAll(missing), availableContexts(cfg))
+	}
 	if len(missing) > 0 {
 		logger.Info("Ignoring selected contexts that are no longer in the config file", map[string]interface{}{
 			"contexts": strings.Join(missing, ", "),

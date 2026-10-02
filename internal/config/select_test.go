@@ -263,13 +263,14 @@ func TestLoadForRuntime_UnknownSelectedContextIsDropped(t *testing.T) {
 	assert.Equal(t, []string{"team-a"}, contextNames(cfg))
 }
 
-func TestLoadForRuntime_SelectionReducingToNothing(t *testing.T) {
+func TestLoadForRuntime_SelectionReducingToNothingIsAnError(t *testing.T) {
 	path := writeConfig(t, sharedPortConfig)
 
 	cfg, err := LoadForRuntime(path, []string{"gone"})
-	require.NoError(t, err)
-	assert.Empty(t, cfg.Contexts)
-	assert.Empty(t, cfg.GetAllForwards())
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), `"gone"`)
+	assert.Contains(t, err.Error(), `"team-a"`)
 }
 
 func TestLoadForRuntime_ReportsErrorsInNonSelectedContexts(t *testing.T) {
