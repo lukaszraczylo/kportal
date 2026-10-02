@@ -802,6 +802,7 @@ func TestRun_CheckValidatesNonSelectedContexts(t *testing.T) {
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr.String(), "localPort")
 }
+
 // ---- reloadFromSignal ----
 
 func TestReloadFromSignal_OnAppliedRunsAfterSuccessfulReload(t *testing.T) {
