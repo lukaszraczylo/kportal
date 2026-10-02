@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -694,6 +695,14 @@ func validateDNS1123Label(name, field, entityType string) *ValidationError {
 		}
 	}
 
+	return nil
+}
+
+// ValidateNamespaceName validates a Kubernetes namespace name (a DNS-1123 label).
+func ValidateNamespaceName(name string) error {
+	if verr := validateDNS1123Label(name, "namespace", "Namespace"); verr != nil {
+		return errors.New(verr.Message)
+	}
 	return nil
 }
 

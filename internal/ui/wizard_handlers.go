@@ -14,6 +14,9 @@ import (
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
 
+// keyTypedText routes j and k to text input while a text field has focus.
+const keyTypedText = "<typed-text>"
+
 // isFilterableStep returns true if the step supports search/filter
 func isFilterableStep(step AddWizardStep) bool {
 	switch step {
@@ -339,7 +342,12 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg.String() {
+	key := msg.String()
+	if (key == "j" || key == "k") && wizard.isTypingText() {
+		key = keyTypedText
+	}
+
+	switch key {
 	case "ctrl+c":
 		// Hard cancel
 		m.ui.viewMode = ViewModeMain
@@ -373,8 +381,14 @@ func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			// Reset input mode based on the step we're going back to
 			switch wizard.step {
-			case StepSelectContext, StepSelectNamespace, StepSelectResourceType:
+			case StepSelectContext, StepSelectResourceType:
 				wizard.inputMode = InputModeList
+			case StepSelectNamespace:
+				if wizard.namespaceManual {
+					wizard.inputMode = InputModeText
+				} else {
+					wizard.inputMode = InputModeList
+				}
 			case StepEnterResource:
 				if wizard.selectedResourceType == ResourceTypeService {
 					wizard.inputMode = InputModeList
@@ -526,10 +540,27 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 			wizard.cursor = 0
 			wizard.clearSearchFilter()
 			wizard.loading = true
+			wizard.namespaceManual = false
+			wizard.namespaceListErr = nil
+			wizard.inputMode = InputModeList
 			return m, loadNamespacesCmd(m.ui.discovery, wizard.selectedContext)
 		}
 
 	case StepSelectNamespace:
+		if wizard.namespaceManual {
+			name := strings.TrimSpace(wizard.textInput)
+			if err := config.ValidateNamespaceName(name); err != nil {
+				wizard.error = err
+				return m, nil
+			}
+			wizard.error = nil
+			wizard.selectedNamespace = name
+			wizard.step = StepSelectResourceType
+			wizard.cursor = 0
+			wizard.clearTextInput()
+			wizard.inputMode = InputModeList
+			return m, nil
+		}
 		filteredNamespaces := wizard.getFilteredNamespaces()
 		if wizard.cursor >= 0 && wizard.cursor < len(filteredNamespaces) {
 			wizard.selectedNamespace = filteredNamespaces[wizard.cursor]
@@ -863,10 +894,18 @@ func (m model) handleNamespacesLoaded(msg NamespacesLoadedMsg) (tea.Model, tea.C
 	defer m.ui.mu.Unlock()
 
 	if m.ui.addWizard != nil {
-		m.ui.addWizard.loading = false
-		m.ui.addWizard.error = msg.err
+		w := m.ui.addWizard
+		w.loading = false
+		w.error = nil
 		if msg.err == nil {
-			m.ui.addWizard.namespaces = msg.namespaces
+			w.namespaces = msg.namespaces
+		}
+		// Without permission to list namespaces the user types the name instead.
+		if (msg.err != nil || len(msg.namespaces) == 0) && w.step == StepSelectNamespace {
+			w.namespaceManual = true
+			w.namespaceListErr = msg.err
+			w.inputMode = InputModeText
+			w.textInput = ""
 		}
 	}
 

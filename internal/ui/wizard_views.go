@@ -142,6 +142,10 @@ func (m model) renderSelectNamespace() string {
 	b.WriteString(renderHeader("Add Port Forward", renderProgress(2, 7)))
 	fmt.Fprintf(&b, "Context: %s\n\n", breadcrumbStyle.Render(wizard.selectedContext))
 
+	if wizard.namespaceManual {
+		return m.renderManualNamespace(&b)
+	}
+
 	b.WriteString("Select Namespace:\n\n")
 
 	// Show search input if there's a filter active
@@ -174,6 +178,32 @@ func (m model) renderSelectNamespace() string {
 		b.WriteString(wrapHelpText("Type to filter  ↑/↓: Navigate  Enter: Select  Esc: Back  Ctrl+C: Cancel", helpWidth))
 	}
 
+	return b.String()
+}
+
+// renderManualNamespace shows a free-text namespace prompt for clusters where
+// the namespace list is not available to the user.
+func (m model) renderManualNamespace(b *strings.Builder) string {
+	wizard := m.ui.addWizard
+
+	b.WriteString("Enter Namespace:\n\n")
+	if wizard.namespaceListErr != nil {
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("Could not list namespaces (%v).", wizard.namespaceListErr)))
+	} else {
+		b.WriteString(mutedStyle.Render("No namespaces found."))
+	}
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("Type the namespace name instead."))
+	b.WriteString("\n\n")
+
+	b.WriteString(renderTextInput("Namespace: ", wizard.textInput, wizard.textInput != ""))
+	b.WriteString("\n")
+	if wizard.error != nil {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("✗ %v\n", wizard.error)))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(wrapHelpText("Enter: Continue  Esc: Back  Ctrl+C: Cancel", wizardHelpWidth(m.termWidth)))
 	return b.String()
 }
 

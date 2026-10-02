@@ -111,6 +111,7 @@ func (r ResourceType) Description() string {
 // AddWizardState maintains the state for the add port forward wizard
 type AddWizardState struct {
 	error                error
+	namespaceListErr     error
 	httpLogOriginal      *config.HTTPLogSpec
 	resourceValue        string
 	originalID           string
@@ -137,6 +138,7 @@ type AddWizardState struct {
 	confirmationFocus    ConfirmationFocus
 	portAvailable        bool
 	isEditing            bool
+	namespaceManual      bool
 	loading              bool
 	httpLog              bool
 }
@@ -221,6 +223,13 @@ func (w *AddWizardState) handleTextInput(char rune) {
 	if char >= 32 && char < 127 {
 		w.textInput += string(char)
 	}
+}
+
+// isTypingText reports whether printable keys must go into a text field,
+// including keys that otherwise navigate (j, k).
+func (w *AddWizardState) isTypingText() bool {
+	return w.inputMode == InputModeText ||
+		(w.step == StepConfirmation && w.confirmationFocus == FocusAlias)
 }
 
 // clearTextInput clears the text input field
