@@ -497,7 +497,7 @@ func runHeadless(ctx context.Context, opts runOptions, cfg *config.Config, deps 
 // runVerboseTable runs the simple table UI with periodic redraws and SIGHUP
 // reload, exiting cleanly when ctx is cancelled.
 func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, deps *runtimeDeps, validator *config.Validator, stderr io.Writer) int {
-	tableUI := ui.NewTableUI(opts.verbose)
+	tableUI := ui.NewTableUI(opts.verbose, cfg)
 	deps.manager.SetStatusUI(tableUI)
 
 	// Background update check (best effort).
@@ -539,7 +539,11 @@ func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, d
 	}()
 
 	watcher, watchErr := config.NewWatcher(opts.configFile, func(newCfg *config.Config) error {
-		return deps.manager.Reload(newCfg)
+		if err := deps.manager.Reload(newCfg); err != nil {
+			return err
+		}
+		tableUI.SetColumns(newCfg)
+		return nil
 	}, opts.verbose)
 	watcherActive := false
 	if watchErr != nil {
@@ -576,7 +580,9 @@ func runVerboseTable(ctx context.Context, opts runOptions, cfg *config.Config, d
 			}
 			if reloadErr := deps.manager.Reload(newCfg); reloadErr != nil {
 				log.Printf("Failed to reload: %v", reloadErr)
+				continue
 			}
+			tableUI.SetColumns(newCfg)
 		}
 	}
 }
@@ -590,6 +596,7 @@ func runInteractive(ctx context.Context, opts runOptions, cfg *config.Config, de
 			_ = deps.manager.DisableForward(id)
 		}
 	}, appVersion)
+	bubbleTeaUI.SetColumns(cfg)
 	bubbleTeaUI.SetWizardDependencies(deps.discovery, deps.mutator, opts.configFile)
 	bubbleTeaUI.SetHTTPLogSubscriber(makeHTTPLogSubscriber(deps.manager))
 
@@ -611,7 +618,11 @@ func runInteractive(ctx context.Context, opts runOptions, cfg *config.Config, de
 
 	var watcher *config.Watcher
 	watcher, err := config.NewWatcher(opts.configFile, func(newCfg *config.Config) error {
-		return deps.manager.Reload(newCfg)
+		if err := deps.manager.Reload(newCfg); err != nil {
+			return err
+		}
+		bubbleTeaUI.SetColumns(newCfg)
+		return nil
 	}, opts.verbose)
 	if err == nil {
 		watcher.Start()

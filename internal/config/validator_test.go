@@ -2050,3 +2050,137 @@ func TestValidateProtocol(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_ValidateTUI(t *testing.T) {
+	validator := NewValidator()
+
+	baseContexts := []Context{
+		{
+			Name: "dev",
+			Namespaces: []Namespace{
+				{
+					Name: "default",
+					Forwards: []Forward{
+						{Resource: "pod/app", Protocol: "tcp", Port: 8080, LocalPort: 8080, contextName: "dev", namespaceName: "default"},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		config        *Config
+		name          string
+		errorContains string
+		expectErrors  bool
+	}{
+		{
+			name:         "no tui config - no validation",
+			config:       &Config{Contexts: baseContexts},
+			expectErrors: false,
+		},
+		{
+			name: "valid columns",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI: &TUISpec{
+					Columns: []TableColumn{
+						{Name: "alias", Width: 30},
+						{Name: "status"},
+					},
+				},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "unknown column name",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "bogus"}}},
+			},
+			expectErrors:  true,
+			errorContains: "Invalid column name",
+		},
+		{
+			name: "empty column name",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: ""}}},
+			},
+			expectErrors:  true,
+			errorContains: "cannot be empty",
+		},
+		{
+			name: "duplicate column",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "alias"}, {Name: "Alias"}}},
+			},
+			expectErrors:  true,
+			errorContains: "Duplicate column",
+		},
+		{
+			name: "negative width",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "alias", Width: -1}}},
+			},
+			expectErrors:  true,
+			errorContains: "cannot be negative",
+		},
+		{
+			name: "width at cap",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "alias", Width: 200}}},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "width above cap",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "alias", Width: 201}}},
+			},
+			expectErrors:  true,
+			errorContains: "cannot exceed 200",
+		},
+		{
+			name: "name is case and whitespace insensitive",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: " Alias "}, {Name: "STATUS"}}},
+			},
+			expectErrors: false,
+		},
+		{
+			name: "padded duplicate is detected",
+			config: &Config{
+				Contexts: baseContexts,
+				TUI:      &TUISpec{Columns: []TableColumn{{Name: "alias"}, {Name: " Alias "}}},
+			},
+			expectErrors:  true,
+			errorContains: "Duplicate column",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validator.ValidateConfig(tt.config)
+
+			if tt.expectErrors {
+				assert.NotEmpty(t, errs)
+				found := false
+				for _, err := range errs {
+					if strings.Contains(err.Message, tt.errorContains) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "expected error message '%s' not found in errors: %v", tt.errorContains, errs)
+			} else {
+				assert.Empty(t, errs, "expected no validation errors, got: %v", errs)
+			}
+		})
+	}
+}

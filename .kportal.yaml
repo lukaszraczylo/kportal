@@ -22,6 +22,19 @@ reliability:
   retryOnStale: true          # Automatically reconnect when stale connections detected (default: true)
   watchdogPeriod: "30s"       # Goroutine watchdog check interval to detect hung workers (default: 30s)
 
+# Optional: TUI table configuration
+# Controls which columns are visible in the forwards table, in what order,
+# and how wide each one renders. Omit this section (or leave it empty) to
+# use the built-in default columns/order/widths.
+# Valid column names: context, namespace, alias, type, resource, remote, local, status
+# tui:
+#   columns:
+#     - name: alias
+#       width: 30      # optional; falls back to the built-in default width
+#     - name: resource
+#     - name: local
+#     - name: status
+
 contexts:
   # Production context
   - name: production

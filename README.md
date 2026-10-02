@@ -238,6 +238,26 @@ dns-sd -B _kportal._tcp local       # macOS
 avahi-browse -t _kportal._tcp       # Linux
 ```
 
+### Table Columns
+
+Choose which columns the forwards table shows, and in what order. The setting applies to the interactive UI and the `-verbose` table:
+
+```yaml
+tui:
+  columns:
+    - name: alias
+      width: 30      # optional, 1-200
+    - name: resource
+    - name: local
+    - name: status
+```
+
+- Valid names: `context`, `namespace`, `alias`, `type`, `resource`, `remote`, `local`, `status`
+- The list order is the render order, and unlisted columns are hidden
+- `width` is the maximum text width, from 1 to 200. If you omit it, the column keeps its default width
+- If you omit `tui`, the table keeps its default columns and order
+- Changes apply on hot-reload
+
 ## Usage
 
 ### Interactive Mode

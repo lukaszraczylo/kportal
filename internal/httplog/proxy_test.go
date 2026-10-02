@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/lukaszraczylo/kportal/internal/config"
@@ -420,4 +423,33 @@ func TestProxy_LogError(t *testing.T) {
 	assert.Equal(t, "GET", entry.Method)
 	assert.Equal(t, "/test", entry.Path)
 	assert.Contains(t, entry.Error, "assert.AnError")
+}
+
+func TestProxy_ForwardsToTargetPortAndSendsForwardedFor(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Seen-Path", r.URL.Path)
+		w.Header().Set("X-Seen-Forwarded-For", r.Header.Get("X-Forwarded-For"))
+	}))
+	defer backend.Close()
+	backendURL, err := url.Parse(backend.URL)
+	require.NoError(t, err)
+	targetPort, err := strconv.Atoi(backendURL.Port())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	proxy := &Proxy{
+		targetPort: targetPort,
+		logger:     &Logger{forwardID: "test", maxBodyLen: 1024, output: &buf},
+		forwardID:  "test-fwd",
+	}
+	require.NoError(t, proxy.Start())
+	defer func() { _ = proxy.Stop() }()
+
+	resp, err := http.Get("http://" + proxy.listener.Addr().String() + "/hello")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "/hello", resp.Header.Get("X-Seen-Path"))
+	assert.Equal(t, "127.0.0.1", resp.Header.Get("X-Seen-Forwarded-For"))
 }

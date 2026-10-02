@@ -72,6 +72,7 @@ type BubbleTeaUI struct {
 	discovery           *k8s.Discovery
 	program             *tea.Program
 	forwards            map[string]*ForwardStatus
+	columns             []ResolvedColumn
 	benchmarkState      *BenchmarkState
 	httpLogSubscriber   HTTPLogSubscriber
 	disabledMap         map[string]bool
@@ -115,9 +116,18 @@ func NewBubbleTeaUI(toggleCallback func(id string, enable bool), version string)
 		version:        version,
 		errors:         make(map[string]string),
 		viewMode:       ViewModeMain,
+		columns:        ResolveColumns(nil),
 	}
 
 	return ui
+}
+
+// SetColumns updates the forwards-table column set and order, e.g. after a
+// config hot-reload. cfg may be nil to reset to the built-in defaults.
+func (ui *BubbleTeaUI) SetColumns(cfg *config.Config) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	ui.columns = ResolveColumns(cfg)
 }
 
 // SetWizardDependencies sets the dependencies needed for the add/remove wizards
@@ -545,10 +555,15 @@ func (m model) renderForwardsTable(colors mainViewColors) string {
 	// Build table rows
 	rows := m.buildTableRows()
 
+	headers := make([]string, len(m.ui.columns))
+	for i, col := range m.ui.columns {
+		headers[i] = col.Header
+	}
+
 	// Create table with styling (no borders for cleaner look)
 	t := table.New().
 		Border(lipgloss.HiddenBorder()).
-		Headers("CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE", "LOCAL", "STATUS").
+		Headers(headers...).
 		Rows(rows...).
 		StyleFunc(m.createTableStyleFunc(colors))
 
@@ -570,21 +585,23 @@ func (m model) buildTableRows() [][]string {
 
 		statusIcon, statusText := m.getStatusIconAndText(id, fwd)
 
-		localPortText := fmt.Sprintf("%d", fwd.LocalPort)
-		if fwd.Status == "Active" && !m.ui.isForwardDisabled(id) {
-			localPortText = hyperlink(fmt.Sprintf("http://127.0.0.1:%d", fwd.LocalPort), fmt.Sprintf("%d→", fwd.LocalPort))
+		row := make([]string, len(m.ui.columns))
+		for i, col := range m.ui.columns {
+			switch col.Key {
+			case ColKeyLocal:
+				localPortText := fmt.Sprintf("%d", fwd.LocalPort)
+				if fwd.Status == "Active" && !m.ui.isForwardDisabled(id) {
+					localPortText = hyperlink(fmt.Sprintf("http://127.0.0.1:%d", fwd.LocalPort), fmt.Sprintf("%d→", fwd.LocalPort))
+				}
+				row[i] = localPortText
+			case ColKeyStatus:
+				row[i] = statusIcon + " " + statusText
+			default:
+				row[i] = columnValue(col, fwd)
+			}
 		}
 
-		rows = append(rows, []string{
-			truncate(fwd.Context, ColumnWidthContext),
-			truncate(fwd.Namespace, ColumnWidthNamespace),
-			truncate(fwd.Alias, ColumnWidthAlias),
-			truncate(fwd.Type, ColumnWidthType),
-			truncate(fwd.Resource, ColumnWidthResource),
-			fmt.Sprintf("%d", fwd.RemotePort),
-			localPortText,
-			statusIcon + " " + statusText,
-		})
+		rows = append(rows, row)
 	}
 
 	return rows
@@ -613,6 +630,8 @@ func (m model) getStatusIconAndText(id string, fwd *ForwardStatus) (icon, text s
 
 // createTableStyleFunc creates the style function for the forwards table
 func (m model) createTableStyleFunc(colors mainViewColors) func(row, col int) lipgloss.Style {
+	statusCol := columnIndex(m.ui.columns, ColKeyStatus)
+
 	return func(row, col int) lipgloss.Style {
 		// Header row
 		if row == table.HeaderRow {
@@ -643,7 +662,7 @@ func (m model) createTableStyleFunc(colors mainViewColors) func(row, col int) li
 			}
 
 			// Status column gets colored based on status
-			if col == ColumnStatus && ok {
+			if col == statusCol && ok {
 				switch fwd.Status {
 				case "Active":
 					return baseStyle.Foreground(colors.active)

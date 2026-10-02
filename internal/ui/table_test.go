@@ -11,12 +11,12 @@ import (
 
 // TestNewTableUI tests the constructor.
 func TestNewTableUI(t *testing.T) {
-	tui := NewTableUI(false)
+	tui := NewTableUI(false, nil)
 	require.NotNil(t, tui)
 	assert.NotNil(t, tui.forwards)
 	assert.False(t, tui.verbose)
 
-	tuiVerbose := NewTableUI(true)
+	tuiVerbose := NewTableUI(true, nil)
 	assert.True(t, tuiVerbose.verbose)
 }
 
@@ -58,7 +58,7 @@ func TestTableUI_AddForward(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tui := NewTableUI(false)
+			tui := NewTableUI(false, nil)
 			fwd := &config.Forward{
 				Resource:  tt.resource,
 				Port:      8080,
@@ -84,7 +84,7 @@ func TestTableUI_AddForward(t *testing.T) {
 
 // TestTableUI_UpdateStatus verifies status mutation.
 func TestTableUI_UpdateStatus(t *testing.T) {
-	tui := NewTableUI(false)
+	tui := NewTableUI(false, nil)
 	fwd := &config.Forward{Resource: "pod/app", Port: 80, LocalPort: 8080}
 	tui.AddForward("id-1", fwd)
 
@@ -100,7 +100,7 @@ func TestTableUI_UpdateStatus(t *testing.T) {
 
 // TestTableUI_GetForward covers the lookup path.
 func TestTableUI_GetForward(t *testing.T) {
-	tui := NewTableUI(false)
+	tui := NewTableUI(false, nil)
 	fwd := &config.Forward{Resource: "pod/app", Port: 80, LocalPort: 8080}
 	tui.AddForward("id-1", fwd)
 
@@ -114,7 +114,7 @@ func TestTableUI_GetForward(t *testing.T) {
 
 // TestTableUI_Remove tests deletion.
 func TestTableUI_Remove(t *testing.T) {
-	tui := NewTableUI(false)
+	tui := NewTableUI(false, nil)
 	fwd := &config.Forward{Resource: "pod/app", Port: 80, LocalPort: 8080}
 	tui.AddForward("id-1", fwd)
 	tui.AddForward("id-2", fwd)

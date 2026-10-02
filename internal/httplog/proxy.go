@@ -91,13 +91,15 @@ func (p *Proxy) Start() error {
 	p.listener = ln
 
 	// Create reverse proxy
-	director := func(req *http.Request) {
-		req.URL.Scheme = "http"
-		req.URL.Host = fmt.Sprintf("127.0.0.1:%d", p.targetPort)
+	rewrite := func(pr *httputil.ProxyRequest) {
+		pr.Out.URL.Scheme = "http"
+		pr.Out.URL.Host = fmt.Sprintf("127.0.0.1:%d", p.targetPort)
+		// Rewrite drops X-Forwarded-For, which Director used to send.
+		pr.SetXForwarded()
 	}
 
 	proxy := &httputil.ReverseProxy{
-		Director: director,
+		Rewrite: rewrite,
 		Transport: &loggingTransport{
 			proxy:     p,
 			transport: http.DefaultTransport,

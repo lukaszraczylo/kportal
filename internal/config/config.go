@@ -60,7 +60,27 @@ type Config struct {
 	HealthCheck *HealthCheckSpec `yaml:"healthCheck,omitempty"`
 	Reliability *ReliabilitySpec `yaml:"reliability,omitempty"`
 	MDNS        *MDNSSpec        `yaml:"mdns,omitempty"`
+	TUI         *TUISpec         `yaml:"tui,omitempty"`
 	Contexts    []Context        `yaml:"contexts"`
+}
+
+// TUISpec configures the terminal UI table display
+type TUISpec struct {
+	// Columns lists the forwards-table columns to display, in the order they
+	// should appear. Omitting this field (or leaving it empty) keeps the
+	// built-in default column set and order. Any column not listed here is
+	// hidden.
+	Columns []TableColumn `yaml:"columns,omitempty"`
+}
+
+// TableColumn configures a single column of the forwards table.
+type TableColumn struct {
+	// Name is the column identifier: context, namespace, alias, type,
+	// resource, remote, local, or status.
+	Name string `yaml:"name"`
+	// Width is the maximum display width for the column, in characters.
+	// If zero or omitted, the column's built-in default width is used.
+	Width int `yaml:"width,omitempty"`
 }
 
 // MDNSSpec configures mDNS (multicast DNS) hostname publishing
@@ -172,6 +192,15 @@ func (c *Config) GetDialTimeout() time.Duration {
 // IsMDNSEnabled returns whether mDNS hostname publishing is enabled
 func (c *Config) IsMDNSEnabled() bool {
 	return c.MDNS != nil && c.MDNS.Enabled
+}
+
+// GetTableColumns returns the configured TUI table columns, or nil if the
+// built-in default column set and order should be used.
+func (c *Config) GetTableColumns() []TableColumn {
+	if c == nil || c.TUI == nil || len(c.TUI.Columns) == 0 {
+		return nil
+	}
+	return c.TUI.Columns
 }
 
 // Context represents a Kubernetes context with its namespaces

@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -26,16 +28,27 @@ type ForwardStatus struct {
 // TableUI manages the terminal table display
 type TableUI struct {
 	forwards map[string]*ForwardStatus
+	columns  []ResolvedColumn
 	mu       sync.RWMutex
 	verbose  bool
 }
 
-// NewTableUI creates a new table UI manager
-func NewTableUI(verbose bool) *TableUI {
+// NewTableUI creates a new table UI manager. cfg may be nil, in which case
+// the built-in default column set and order is used.
+func NewTableUI(verbose bool, cfg *config.Config) *TableUI {
 	return &TableUI{
 		forwards: make(map[string]*ForwardStatus),
 		verbose:  verbose,
+		columns:  ResolvePlainColumns(cfg),
 	}
+}
+
+// SetColumns updates the table's column set and order, e.g. after a config
+// hot-reload.
+func (t *TableUI) SetColumns(cfg *config.Config) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.columns = ResolvePlainColumns(cfg)
 }
 
 // AddForward registers a new forward for display
@@ -94,12 +107,11 @@ func (t *TableUI) Render() {
 
 	// Print header
 	fmt.Println("kportal - Port Forwarding Status")
-	fmt.Println(strings.Repeat("=", 130))
+	fmt.Println(plainRule("=", t.columns))
 
 	// Table header
-	fmt.Printf("%-15s %-18s %-25s %-10s %-25s %-12s %-12s %-12s\n",
-		"CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE PORT", "LOCAL PORT", "STATUS")
-	fmt.Println(strings.Repeat("-", 130))
+	fmt.Println(renderPlainHeaderRow(t.columns))
+	fmt.Println(plainRule("-", t.columns))
 
 	// Sort forwards by local port for consistent display
 	type sortEntry struct {
@@ -122,28 +134,10 @@ func (t *TableUI) Render() {
 
 	// Print each forward
 	for _, entry := range entries {
-		fwd := entry.fwd
-
-		// Truncate long names
-		alias := truncate(fwd.Alias, 25)
-		resource := truncate(fwd.Resource, 25)
-
-		// Color code status with indicator
-		statusStr := formatStatusWithIndicator(fwd.Status)
-
-		// Print the row
-		fmt.Printf("  %-15s %-18s %-25s %-10s %-25s %-12d %-12d %s\n",
-			fwd.Context,
-			fwd.Namespace,
-			alias,
-			fwd.Type,
-			resource,
-			fwd.RemotePort,
-			fwd.LocalPort,
-			statusStr)
+		fmt.Println(renderPlainDataRow(t.columns, entry.fwd))
 	}
 
-	fmt.Println(strings.Repeat("=", 130))
+	fmt.Println(plainRule("=", t.columns))
 	fmt.Printf("Total forwards: %d | Press Ctrl+C to stop\n", len(t.forwards))
 
 	// In verbose mode, add a newline to separate from logs
@@ -159,19 +153,18 @@ func (t *TableUI) RenderInitial() {
 
 	// Print header
 	fmt.Println("\nkportal - Port Forwarding Status")
-	fmt.Println(strings.Repeat("=", 130))
+	fmt.Println(plainRule("=", t.columns))
 
 	// Table header
-	fmt.Printf("%-15s %-18s %-25s %-10s %-25s %-12s %-12s %-12s\n",
-		"CONTEXT", "NAMESPACE", "ALIAS", "TYPE", "RESOURCE", "REMOTE PORT", "LOCAL PORT", "STATUS")
-	fmt.Println(strings.Repeat("-", 130))
+	fmt.Println(renderPlainHeaderRow(t.columns))
+	fmt.Println(plainRule("-", t.columns))
 
 	// Print message if no forwards yet
 	if len(t.forwards) == 0 {
 		fmt.Println("Initializing port forwards...")
 	}
 
-	fmt.Println(strings.Repeat("=", 130))
+	fmt.Println(plainRule("=", t.columns))
 	fmt.Println()
 }
 
@@ -187,6 +180,65 @@ func (t *TableUI) Remove(id string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.forwards, id)
+}
+
+// legacyPlainRuleWidth is the rule width the default plain layout always used.
+const legacyPlainRuleWidth = 130
+
+// ansiSeq matches the SGR colour sequences emitted by formatStatusWithIndicator.
+var ansiSeq = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// visibleWidth returns the number of runes a terminal shows for s.
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(ansiSeq.ReplaceAllString(s, ""))
+}
+
+// padVisible right-pads s with spaces to width visible runes.
+func padVisible(s string, width int) string {
+	if n := width - visibleWidth(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
+}
+
+// plainRule returns a rule line as wide as the rendered columns: the sum of
+// their widths plus one separator between each pair.
+func plainRule(ch string, cols []ResolvedColumn) string {
+	if slices.Equal(cols, plainDefaultColumns) {
+		return strings.Repeat(ch, legacyPlainRuleWidth)
+	}
+	width := len(cols) - 1
+	for _, col := range cols {
+		width += col.Width
+	}
+	return strings.Repeat(ch, max(width, 0))
+}
+
+// renderPlainHeaderRow renders the header row for the plain table, padding
+// every column to its width.
+func renderPlainHeaderRow(cols []ResolvedColumn) string {
+	cells := make([]string, len(cols))
+	for i, col := range cols {
+		cells[i] = padVisible(col.Header, col.Width)
+	}
+	return strings.Join(cells, " ")
+}
+
+// renderPlainDataRow renders a single forward's data row for the plain table,
+// padding every column but the last so row cells line up with the header.
+func renderPlainDataRow(cols []ResolvedColumn, fwd *ForwardStatus) string {
+	cells := make([]string, len(cols))
+	for i, col := range cols {
+		if col.Key == ColKeyStatus {
+			cells[i] = formatStatusWithIndicator(fwd.Status)
+		} else {
+			cells[i] = columnValue(col, fwd)
+		}
+		if i < len(cols)-1 {
+			cells[i] = padVisible(cells[i], col.Width)
+		}
+	}
+	return "  " + strings.Join(cells, " ")
 }
 
 // hyperlink wraps text in an OSC 8 terminal hyperlink escape sequence.

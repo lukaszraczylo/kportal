@@ -85,6 +85,7 @@ func (v *Validator) ValidateConfigWithOptions(cfg *Config, allowEmpty bool) []Va
 	if allowEmpty && cfg.IsEmpty() {
 		// Still validate health check and reliability if present (they don't require forwards)
 		errs = append(errs, v.validateSpecDurations(cfg)...)
+		errs = append(errs, v.validateTUI(cfg)...)
 		return errs
 	}
 
@@ -110,6 +111,9 @@ func (v *Validator) ValidateConfigWithOptions(cfg *Config, allowEmpty bool) []Va
 
 	// Validate duration fields in specs
 	errs = append(errs, v.validateSpecDurations(cfg)...)
+
+	// Validate TUI table column configuration
+	errs = append(errs, v.validateTUI(cfg)...)
 
 	return errs
 }
@@ -500,6 +504,74 @@ func (v *Validator) validateMDNS(cfg *Config) []ValidationError {
 					"alias":    alias,
 					"forwards": strings.Join(forwards, ", "),
 				},
+			})
+		}
+	}
+
+	return errs
+}
+
+// maxTableColumnWidth caps tui.columns width so a typo cannot blow up the table.
+const maxTableColumnWidth = 200
+
+// validTableColumnNames are the recognized forwards-table column identifiers.
+var validTableColumnNames = map[string]bool{
+	"context":   true,
+	"namespace": true,
+	"alias":     true,
+	"type":      true,
+	"resource":  true,
+	"remote":    true,
+	"local":     true,
+	"status":    true,
+}
+
+// validateTUI validates the tui.columns configuration.
+func (v *Validator) validateTUI(cfg *Config) []ValidationError {
+	var errs []ValidationError
+
+	if cfg.TUI == nil {
+		return errs
+	}
+
+	seen := make(map[string]bool)
+	for i, col := range cfg.TUI.Columns {
+		name := strings.ToLower(strings.TrimSpace(col.Name))
+
+		if name == "" {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tui.columns[%d].name", i),
+				Message: "Column name cannot be empty",
+			})
+			continue
+		}
+
+		if !validTableColumnNames[name] {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tui.columns[%d].name", i),
+				Message: fmt.Sprintf("Invalid column name '%s' (must be one of: context, namespace, alias, type, resource, remote, local, status)", col.Name),
+			})
+			continue
+		}
+
+		if seen[name] {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tui.columns[%d].name", i),
+				Message: fmt.Sprintf("Duplicate column '%s' in tui.columns", name),
+			})
+			continue
+		}
+		seen[name] = true
+
+		if col.Width < 0 {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tui.columns[%d].width", i),
+				Message: fmt.Sprintf("Column '%s' width cannot be negative", name),
+			})
+		} else if col.Width > maxTableColumnWidth {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tui.columns[%d].width", i),
+				Message: fmt.Sprintf("Column '%s' width cannot exceed %d", name, maxTableColumnWidth),
 			})
 		}
 	}
