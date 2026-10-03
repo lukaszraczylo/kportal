@@ -8,7 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-logr/logr v1.4.4
 	github.com/grandcat/zeroconf v1.0.0
-	github.com/lukaszraczylo/oss-telemetry v0.2.3
+	github.com/lukaszraczylo/oss-telemetry v0.2.5
 	github.com/stretchr/testify v1.12.1
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.1
