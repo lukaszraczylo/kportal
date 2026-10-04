@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/benchmark"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"

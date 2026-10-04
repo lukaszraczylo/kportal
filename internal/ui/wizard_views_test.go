@@ -987,7 +987,7 @@ func TestRenderDeleteConfirmation_NoSelected(t *testing.T) {
 
 func TestModelView_MainViewDefault(t *testing.T) {
 	m := newTestModel()
-	result := m.View()
+	result := m.View().Content
 	assert.NotEmpty(t, result)
 }
 
@@ -1001,7 +1001,7 @@ func TestModelView_DeleteConfirmationOverlay(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	result := m.View()
+	result := m.View().Content
 	assert.Contains(t, result, "Delete Port Forward")
 }
 
@@ -1013,7 +1013,7 @@ func TestModelView_AddWizardOverlay(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	result := m.View()
+	result := m.View().Content
 	assert.NotEmpty(t, result)
 }
 
@@ -1028,7 +1028,7 @@ func TestModelView_RemoveWizardOverlay(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	result := m.View()
+	result := m.View().Content
 	assert.Contains(t, result, "alpha")
 }
 
@@ -1040,7 +1040,7 @@ func TestModelView_BenchmarkOverlay(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	result := m.View()
+	result := m.View().Content
 	assert.NotEmpty(t, result)
 }
 
@@ -1052,7 +1052,7 @@ func TestModelView_HTTPLogFullScreen(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	result := m.View()
+	result := m.View().Content
 	assert.Contains(t, result, "HTTP Traffic Log")
 }
 
@@ -1061,7 +1061,7 @@ func TestModelView_ZeroTermSize(t *testing.T) {
 	m.termWidth = 0
 	m.termHeight = 0
 	// Must not panic even with zero term dims.
-	result := m.View()
+	result := m.View().Content
 	assert.NotEmpty(t, result)
 }
 
@@ -1406,8 +1406,8 @@ func TestGetStatusIconAndText(t *testing.T) {
 
 func TestDefaultMainViewColors(t *testing.T) {
 	colors := defaultMainViewColors()
-	assert.NotEmpty(t, string(colors.header))
-	assert.NotEmpty(t, string(colors.active))
+	assert.NotNil(t, colors.header)
+	assert.NotNil(t, colors.active)
 }
 
 func TestMainViewKeyBindings(t *testing.T) {

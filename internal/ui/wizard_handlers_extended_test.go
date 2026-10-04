@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +44,7 @@ func TestHandleMainViewKeys_PageUpDown(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyPgUp}
 	m.handleMainViewKeys(keyMsg)
 	ui.mu.RLock()
 	assert.Equal(t, 0, ui.selectedIndex)
@@ -54,7 +54,7 @@ func TestHandleMainViewKeys_PageUpDown(t *testing.T) {
 	ui.mu.Lock()
 	ui.selectedIndex = 0
 	ui.mu.Unlock()
-	keyMsg = tea.KeyMsg{Type: tea.KeyPgDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyPgDown}
 	m.handleMainViewKeys(keyMsg)
 	ui.mu.RLock()
 	assert.Equal(t, 10, ui.selectedIndex)
@@ -76,7 +76,7 @@ func TestHandleMainViewKeys_NewWizard_WithDiscovery(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Text: "n"}
 	_, cmd := m.handleMainViewKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -99,7 +99,7 @@ func TestHandleMainViewKeys_NewWizard_AlreadyActive(t *testing.T) {
 	ui.mu.Unlock()
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Text: "n"}
 	m.handleMainViewKeys(keyMsg)
 
 	// Should still be the same wizard (not replaced).
@@ -116,7 +116,7 @@ func TestHandleMainViewKeys_HttpLog_NoSubscriber(t *testing.T) {
 	ui.AddForward("id-1", fwd)
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")}
+	keyMsg := tea.KeyPressMsg{Text: "l"}
 	m.handleMainViewKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -133,7 +133,7 @@ func TestHandleMainViewKeys_HttpLog_WithSubscriber(t *testing.T) {
 	ui.AddForward("id-1", fwd)
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")}
+	keyMsg := tea.KeyPressMsg{Text: "l"}
 	m.handleMainViewKeys(keyMsg)
 
 	// Subscription should be established.
@@ -151,7 +151,7 @@ func TestHandleMainViewKeys_Benchmark(t *testing.T) {
 	ui.AddForward("id-1", fwd)
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")}
+	keyMsg := tea.KeyPressMsg{Text: "b"}
 	m.handleMainViewKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -170,7 +170,7 @@ func TestHandleMainViewKeys_Benchmark_BlocksWhenActive(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	prevState := ui.benchmarkState
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")}
+	keyMsg := tea.KeyPressMsg{Text: "b"}
 	m.handleMainViewKeys(keyMsg)
 
 	// Should not have replaced the benchmark state.
@@ -184,7 +184,7 @@ func TestHandleMainViewKeys_Benchmark_BlocksWhenActive(t *testing.T) {
 func TestHandleAddWizardKeys_CtrlC(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	keyMsg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	assert.NotNil(t, cmd) // tea.ClearScreen
@@ -197,7 +197,7 @@ func TestHandleAddWizardKeys_CtrlC(t *testing.T) {
 func TestHandleAddWizardKeys_Esc_FirstStep_Cancels(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleAddWizardKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -209,7 +209,7 @@ func TestHandleAddWizardKeys_Esc_FirstStep_Cancels(t *testing.T) {
 func TestHandleAddWizardKeys_Esc_MiddleStep_GoesBack(t *testing.T) {
 	m := newModelWithWizard(StepSelectNamespace)
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleAddWizardKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -221,7 +221,7 @@ func TestHandleAddWizardKeys_Esc_ClearsSearchFilter_InsteadOfBack(t *testing.T) 
 	m := newModelWithWizard(StepSelectContext)
 	m.ui.addWizard.searchFilter = "my"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleAddWizardKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -235,7 +235,7 @@ func TestHandleAddWizardKeys_Esc_EditMode_AlwaysCancels(t *testing.T) {
 	m := newModelWithWizard(StepEnterRemotePort)
 	m.ui.addWizard.isEditing = true
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleAddWizardKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -250,11 +250,11 @@ func TestHandleAddWizardKeys_Navigation(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 	m.ui.addWizard.contexts = []string{"ctx-a", "ctx-b", "ctx-c"}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, 1, m.ui.addWizard.cursor)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, 0, m.ui.addWizard.cursor)
 }
@@ -268,11 +268,11 @@ func TestHandleAddWizardKeys_PageNavigation(t *testing.T) {
 	m.ui.addWizard.contexts = contexts
 	m.ui.addWizard.cursor = 15
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyPgUp}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, 5, m.ui.addWizard.cursor)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyPgDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyPgDown}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, 15, m.ui.addWizard.cursor)
 }
@@ -283,7 +283,7 @@ func TestHandleAddWizardKeys_ConfirmationStep_UpFocusAlias(t *testing.T) {
 	m := newModelWithWizard(StepConfirmation)
 	m.ui.addWizard.confirmationFocus = FocusButtons
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, FocusAlias, m.ui.addWizard.confirmationFocus)
 }
@@ -292,7 +292,7 @@ func TestHandleAddWizardKeys_ConfirmationStep_DownFocusButtons(t *testing.T) {
 	m := newModelWithWizard(StepConfirmation)
 	m.ui.addWizard.confirmationFocus = FocusAlias
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, FocusButtons, m.ui.addWizard.confirmationFocus)
 }
@@ -301,7 +301,7 @@ func TestHandleAddWizardKeys_Tab_TogglesFocus(t *testing.T) {
 	m := newModelWithWizard(StepConfirmation)
 	m.ui.addWizard.confirmationFocus = FocusAlias
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyTab}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, FocusButtons, m.ui.addWizard.confirmationFocus)
 
@@ -316,7 +316,7 @@ func TestHandleAddWizardKeys_Backspace_TextMode(t *testing.T) {
 	m.ui.addWizard.inputMode = InputModeText
 	m.ui.addWizard.textInput = "808"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, "80", m.ui.addWizard.textInput)
 }
@@ -325,7 +325,7 @@ func TestHandleAddWizardKeys_Backspace_SearchFilter(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 	m.ui.addWizard.searchFilter = "my"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, "m", m.ui.addWizard.searchFilter)
 }
@@ -334,7 +334,7 @@ func TestHandleAddWizardKeys_Backspace_EmptyFilter_NoOp(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 	m.ui.addWizard.searchFilter = ""
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	// Must not panic.
 	m.handleAddWizardKeys(keyMsg)
 }
@@ -345,7 +345,7 @@ func TestHandleAddWizardKeys_TypeCharAddsToSearchFilter(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 	// Context step is filterable in list mode.
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}
+	keyMsg := tea.KeyPressMsg{Text: "p"}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, "p", m.ui.addWizard.searchFilter)
 }
@@ -356,7 +356,7 @@ func TestHandleAddWizardKeys_TypeCharInTextMode(t *testing.T) {
 	m := newModelWithWizard(StepEnterRemotePort)
 	m.ui.addWizard.inputMode = InputModeText
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("8")}
+	keyMsg := tea.KeyPressMsg{Text: "8"}
 	m.handleAddWizardKeys(keyMsg)
 	assert.Equal(t, "8", m.ui.addWizard.textInput)
 }
@@ -377,7 +377,7 @@ func TestHandleAddWizardEnter_SelectContext(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -393,7 +393,7 @@ func TestHandleAddWizardEnter_SelectContext_Loading_NoOp(t *testing.T) {
 	m := newModelWithWizard(StepSelectContext)
 	m.ui.addWizard.loading = true
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 	assert.Nil(t, cmd)
 }
@@ -405,7 +405,7 @@ func TestHandleAddWizardEnter_SelectNamespace(t *testing.T) {
 	m.ui.addWizard.namespaces = []string{"default", "kube-system"}
 	m.ui.addWizard.cursor = 1 // kube-system
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepSelectResourceType, m.ui.addWizard.step)
@@ -428,7 +428,7 @@ func TestHandleAddWizardEnter_SelectResourceType_Service(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -454,7 +454,7 @@ func TestHandleAddWizardEnter_SelectResourceType_PodPrefix(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -477,7 +477,7 @@ func TestHandleAddWizardEnter_EnterResource_PodPrefix(t *testing.T) {
 		Containers: []k8s.ContainerInfo{{Name: "main", Ports: []k8s.PortInfo{{Port: 8080}}}},
 	}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterRemotePort, m.ui.addWizard.step)
@@ -490,7 +490,7 @@ func TestHandleAddWizardEnter_EnterResource_PodPrefix_EmptyInput_NoOp(t *testing
 	m.ui.addWizard.inputMode = InputModeText
 	m.ui.addWizard.textInput = ""
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterResource, m.ui.addWizard.step) // should not advance
@@ -505,7 +505,7 @@ func TestHandleAddWizardEnter_EnterResource_PodSelector(t *testing.T) {
 	m.ui.addWizard.textInput = "app=my"
 	m.ui.addWizard.matchingPods = []k8s.PodInfo{{Name: "my-pod"}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterRemotePort, m.ui.addWizard.step)
@@ -518,7 +518,7 @@ func TestHandleAddWizardEnter_EnterResource_PodSelector_NoMatchingPods_NoOp(t *t
 	m.ui.addWizard.textInput = "app=my"
 	m.ui.addWizard.matchingPods = nil
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterResource, m.ui.addWizard.step)
@@ -535,7 +535,7 @@ func TestHandleAddWizardEnter_EnterResource_Service(t *testing.T) {
 	}
 	m.ui.addWizard.cursor = 0
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterRemotePort, m.ui.addWizard.step)
@@ -549,7 +549,7 @@ func TestHandleAddWizardEnter_RemotePort_TextMode_ValidPort(t *testing.T) {
 	m.ui.addWizard.inputMode = InputModeText
 	m.ui.addWizard.textInput = "8080"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterLocalPort, m.ui.addWizard.step)
@@ -561,7 +561,7 @@ func TestHandleAddWizardEnter_RemotePort_TextMode_InvalidPort(t *testing.T) {
 	m.ui.addWizard.inputMode = InputModeText
 	m.ui.addWizard.textInput = "invalid"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterRemotePort, m.ui.addWizard.step)
@@ -577,7 +577,7 @@ func TestHandleAddWizardEnter_RemotePort_ListMode_SelectPort(t *testing.T) {
 	}
 	m.ui.addWizard.cursor = 1 // 8080 → TargetPort 9090
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, StepEnterLocalPort, m.ui.addWizard.step)
@@ -590,7 +590,7 @@ func TestHandleAddWizardEnter_RemotePort_ListMode_ManualEntry(t *testing.T) {
 	m.ui.addWizard.detectedPorts = []k8s.PortInfo{{Port: 80}}
 	m.ui.addWizard.cursor = 1 // "Manual entry" option
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, InputModeText, m.ui.addWizard.inputMode)
@@ -612,7 +612,7 @@ func TestHandleAddWizardEnter_LocalPort_ValidPort(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	// loading set, cmd generated.
@@ -627,7 +627,7 @@ func TestHandleAddWizardEnter_LocalPort_InvalidPort(t *testing.T) {
 	m := newModelWithWizard(StepEnterLocalPort)
 	m.ui.addWizard.textInput = "0" // invalid (must be > 0)
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.NotNil(t, m.ui.addWizard.error)
@@ -639,7 +639,7 @@ func TestHandleAddWizardEnter_Confirmation_FocusAlias_MoveToButtons(t *testing.T
 	m := newModelWithWizard(StepConfirmation)
 	m.ui.addWizard.confirmationFocus = FocusAlias
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.Equal(t, FocusButtons, m.ui.addWizard.confirmationFocus)
@@ -650,7 +650,7 @@ func TestHandleAddWizardEnter_Confirmation_CancelButton(t *testing.T) {
 	m.ui.addWizard.confirmationFocus = FocusButtons
 	m.ui.addWizard.cursor = 1 // Cancel
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	assert.NotNil(t, cmd) // tea.ClearScreen
@@ -667,7 +667,7 @@ func TestHandleAddWizardEnter_Confirmation_PortNotAvailable_Error(t *testing.T) 
 	m.ui.addWizard.portAvailable = false
 	m.ui.addWizard.localPort = 8080
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.NotNil(t, m.ui.addWizard.error)
@@ -697,7 +697,7 @@ func TestHandleAddWizardEnter_Confirmation_Save_NewForward(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	require.NotNil(t, cmd)
@@ -731,7 +731,7 @@ func TestHandleAddWizardEnter_Confirmation_Save_NewForward_WithHTTPLog(t *testin
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -767,7 +767,7 @@ func TestHandleAddWizardEnter_Confirmation_Update_EditMode(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -790,7 +790,7 @@ func TestHandleAddWizardEnter_Success_AddAnother(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	// A cmd (loadContextsCmd) must be returned.
@@ -801,7 +801,7 @@ func TestHandleAddWizardEnter_Success_ReturnToMain(t *testing.T) {
 	m := newModelWithWizard(StepSuccess)
 	m.ui.addWizard.cursor = 1 // "Return to main"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	assert.NotNil(t, cmd)
@@ -828,7 +828,7 @@ func TestHandleAddWizardKeys_SelectorValidation_OnChar(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Typing a char in PodSelector step should return a validation cmd.
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-")}
+	keyMsg := tea.KeyPressMsg{Text: "-"}
 	_, cmd := m.handleAddWizardKeys(keyMsg)
 
 	// A cmd is returned (validateSelectorCmd); we don't invoke it as it needs a real cluster.
@@ -849,7 +849,7 @@ func TestHandleRemoveWizardKeys_SpaceToggle(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeySpace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	m.handleRemoveWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -874,7 +874,7 @@ func TestHandleRemoveWizardKeys_SelectAll(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
+	keyMsg := tea.KeyPressMsg{Text: "a"}
 	m.handleRemoveWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -895,7 +895,7 @@ func TestHandleRemoveWizardKeys_SelectNone(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Text: "n"}
 	m.handleRemoveWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -915,7 +915,7 @@ func TestHandleRemoveWizardKeys_CtrlC_ExitsAlways(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	keyMsg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	m.handleRemoveWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -935,7 +935,7 @@ func TestHandleRemoveWizardKeys_Enter_NothingSelected_NoOp(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleRemoveWizardKeys(keyMsg)
 
 	assert.Nil(t, cmd)
@@ -955,7 +955,7 @@ func TestHandleRemoveWizardKeys_Enter_ShowConfirmation(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleRemoveWizardKeys(keyMsg)
 
 	ui.mu.RLock()
@@ -976,7 +976,7 @@ func TestHandleRemoveWizardKeys_Enter_ConfirmNo(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleRemoveWizardKeys(keyMsg)
 
 	assert.Nil(t, cmd)
@@ -997,13 +997,13 @@ func TestHandleRemoveWizardKeys_Navigation_InSelection(t *testing.T) {
 	ui.mu.Unlock()
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleRemoveWizardKeys(keyMsg)
 	ui.mu.RLock()
 	assert.Equal(t, 1, ui.removeWizard.cursor)
 	ui.mu.RUnlock()
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleRemoveWizardKeys(keyMsg)
 	ui.mu.RLock()
 	assert.Equal(t, 0, ui.removeWizard.cursor)
@@ -1017,7 +1017,7 @@ func TestHandleBenchmarkKeys_Tab(t *testing.T) {
 	m.ui.benchmarkState.step = BenchmarkStepConfig
 	m.ui.benchmarkState.cursor = 0
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyTab}
 	m.handleBenchmarkKeys(keyMsg)
 
 	assert.Equal(t, 1, m.ui.benchmarkState.cursor)
@@ -1028,7 +1028,7 @@ func TestHandleBenchmarkKeys_Tab_Wraps(t *testing.T) {
 	m.ui.benchmarkState.step = BenchmarkStepConfig
 	m.ui.benchmarkState.cursor = 3
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyTab}
 	m.handleBenchmarkKeys(keyMsg)
 
 	assert.Equal(t, 0, m.ui.benchmarkState.cursor)
@@ -1040,7 +1040,7 @@ func TestHandleBenchmarkKeys_Backspace(t *testing.T) {
 	m.ui.benchmarkState.cursor = 0
 	m.ui.benchmarkState.textInput = "/api"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	m.handleBenchmarkKeys(keyMsg)
 
 	assert.Equal(t, "/ap", m.ui.benchmarkState.textInput)
@@ -1053,7 +1053,7 @@ func TestHandleBenchmarkKeys_TypeChar_UpdatesField(t *testing.T) {
 	m.ui.benchmarkState.cursor = 1 // Method field
 	m.ui.benchmarkState.textInput = "GE"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
+	keyMsg := tea.KeyPressMsg{Text: "T"}
 	m.handleBenchmarkKeys(keyMsg)
 
 	assert.Equal(t, "GET", m.ui.benchmarkState.method)
@@ -1063,7 +1063,7 @@ func TestHandleBenchmarkKeys_Enter_ResultsStep_ReturnsToMain(t *testing.T) {
 	m := newModelWithBenchmark()
 	m.ui.benchmarkState.step = BenchmarkStepResults
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleBenchmarkKeys(keyMsg)
 
 	assert.NotNil(t, cmd) // tea.ClearScreen
@@ -1077,7 +1077,7 @@ func TestHandleBenchmarkKeys_Enter_ConfigStep_StartsRunning(t *testing.T) {
 	m := newModelWithBenchmark()
 	m.ui.benchmarkState.step = BenchmarkStepConfig
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleBenchmarkKeys(keyMsg)
 
 	require.NotNil(t, cmd)
@@ -1157,7 +1157,7 @@ func TestHandleHTTPLogKeys_Detail_Esc(t *testing.T) {
 	m.ui.httpLogState.showingDetail = true
 	m.ui.httpLogState.entries = []HTTPLogEntry{{Method: "GET", Path: "/test"}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.False(t, m.ui.httpLogState.showingDetail)
@@ -1169,11 +1169,11 @@ func TestHandleHTTPLogKeys_Detail_UpDown(t *testing.T) {
 	m.ui.httpLogState.detailScroll = 5
 	m.ui.httpLogState.entries = []HTTPLogEntry{{Method: "GET"}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 4, m.ui.httpLogState.detailScroll)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 5, m.ui.httpLogState.detailScroll)
 }
@@ -1184,11 +1184,11 @@ func TestHandleHTTPLogKeys_Detail_PgUpDown(t *testing.T) {
 	m.ui.httpLogState.detailScroll = 25
 	m.ui.httpLogState.entries = []HTTPLogEntry{{Method: "GET"}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyPgUp}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 5, m.ui.httpLogState.detailScroll)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyPgDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyPgDown}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 25, m.ui.httpLogState.detailScroll)
 }
@@ -1199,7 +1199,7 @@ func TestHandleHTTPLogKeys_Detail_GoToTop(t *testing.T) {
 	m.ui.httpLogState.detailScroll = 99
 	m.ui.httpLogState.entries = []HTTPLogEntry{{Method: "GET"}}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}
+	keyMsg := tea.KeyPressMsg{Text: "g"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.Equal(t, 0, m.ui.httpLogState.detailScroll)
@@ -1213,7 +1213,7 @@ func TestHandleHTTPLogKeys_Enter_ShowDetail(t *testing.T) {
 	m.ui.httpLogState.entries = []HTTPLogEntry{{Method: "GET", Path: "/test", StatusCode: 200}}
 	m.ui.httpLogState.cursor = 0
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.True(t, m.ui.httpLogState.showingDetail)
@@ -1227,11 +1227,11 @@ func TestHandleHTTPLogKeys_Navigate_UpDown(t *testing.T) {
 	}
 	m.ui.httpLogState.cursor = 1
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 0, m.ui.httpLogState.cursor)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 1, m.ui.httpLogState.cursor)
 }
@@ -1243,7 +1243,7 @@ func TestHandleHTTPLogKeys_Down_AtBottom_EnablesAutoScroll(t *testing.T) {
 	m.ui.httpLogState.cursor = 0
 	m.ui.httpLogState.autoScroll = false
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.True(t, m.ui.httpLogState.autoScroll)
@@ -1257,7 +1257,7 @@ func TestHandleHTTPLogKeys_GoToTop_G(t *testing.T) {
 	}
 	m.ui.httpLogState.cursor = 2
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}
+	keyMsg := tea.KeyPressMsg{Text: "g"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.Equal(t, 0, m.ui.httpLogState.cursor)
@@ -1272,7 +1272,7 @@ func TestHandleHTTPLogKeys_GoToBottom_CapitalG(t *testing.T) {
 	}
 	m.ui.httpLogState.cursor = 0
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}
+	keyMsg := tea.KeyPressMsg{Text: "G"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.Equal(t, 2, m.ui.httpLogState.cursor)
@@ -1283,7 +1283,7 @@ func TestHandleHTTPLogKeys_ToggleAutoScroll(t *testing.T) {
 	m := newModelWithHTTPLog()
 	m.ui.httpLogState.autoScroll = false
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
+	keyMsg := tea.KeyPressMsg{Text: "a"}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.True(t, m.ui.httpLogState.autoScroll)
 
@@ -1301,12 +1301,12 @@ func TestHandleHTTPLogKeys_PgUpDown_List(t *testing.T) {
 	m.ui.httpLogState.entries = entries
 	m.ui.httpLogState.cursor = 25
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyPgUp}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyPgUp}
 	m.handleHTTPLogKeys(keyMsg)
 	assert.Equal(t, 5, m.ui.httpLogState.cursor)
 	assert.False(t, m.ui.httpLogState.autoScroll)
 
-	keyMsg = tea.KeyMsg{Type: tea.KeyPgDown}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyPgDown}
 	m.handleHTTPLogKeys(keyMsg)
 	// PgDown +20 from 5 = 25; index 25 is in range (30 items, indices 0-29).
 	assert.Equal(t, 25, m.ui.httpLogState.cursor)
@@ -1319,7 +1319,7 @@ func TestHandleHTTPLogKeys_FilterActive_Typing(t *testing.T) {
 	m.ui.httpLogState.filterActive = true
 	m.ui.httpLogState.filterText = "te"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
+	keyMsg := tea.KeyPressMsg{Text: "s"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.Equal(t, "tes", m.ui.httpLogState.filterText)
@@ -1330,7 +1330,7 @@ func TestHandleHTTPLogKeys_FilterActive_Backspace(t *testing.T) {
 	m.ui.httpLogState.filterActive = true
 	m.ui.httpLogState.filterText = "tes"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.Equal(t, "te", m.ui.httpLogState.filterText)
@@ -1341,7 +1341,7 @@ func TestHandleHTTPLogKeys_FilterActive_EscClearsFilter(t *testing.T) {
 	m.ui.httpLogState.filterActive = true
 	m.ui.httpLogState.filterText = "test"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.False(t, m.ui.httpLogState.filterActive)
@@ -1353,7 +1353,7 @@ func TestHandleHTTPLogKeys_FilterActive_EnterConfirms(t *testing.T) {
 	m.ui.httpLogState.filterActive = true
 	m.ui.httpLogState.filterText = "api"
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	m.handleHTTPLogKeys(keyMsg)
 
 	assert.False(t, m.ui.httpLogState.filterActive)

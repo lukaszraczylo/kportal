@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 	"github.com/stretchr/testify/assert"
@@ -44,10 +44,10 @@ func TestHandleMainViewKeys_Quit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
 			m := newTestModel()
-			_, cmd := m.handleMainViewKeys(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key)})
+			_, cmd := m.handleMainViewKeys(tea.KeyPressMsg{Text: tt.key})
 
 			if tt.key == "ctrl+c" {
-				keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+				keyMsg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 				_, cmd = m.handleMainViewKeys(keyMsg)
 			}
 
@@ -76,14 +76,14 @@ func TestHandleMainViewKeys_Navigation(t *testing.T) {
 	tests := []struct {
 		name          string
 		key           string
-		keyType       tea.KeyType
+		code          rune
 		initialIndex  int
 		expectedIndex int
 	}{
 		{"down arrow", "down", tea.KeyDown, 0, 1},
-		{"j key", "j", tea.KeyRunes, 0, 1},
+		{"j key", "j", 0, 0, 1},
 		{"up arrow", "up", tea.KeyUp, 2, 1},
-		{"k key", "k", tea.KeyRunes, 2, 1},
+		{"k key", "k", 0, 2, 1},
 	}
 
 	for _, tt := range tests {
@@ -92,11 +92,11 @@ func TestHandleMainViewKeys_Navigation(t *testing.T) {
 			m.ui.selectedIndex = tt.initialIndex
 			m.ui.mu.Unlock()
 
-			var keyMsg tea.KeyMsg
-			if tt.keyType == tea.KeyRunes {
-				keyMsg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key)}
+			var keyMsg tea.KeyPressMsg
+			if tt.code == 0 {
+				keyMsg = tea.KeyPressMsg{Text: tt.key}
 			} else {
-				keyMsg = tea.KeyMsg{Type: tt.keyType}
+				keyMsg = tea.KeyPressMsg{Code: tt.code}
 			}
 
 			m.handleMainViewKeys(keyMsg)
@@ -123,7 +123,7 @@ func TestHandleMainViewKeys_Toggle(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Toggle with space
-	keyMsg := tea.KeyMsg{Type: tea.KeySpace}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	m.handleMainViewKeys(keyMsg)
 
 	// Check disabled state changed
@@ -151,7 +151,7 @@ func TestHandleMainViewKeys_NewWizard(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Without dependencies, 'n' should do nothing
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Text: "n"}
 	m.handleMainViewKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -180,7 +180,7 @@ func TestHandleMainViewKeys_DeleteConfirmation(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press 'd' to show delete confirmation
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")}
+	keyMsg := tea.KeyPressMsg{Text: "d"}
 	m.handleMainViewKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -204,7 +204,7 @@ func TestHandleMainViewKeys_DeleteConfirmation_PreventsDuplicate(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press 'd' for first forward
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")}
+	keyMsg := tea.KeyPressMsg{Text: "d"}
 	m.handleMainViewKeys(keyMsg)
 
 	// Change selection
@@ -234,7 +234,7 @@ func TestHandleDeleteConfirmation_Cancel(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press Esc
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleDeleteConfirmation(keyMsg)
 
 	m.ui.mu.RLock()
@@ -257,7 +257,7 @@ func TestHandleDeleteConfirmation_NavigateAndConfirm(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Navigate left to "Yes"
-	keyMsg := tea.KeyMsg{Type: tea.KeyLeft}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyLeft}
 	m.handleDeleteConfirmation(keyMsg)
 
 	m.ui.mu.RLock()
@@ -265,7 +265,7 @@ func TestHandleDeleteConfirmation_NavigateAndConfirm(t *testing.T) {
 	m.ui.mu.RUnlock()
 
 	// Navigate right back to "No"
-	keyMsg = tea.KeyMsg{Type: tea.KeyRight}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyRight}
 	m.handleDeleteConfirmation(keyMsg)
 
 	m.ui.mu.RLock()
@@ -288,7 +288,7 @@ func TestHandleDeleteConfirmation_ConfirmYes(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press Enter on "Yes"
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleDeleteConfirmation(keyMsg)
 
 	// Should return a command to remove the forward
@@ -314,7 +314,7 @@ func TestHandleDeleteConfirmation_QuickYKey(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press 'y' - should confirm regardless of cursor position
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+	keyMsg := tea.KeyPressMsg{Text: "y"}
 	_, cmd := m.handleDeleteConfirmation(keyMsg)
 
 	assert.NotNil(t, cmd)
@@ -336,7 +336,7 @@ func TestHandleDeleteConfirmation_QuickNKey(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press 'n' - should cancel regardless of cursor position
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Text: "n"}
 	m.handleDeleteConfirmation(keyMsg)
 
 	m.ui.mu.RLock()
@@ -358,7 +358,7 @@ func TestHandleBenchmarkKeys_Cancel(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press Esc
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleBenchmarkKeys(keyMsg)
 
 	assert.True(t, cancelled, "Cancel function should be called")
@@ -385,7 +385,7 @@ func TestHandleBenchmarkKeys_Navigation(t *testing.T) {
 	m.ui.mu.RUnlock()
 
 	// Move down
-	keyMsg := tea.KeyMsg{Type: tea.KeyDown}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyDown}
 	m.handleBenchmarkKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -400,7 +400,7 @@ func TestHandleBenchmarkKeys_Navigation(t *testing.T) {
 	m.ui.mu.RUnlock()
 
 	// Move up
-	keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyUp}
 	m.handleBenchmarkKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -422,7 +422,7 @@ func TestHandleHTTPLogKeys_Close(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press Esc
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	m.handleHTTPLogKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -451,7 +451,7 @@ func TestHandleHTTPLogKeys_FilterCycle(t *testing.T) {
 	m.ui.mu.RUnlock()
 
 	// Press 'f' to cycle - should skip Text mode and go to Non200
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")}
+	keyMsg := tea.KeyPressMsg{Text: "f"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -484,7 +484,7 @@ func TestHandleHTTPLogKeys_TextFilter(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press '/'
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
+	keyMsg := tea.KeyPressMsg{Text: "/"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -505,7 +505,7 @@ func TestHandleHTTPLogKeys_ClearFilters(t *testing.T) {
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 	// Press 'c'
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}
+	keyMsg := tea.KeyPressMsg{Text: "c"}
 	m.handleHTTPLogKeys(keyMsg)
 
 	m.ui.mu.RLock()
@@ -869,7 +869,7 @@ func TestModel_Update_ViewModeRouting(t *testing.T) {
 			m := model{ui: ui, termWidth: 120, termHeight: 40}
 
 			// Send a key message - should not panic
-			keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+			keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 			_, _ = m.Update(keyMsg)
 		})
 	}
@@ -925,7 +925,7 @@ func TestHandleRemoveWizardKeys_EscInConfirmingCancels(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	_, cmd := m.handleRemoveWizardKeys(keyMsg)
 
 	// No removal command must be dispatched.
@@ -962,7 +962,7 @@ func TestHandleRemoveWizardKeys_EscNotConfirmingExits(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	_, cmd := m.handleRemoveWizardKeys(keyMsg)
 
 	// Should return tea.ClearScreen command on full exit.
@@ -992,7 +992,7 @@ func TestHandleRemoveWizardKeys_EnterOnYesStillConfirms(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, cmd := m.handleRemoveWizardKeys(keyMsg)
 
 	assert.NotNil(t, cmd, "Enter on Yes must still dispatch removeForwardsCmd")
@@ -1017,7 +1017,7 @@ func TestHandleAddWizardKeys_HToggleHTTPLog(t *testing.T) {
 
 	require.False(t, m.ui.addWizard.httpLog, "httpLog should default to false")
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+	keyMsg := tea.KeyPressMsg{Text: "h"}
 	m.handleAddWizardKeys(keyMsg)
 	assert.True(t, m.ui.addWizard.httpLog, "first 'h' should enable httpLog")
 
@@ -1042,7 +1042,7 @@ func TestHandleAddWizardKeys_HOnAliasFocusIsTextInput(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+	keyMsg := tea.KeyPressMsg{Text: "h"}
 	m.handleAddWizardKeys(keyMsg)
 
 	assert.False(t, m.ui.addWizard.httpLog, "httpLog must NOT toggle when alias has focus")
@@ -1067,7 +1067,7 @@ func TestEditPrefill_PreservesHTTPLog(t *testing.T) {
 
 	m := model{ui: ui, termWidth: 120, termHeight: 40}
 
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}
+	keyMsg := tea.KeyPressMsg{Text: "e"}
 	m.handleMainViewKeys(keyMsg)
 
 	require.NotNil(t, m.ui.addWizard, "wizard should be active after 'e'")

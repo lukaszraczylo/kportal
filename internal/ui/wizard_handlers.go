@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
@@ -31,7 +31,7 @@ func isFilterableStep(step AddWizardStep) bool {
 }
 
 // handleMainViewKeys handles keyboard input in the main view
-func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleMainViewKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If delete confirmation is showing, handle it separately
 	if m.ui.deleteConfirming {
 		return m.handleDeleteConfirmation(msg)
@@ -53,7 +53,7 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "ctrl+d":
 		m.ui.moveSelection(10)
 
-	case " ", "enter":
+	case "space", "enter":
 		m.ui.toggleSelected()
 
 	case "n": // Enter add wizard
@@ -294,7 +294,7 @@ func (m model) handleMainViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleDeleteConfirmation handles keyboard input for delete confirmation dialog
-func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleDeleteConfirmation(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.ui.mu.Lock()
 
 	switch msg.String() {
@@ -336,7 +336,7 @@ func (m model) handleDeleteConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleAddWizardKeys handles keyboard input in the add wizard
-func (m model) handleAddWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleAddWizardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.ui.mu.Lock()
 	defer m.ui.mu.Unlock()
 
@@ -781,7 +781,7 @@ func (m model) handleAddWizardEnter() (tea.Model, tea.Cmd) {
 }
 
 // handleRemoveWizardKeys handles keyboard input in the remove wizard
-func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleRemoveWizardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.ui.mu.Lock()
 	defer m.ui.mu.Unlock()
 
@@ -822,7 +822,7 @@ func (m model) handleRemoveWizardKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "ctrl+d":
 		wizard.moveCursor(10)
 
-	case " ":
+	case "space":
 		if !wizard.confirming {
 			wizard.toggleSelection()
 		}
@@ -1051,7 +1051,7 @@ func (m model) handleForwardsRemoved(msg ForwardsRemovedMsg) (tea.Model, tea.Cmd
 }
 
 // handleBenchmarkKeys handles keyboard input in the benchmark view
-func (m model) handleBenchmarkKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleBenchmarkKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.ui.mu.Lock()
 	defer m.ui.mu.Unlock()
 
@@ -1192,7 +1192,7 @@ func (m model) applyBenchmarkTextInput() {
 }
 
 // handleHTTPLogKeys handles keyboard input in the HTTP log view
-func (m model) handleHTTPLogKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleHTTPLogKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.ui.mu.Lock()
 	defer m.ui.mu.Unlock()
 

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/config"
 )
 
@@ -323,13 +323,13 @@ func (m *GenerateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.step = GenerateStepDone
 		return m, tea.Quit
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *GenerateModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *GenerateModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.loading {
 		// Allow only ctrl+c / esc while loading
 		switch msg.String() {
@@ -354,12 +354,12 @@ func (m *GenerateModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ---------- Namespace step ----------
 
-func (m *GenerateModel) handleNamespaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *GenerateModel) handleNamespaceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.nsFiltering {
-		switch msg.Type {
-		case tea.KeyEnter, tea.KeyEsc:
+		switch msg.Code {
+		case tea.KeyEnter, tea.KeyEscape:
 			m.nsFiltering = false
-			if msg.Type == tea.KeyEsc {
+			if msg.Code == tea.KeyEscape {
 				m.nsFilter = ""
 				m.recomputeNamespaceFilter()
 			}
@@ -370,12 +370,11 @@ func (m *GenerateModel) handleNamespaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 				m.recomputeNamespaceFilter()
 			}
 			return m, nil
-		case tea.KeyRunes, tea.KeySpace:
-			m.nsFilter += string(msg.Runes)
+		default:
+			m.nsFilter += msg.Text
 			m.recomputeNamespaceFilter()
 			return m, nil
 		}
-		return m, nil
 	}
 
 	switch msg.String() {
@@ -391,7 +390,7 @@ func (m *GenerateModel) handleNamespaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		m.moveCursor(&m.nsCursor, &m.nsScroll, len(m.nsFilteredView), -10)
 	case "pgdown":
 		m.moveCursor(&m.nsCursor, &m.nsScroll, len(m.nsFilteredView), 10)
-	case " ":
+	case "space":
 		if len(m.nsFilteredView) > 0 {
 			ns := m.nsFilteredView[m.nsCursor]
 			m.nsSelected[ns] = !m.nsSelected[ns]
@@ -475,12 +474,12 @@ func (m *GenerateModel) buildServiceOrder() {
 	}
 }
 
-func (m *GenerateModel) handleServiceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *GenerateModel) handleServiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.svcFiltering {
-		switch msg.Type {
-		case tea.KeyEnter, tea.KeyEsc:
+		switch msg.Code {
+		case tea.KeyEnter, tea.KeyEscape:
 			m.svcFiltering = false
-			if msg.Type == tea.KeyEsc {
+			if msg.Code == tea.KeyEscape {
 				m.svcFilter = ""
 				m.recomputeServiceFilter()
 			}
@@ -491,12 +490,11 @@ func (m *GenerateModel) handleServiceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.recomputeServiceFilter()
 			}
 			return m, nil
-		case tea.KeyRunes, tea.KeySpace:
-			m.svcFilter += string(msg.Runes)
+		default:
+			m.svcFilter += msg.Text
 			m.recomputeServiceFilter()
 			return m, nil
 		}
-		return m, nil
 	}
 
 	switch msg.String() {
@@ -515,7 +513,7 @@ func (m *GenerateModel) handleServiceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(&m.svcCursor, &m.svcScroll, len(m.svcFilteredView), -10)
 	case "pgdown":
 		m.moveCursor(&m.svcCursor, &m.svcScroll, len(m.svcFilteredView), 10)
-	case " ":
+	case "space":
 		if len(m.svcFilteredView) > 0 {
 			c := m.svcFilteredView[m.svcCursor]
 			if !m.svcLocked[c.Key()] && c.Protocol == "TCP" {
@@ -593,7 +591,7 @@ func (m *GenerateModel) selectedCandidates() []ServiceCandidate {
 
 // ---------- Port assignment step ----------
 
-func (m *GenerateModel) handlePortKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *GenerateModel) handlePortKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		m.step = GenerateStepCancelled
@@ -627,7 +625,7 @@ func (m *GenerateModel) handlePortKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Digit-only input
-	for _, r := range msg.Runes {
+	for _, r := range msg.Text {
 		if r >= '0' && r <= '9' && len(m.startingPortStr) < 5 {
 			m.startingPortStr += string(r)
 			m.portError = ""
@@ -716,7 +714,13 @@ func (m *GenerateModel) countSkippedNonTCP() int {
 // ---------- View ----------
 
 // View implements tea.Model.
-func (m *GenerateModel) View() string {
+func (m *GenerateModel) View() tea.View {
+	v := tea.NewView(m.view())
+	v.AltScreen = true
+	return v
+}
+
+func (m *GenerateModel) view() string {
 	var b strings.Builder
 	b.WriteString(wizardHeaderStyle.Render(fmt.Sprintf("kportal generate · context: %s", m.contextName)))
 	b.WriteString("\n")
@@ -975,7 +979,7 @@ func RunGenerate(
 	existingForwards []config.Forward,
 ) (GenerateResult, error) {
 	m := NewGenerateModel(discovery, mutator, contextName, configPath, dryRun, existingForwards)
-	prog := tea.NewProgram(m, tea.WithAltScreen())
+	prog := tea.NewProgram(m)
 	finalModel, err := prog.Run()
 	if err != nil {
 		return GenerateResult{}, err

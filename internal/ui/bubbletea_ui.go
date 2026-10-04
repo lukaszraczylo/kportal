@@ -21,13 +21,14 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"strings"
 	"sync"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
@@ -173,7 +174,7 @@ func (ui *BubbleTeaUI) SetUpdateAvailable(version, url string) {
 // Start starts the bubbletea application
 func (ui *BubbleTeaUI) Start() error {
 	m := model{ui: ui}
-	ui.program = tea.NewProgram(m, tea.WithAltScreen())
+	ui.program = tea.NewProgram(m)
 	_, err := ui.program.Run()
 	return err
 }
@@ -325,7 +326,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.termHeight = msg.Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Route based on current view mode
 		switch viewMode {
 		case ViewModeMain:
@@ -390,7 +391,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	v := tea.NewView(m.view())
+	v.AltScreen = true
+	return v
+}
+
+func (m model) view() string {
 	m.ui.mu.RLock()
 	viewMode := m.ui.viewMode
 	deleteConfirming := m.ui.deleteConfirming
@@ -438,13 +445,13 @@ func (m model) View() string {
 
 // mainViewColors holds the color palette for the main view
 type mainViewColors struct {
-	header     lipgloss.Color
-	active     lipgloss.Color
-	warning    lipgloss.Color
-	errorColor lipgloss.Color
-	muted      lipgloss.Color
-	selectedBg lipgloss.Color
-	selectedFg lipgloss.Color
+	header     color.Color
+	active     color.Color
+	warning    color.Color
+	errorColor color.Color
+	muted      color.Color
+	selectedBg color.Color
+	selectedFg color.Color
 }
 
 // defaultMainViewColors returns the default color palette
@@ -526,7 +533,7 @@ func (m model) getTermDimensions() (width, height int) {
 }
 
 // renderTitle renders the title bar with version and optional update notification
-func (m model) renderTitle(headerColor lipgloss.Color) string {
+func (m model) renderTitle(headerColor color.Color) string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().
@@ -552,7 +559,7 @@ func (m model) renderTitle(headerColor lipgloss.Color) string {
 
 // renderEmptyMessage renders the message shown when no forwards are configured.
 // It includes an actionable hint so a first-time user knows how to proceed.
-func (m model) renderEmptyMessage(mutedColor lipgloss.Color) string {
+func (m model) renderEmptyMessage(mutedColor color.Color) string {
 	mutedStyle := lipgloss.NewStyle().Foreground(mutedColor)
 	hintStyle := lipgloss.NewStyle().Foreground(highlightColor)
 	return mutedStyle.Render("No forwards configured") + "\n\n" +

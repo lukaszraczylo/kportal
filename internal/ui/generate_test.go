@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/kportal/internal/config"
 	"github.com/lukaszraczylo/kportal/internal/k8s"
 )
@@ -72,22 +72,22 @@ func (f *fakeDiscovery) ListServices(_ context.Context, _, ns string) ([]k8s.Ser
 	return f.servicesByNS[ns], nil
 }
 
-// keyOf builds a tea.KeyMsg the same way bubbletea does for typed runes.
-func keyOf(s string) tea.KeyMsg {
+// keyOf builds a tea.KeyPressMsg the same way bubbletea does for typed runes.
+func keyOf(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
-		return tea.KeyMsg{Type: tea.KeyEsc}
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "space":
-		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	case "backspace":
-		return tea.KeyMsg{Type: tea.KeyBackspace}
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	}
 	if len(s) == 1 {
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+		return tea.KeyPressMsg{Text: s}
 	}
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+	return tea.KeyPressMsg{Text: s}
 }
 
 // drainModel applies a sequence of messages and returns the final model.
@@ -169,7 +169,7 @@ func TestGenerateModel_NamespaceFilter(t *testing.T) {
 		t.Fatalf("expected [beta], got %v", gm.nsFilteredView)
 	}
 	// Exit filter
-	gm = drainModel(t, gm, tea.KeyMsg{Type: tea.KeyEnter}).(*GenerateModel)
+	gm = drainModel(t, gm, tea.KeyPressMsg{Code: tea.KeyEnter}).(*GenerateModel)
 	if gm.nsFiltering {
 		t.Fatal("expected filtering to be off after enter")
 	}
@@ -496,7 +496,7 @@ func TestGenerateModel_PortStepView(t *testing.T) {
 	m.step = GenerateStepPortAssign
 	m.svcOrder = []ServiceCandidate{{Namespace: "ns", Service: "svc", Port: 80, Protocol: "TCP"}}
 	m.svcSelected[m.svcOrder[0].Key()] = true
-	view := m.View()
+	view := m.View().Content
 	if !contains(view, "Step 3 / 3") {
 		t.Fatalf("expected step header in view, got: %s", view)
 	}

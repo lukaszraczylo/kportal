@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +12,7 @@ import (
 func typeKeys(t *testing.T, m model, text string) {
 	t.Helper()
 	for _, r := range text {
-		m.handleAddWizardKeys(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m.handleAddWizardKeys(tea.KeyPressMsg{Text: string(r)})
 	}
 }
 
@@ -87,7 +87,7 @@ func TestManualNamespace_BackFromLaterStepRestoresTextInput(t *testing.T) {
 	m := newModelWithWizard(StepSelectResourceType)
 	m.ui.addWizard.namespaceManual = true
 
-	m.handleAddWizardKeys(tea.KeyMsg{Type: tea.KeyEsc})
+	m.handleAddWizardKeys(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	w := m.ui.addWizard
 	assert.Equal(t, StepSelectNamespace, w.step)
@@ -98,7 +98,7 @@ func TestKeysJK_StillNavigateInListMode(t *testing.T) {
 	m := newModelWithWizard(StepSelectResourceType)
 	m.ui.addWizard.inputMode = InputModeList
 
-	m.handleAddWizardKeys(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m.handleAddWizardKeys(tea.KeyPressMsg{Text: string('j')})
 
 	assert.Equal(t, 1, m.ui.addWizard.cursor)
 }
