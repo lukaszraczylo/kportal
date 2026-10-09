@@ -1,0 +1,11 @@
+version: "2"
+
+# Vendored upstream code; only the documented patch is ours.
+linters:
+  default: none
+  enable:
+    - govet
+  settings:
+    govet:
+      disable:
+        - composites
