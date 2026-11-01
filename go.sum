@@ -124,8 +124,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
-github.com/xo/terminfo v1.2.0 h1:d0ZTOCpuGE0lwSAOs0zcJjwz3jWQyqcRt9XbGJpCOl4=
-github.com/xo/terminfo v1.2.0/go.mod h1:lGzkSo8Fe7IRh/w+Gqz7n5mDog4FVXCj3gy/DYTBqio=
+github.com/xo/terminfo v1.2.1 h1:e5fQoon4xY/NK3LJzcF8me+JaknbLD8zjtRWm0uvxtw=
+github.com/xo/terminfo v1.2.1/go.mod h1:lGzkSo8Fe7IRh/w+Gqz7n5mDog4FVXCj3gy/DYTBqio=
 go.yaml.in/yaml/v2 v2.4.4 h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=
 go.yaml.in/yaml/v2 v2.4.4/go.mod h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
